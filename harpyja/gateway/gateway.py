@@ -85,12 +85,8 @@ def assert_local(
 
     resolve = resolver or _default_resolver
     addresses = resolve(host)
-    if not addresses or not all(
-        _is_loopback_ip(addr) is True for addr in addresses
-    ):
-        raise AirGapError(
-            f"host {host!r} does not resolve to loopback-only: {addresses}"
-        )
+    if not addresses or not all(_is_loopback_ip(addr) is True for addr in addresses):
+        raise AirGapError(f"host {host!r} does not resolve to loopback-only: {addresses}")
 
 
 @dataclass

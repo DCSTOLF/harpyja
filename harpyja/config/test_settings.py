@@ -6,6 +6,19 @@ AC6 — resolution order is defaults < harpyja.toml < HARPYJA_* env < per-reques
 from harpyja.config.settings import Settings, load_settings, resolve_settings
 
 
+def test_settings_has_wave1_default_fields():
+    s = Settings()
+    assert s.ignore_globs == ()
+    assert s.follow_symlinks is False
+    assert s.search_max_files == 4000
+    assert s.search_max_matches == 400
+    assert s.rg_chunk_size == 512
+    assert s.tool_max_lines == 400
+    assert s.tool_max_chars == 20000
+    assert s.manifest_page == 200
+    assert s.cache_dir is None
+
+
 def _write_toml(path, body):
     path.write_text(body, encoding="utf-8")
     return path
@@ -36,6 +49,23 @@ def test_load_settings_toml_used_when_no_env(tmp_path, monkeypatch):
     monkeypatch.delenv("HARPYJA_LM_API_BASE", raising=False)
     settings = load_settings(config_path=toml, repo_path=tmp_path)
     assert settings.lm_api_base == "http://127.0.0.1:9999/v1"
+
+
+def test_coerce_ignore_globs_from_toml_list(tmp_path, monkeypatch):
+    toml = _write_toml(
+        tmp_path / "harpyja.toml",
+        'ignore_globs = ["**/dist/**", "*.min.js"]\n',
+    )
+    monkeypatch.delenv("HARPYJA_IGNORE_GLOBS", raising=False)
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.ignore_globs == ("**/dist/**", "*.min.js")
+    assert isinstance(s.ignore_globs, tuple)
+
+
+def test_coerce_ignore_globs_from_env_csv(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_IGNORE_GLOBS", "a/**, b/**")
+    s = load_settings(config_path=None, repo_path=tmp_path)
+    assert s.ignore_globs == ("a/**", "b/**")
 
 
 def test_resolve_settings_request_override_beats_env(tmp_path, monkeypatch):

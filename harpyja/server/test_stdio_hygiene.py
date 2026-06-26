@@ -30,9 +30,7 @@ def reset_root_logging():
 def test_configure_logging_uses_stderr_handler(reset_root_logging):
     configure_logging()
     streams = [
-        h.stream
-        for h in reset_root_logging.handlers
-        if isinstance(h, logging.StreamHandler)
+        h.stream for h in reset_root_logging.handlers if isinstance(h, logging.StreamHandler)
     ]
     assert any(s is sys.stderr for s in streams)
 
@@ -66,13 +64,16 @@ def test_stdio_session_stdout_only_mcp_frames(tmp_path):
 
     script = tmp_path / "stdio_server.py"
     script.write_text(_SERVER_SCRIPT, encoding="utf-8")
+    (tmp_path / "sample.py").write_text("x = 1\n", encoding="utf-8")
 
     async def go():
         transport = PythonStdioTransport(script_path=str(script))
         async with Client(transport) as client:
             tools = [t.name for t in await client.list_tools()]
+            # Use harpyja_index — it exercises the full stdio round-trip without
+            # needing ripgrep, so the stdout-hygiene check runs regardless of env.
             result = await client.call_tool(
-                "harpyja_locate", {"query": "q", "repo_path": "/repo"}
+                "harpyja_index", {"repo_path": str(tmp_path)}
             )
             return tools, result.data
 
@@ -83,4 +84,4 @@ def test_stdio_session_stdout_only_mcp_frames(tmp_path):
 
     # The handshake + call only complete if stdout carried clean MCP frames.
     assert "harpyja_locate" in tools
-    assert data["notes"] == "wave-0 stub: no retrieval"
+    assert data["files_indexed"] >= 1

@@ -61,7 +61,6 @@ def format_report(report: DoctorReport) -> str:
         f"  ripgrep (rg):   {mark(report.rg_present)}",
         f"  deno:           {mark(report.deno_present)}",
         f"  model endpoint: {report.endpoint_url}",
-        f"  air-gap:        {'ok' if report.air_gap_ok else 'FAIL'} "
-        f"({report.air_gap_detail})",
+        f"  air-gap:        {'ok' if report.air_gap_ok else 'FAIL'} ({report.air_gap_detail})",
     ]
     return "\n".join(lines)

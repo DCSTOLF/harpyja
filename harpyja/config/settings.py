@@ -31,6 +31,17 @@ class Settings:
     max_results: int = 8
     allow_remote: bool = False
 
+    # Wave 1 — indexer / search / tool bounds (SPEC §5).
+    ignore_globs: tuple[str, ...] = ()
+    follow_symlinks: bool = False
+    search_max_files: int = 4000
+    search_max_matches: int = 400
+    rg_chunk_size: int = 512
+    tool_max_lines: int = 400
+    tool_max_chars: int = 20000
+    manifest_page: int = 200
+    cache_dir: str | None = None
+
 
 _FIELD_TYPES = {f.name: f.type for f in fields(Settings)}
 
@@ -38,11 +49,19 @@ _FIELD_TYPES = {f.name: f.type for f in fields(Settings)}
 def _coerce(name: str, raw: Any) -> Any:
     """Coerce a raw (env-string or toml) value to the field's type."""
     target = _FIELD_TYPES[name]
-    if target is bool or target == "bool":
+    target_str = target if isinstance(target, str) else getattr(target, "__name__", "")
+    if target_str.startswith("tuple"):
+        # toml lists arrive as list/tuple; env values arrive as a CSV string.
+        if isinstance(raw, (list, tuple)):
+            items = [str(v) for v in raw]
+        else:
+            items = [part.strip() for part in str(raw).split(",")]
+        return tuple(p for p in items if p)
+    if target is bool or target_str == "bool":
         if isinstance(raw, bool):
             return raw
         return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-    if target is int or target == "int":
+    if target is int or target_str == "int":
         return int(raw)
     return str(raw)
 
@@ -90,9 +109,7 @@ def load_settings(
     return replace(Settings(), **merged)
 
 
-def resolve_settings(
-    base: Settings, request_override: dict[str, Any] | None = None
-) -> Settings:
+def resolve_settings(base: Settings, request_override: dict[str, Any] | None = None) -> Settings:
     """Apply the highest-precedence per-request override onto ``base``.
 
     Returns a new Settings; ``base`` is never mutated.

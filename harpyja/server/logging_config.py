@@ -24,8 +24,7 @@ def configure_logging(level: int = logging.INFO) -> None:
 
     # Add a stderr handler if one isn't already present.
     has_stderr = any(
-        isinstance(h, logging.StreamHandler) and h.stream is sys.stderr
-        for h in root.handlers
+        isinstance(h, logging.StreamHandler) and h.stream is sys.stderr for h in root.handlers
     )
     if not has_stderr:
         handler = logging.StreamHandler(stream=sys.stderr)
