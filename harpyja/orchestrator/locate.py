@@ -23,8 +23,11 @@ from harpyja.index.indexer import index_repo
 from harpyja.index.manifest import read_manifest
 from harpyja.orchestrator.format import format_citations
 from harpyja.server.types import CodeSpan, LocateRequest, LocateResult, Mode
+from harpyja.symbols.engine_identity import engine_identity
+from harpyja.symbols.symbol_locator import SymbolEngine
+from harpyja.symbols.symbols_io import load_symbols_or_none
 
-_MODE_NO_EFFECT = "Wave 1: deterministic tier only; mode has no effect"
+_MODE_NO_EFFECT = "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
 _VALID_MODES = set(get_args(Mode))
 
 
@@ -39,16 +42,28 @@ def locate(
     engine: _Engine,
     indexer: Callable[..., object] = index_repo,
     resolve_dir: Callable[..., object] = resolve_artifact_dir,
+    symbol_engine: _Engine | None = None,
 ) -> LocateResult:
     if req.mode not in _VALID_MODES:
         raise ValueError(f"invalid mode: {req.mode!r}; expected one of {_VALID_MODES}")
 
-    # Ensure-index: incremental refresh so the result reflects the current tree.
+    # Ensure-index: incremental refresh so the result reflects the current tree
+    # (manifest *and* symbols.jsonl).
     art_dir = resolve_dir(req.repo_path, settings)
     indexer(req.repo_path, settings, artifact_dir=art_dir)
     manifest = {e.path: e for e in read_manifest(art_dir)}
 
-    spans = engine.search(req.query, scope=req.repo_path)
+    # Compose the symbol and ripgrep Locators into one CodeSpan stream — the
+    # orchestrator never branches on which engine produced a span; the formatter
+    # promotes definitions via the boost. A no-symbol-match query degrades to the
+    # exact Wave-1 ripgrep-only result.
+    if symbol_engine is None:
+        records = load_symbols_or_none(art_dir, engine_identity()) or []
+        symbol_engine = SymbolEngine(records, settings)
+
+    sym_spans = symbol_engine.search(req.query, scope=req.repo_path)
+    text_spans = engine.search(req.query, scope=req.repo_path)
+    spans = sym_spans + text_spans
 
     notes: list[str] = [_MODE_NO_EFFECT]
     spans, hint_note = _apply_language_hint(spans, manifest, req.language_hint)

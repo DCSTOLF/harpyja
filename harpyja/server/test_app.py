@@ -146,3 +146,56 @@ def test_run_http_allows_explicit_host_opt_out():
 
     run_http(_FakeApp(), host="0.0.0.0", port=9000)
     assert captured.get("host") == "0.0.0.0"
+
+
+# --- Wave 2: real symbol surfacing + symbol-aware locate (AC3, AC9, AC10, AC14, AC16) ---
+
+
+def test_build_app_index_surfaces_real_symbols_indexed(tmp_path):
+    _write(tmp_path, "a.py", "def foo():\n    pass\n")
+    app = build_app()
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool("harpyja_index", {"repo_path": str(tmp_path)})
+
+    assert _run(go()).data["symbols_indexed"] == 1
+
+
+def test_build_app_index_surfaces_degraded_array(tmp_path):
+    _write(tmp_path, "broken.py", "def bad(:\n    pass\n")
+    app = build_app()
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool("harpyja_index", {"repo_path": str(tmp_path)})
+
+    assert any("parse-error" in d for d in _run(go()).data["degraded"])
+
+
+def test_build_app_locate_promotes_definition_above_call_site(tmp_path):
+    _write(tmp_path, "a.py", "def foo():\n    pass\nfoo()\n")
+    app = build_app(engine_factory=lambda s: _FakeEngine([CodeSpan("a.py", 3, 3)]))
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate", {"query": "foo", "repo_path": str(tmp_path)}
+            )
+
+    top = _run(go()).data["citations"][0]
+    assert top["symbol"] == "foo"
+    assert top["kind"] == "function"
+
+
+def test_build_app_locate_note_reflects_wave2_symbol_tier(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    app = build_app(engine_factory=lambda s: _FakeEngine([]))
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate", {"query": "x", "repo_path": str(tmp_path)}
+            )
+
+    assert _run(go()).data["notes"].startswith("Wave 2:")

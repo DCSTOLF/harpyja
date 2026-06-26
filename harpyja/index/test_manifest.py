@@ -5,7 +5,7 @@ import os
 
 from harpyja.index.manifest import ManifestEntry, read_manifest, write_manifest
 
-_FIELDS = {"path", "language", "size", "hash", "mtime", "prior"}
+_FIELDS = {"path", "language", "size", "hash", "mtime", "prior", "degraded"}
 
 
 def _entry(path, prior, language="python"):
@@ -62,3 +62,55 @@ def test_manifest_roundtrips(tmp_path):
     back = {e.path: e for e in read_manifest(tmp_path)}
     assert back["a.py"].prior == 0.9
     assert back["x"].language is None
+
+
+# --- Wave 2: per-file `degraded` field (D18, AC16) ---
+
+
+def test_manifest_entry_has_degraded_field_default_clean(tmp_path):
+    # Default (omitted) → clean (None).
+    assert _entry("a.py", 1.0).degraded is None
+
+
+def test_manifest_degraded_in_key_order_and_serialized_json(tmp_path):
+    entry = ManifestEntry(
+        path="a.py",
+        language="python",
+        size=1,
+        hash="sha256:x",
+        mtime=1.0,
+        prior=1.0,
+        degraded="parse-error",
+    )
+    write_manifest(tmp_path, [entry])
+    obj = json.loads((tmp_path / "manifest.jsonl").read_text().splitlines()[0])
+    assert obj["degraded"] == "parse-error"
+    assert list(obj.keys())[-1] == "degraded"  # additive, last in key order
+
+
+def test_manifest_reads_legacy_entry_missing_degraded_with_default(tmp_path):
+    # A Wave-1 manifest line has no `degraded` key — read must default it.
+    legacy = json.dumps(
+        {
+            "path": "a.py",
+            "language": "python",
+            "size": 1,
+            "hash": "sha256:x",
+            "mtime": 1.0,
+            "prior": 1.0,
+        }
+    )
+    (tmp_path / "manifest.jsonl").write_text(legacy + "\n")
+    back = read_manifest(tmp_path)
+    assert back[0].degraded is None
+
+
+def test_manifest_two_writes_byte_identical_with_degraded_field(tmp_path):
+    entries = [
+        ManifestEntry("a.py", "python", 1, "sha256:x", 1.0, 0.9, degraded="parse-error"),
+        ManifestEntry("b.py", "go", 1, "sha256:y", 1.0, 0.5, degraded=None),
+    ]
+    write_manifest(tmp_path, entries)
+    first = (tmp_path / "manifest.jsonl").read_bytes()
+    write_manifest(tmp_path, entries)
+    assert (tmp_path / "manifest.jsonl").read_bytes() == first

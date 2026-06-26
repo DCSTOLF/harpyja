@@ -2,6 +2,50 @@
 
 Append-only. Newest first.
 
+## 2026-06-26 — Wave 2 symbol layer shipped (tree-sitter, Python + Go)
+
+**Spec:** specs/0003-wave-2-symbol-layer/
+**Decision:** Add a Tier-0, model-free symbol layer that surfaces a symbol's
+**definition above its call sites**, filling the `symbols_indexed` / `degraded`
+slots Wave 1 reserved. (1) A tree-sitter extractor (`symbols/`) parses **Python and
+Go only** — defs-only, classified by **syntactic form** (no type inference) — into a
+byte-reproducible `symbols.jsonl` ordered by the total key
+`(path, start_line, end_line, kind, name)`; the other five grammars are a deliberate
+follow-up spec. (2) The records file is paired with a tiny self-verifying
+`symbols.meta.json` sidecar carrying `engine_identity` (tree-sitter runtime + each
+pinned grammar version) + `record_count` + a sha256 `content_digest` over the
+records' exact bytes; a refresh forces a full symbol rebuild — independently of the
+`(mtime, size)` gate — on any missing/truncated record file, missing meta,
+engine-identity mismatch, or fingerprint mismatch, committing **records-first,
+meta-last** via same-dir temp + `os.replace`. (3) Graceful degradation has two
+distinct, persisted causes: `grammar-missing` (absent/load-fail grammar → zero
+symbols) and `parse-error` (scoped to a definition's **own region excluding
+nested-definition subtrees**, so a broken method never suppresses its clean
+enclosing class); `degraded` is persisted per-file on the manifest entry so a
+no-reparse refresh re-surfaces it (total-in-index, like `symbols_indexed`). (4)
+`SymbolEngine` implements the shared **`Locator` protocol** (exact, case-sensitive
+name matching + `.`/`::` method addressing; substring matching deferred to Wave 2.1);
+the orchestrator composes it with the ripgrep Locator into one `CodeSpan` stream and
+never branches, and the formatter applies a placeholder **definition boost** between
+`prior` and density. A no-symbol-match query degrades byte-identically to the Wave-1
+ripgrep-only path.
+**Why:** A raw line-grep can't tell a definition from its hundred call sites — the
+exact context-flooding the project exists to prevent. The symbol layer is the first
+tier where structure, not just text, drives the answer, while staying zero-cost and
+fully local (air-gap untouched, audited). The self-verifying sidecar is the durable
+lesson from four cross-review rounds (D15 changed three times): **an untrusted
+derived artifact must authenticate its own generation — a content fingerprint — not
+just its producer's identity**; engine-identity alone misses a records-first/meta-last
+crash residue and a clean newline truncation, the fingerprint catches both.
+**Consequence:** Tier 0 is now deterministic + symbol-aware: index → (ripgrep +
+symbols) → citation formatter, all behind the same `harpyja_locate` contract. Two
+deliberate follow-ups are opened: the **five remaining grammars** (Rust, JS/TS, C#,
+Java, C/C++ — the extractor is built so adding a grammar is additive) and **Wave-2.1
+substring/fuzzy matching** (it needs its own ranking rules + ACs and would otherwise
+create a fuzzy match-state that could promote the wrong definition over a correct
+text hit). Symbol-boost weights are documented placeholders tuned later but must
+preserve the AC ordering.
+
 ## 2026-06-26 — Wave 1 deterministic core shipped
 
 **Spec:** specs/0002-wave-1-deterministic-core/

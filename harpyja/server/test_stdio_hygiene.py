@@ -72,9 +72,7 @@ def test_stdio_session_stdout_only_mcp_frames(tmp_path):
             tools = [t.name for t in await client.list_tools()]
             # Use harpyja_index — it exercises the full stdio round-trip without
             # needing ripgrep, so the stdout-hygiene check runs regardless of env.
-            result = await client.call_tool(
-                "harpyja_index", {"repo_path": str(tmp_path)}
-            )
+            result = await client.call_tool("harpyja_index", {"repo_path": str(tmp_path)})
             return tools, result.data
 
     try:

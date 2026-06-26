@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MANIFEST_NAME = "manifest.jsonl"
-_KEY_ORDER = ("path", "language", "size", "hash", "mtime", "prior")
+# `degraded` (Wave 2, D18) is appended last — additive, so a Wave-1 manifest still
+# reads (default `None` = clean) and the Wave-1 key order is otherwise unchanged.
+_KEY_ORDER = ("path", "language", "size", "hash", "mtime", "prior", "degraded")
 
 
 @dataclass
@@ -27,6 +29,7 @@ class ManifestEntry:
     hash: str
     mtime: float
     prior: float
+    degraded: str | None = None  # per-file degradation outcome; None = clean
 
     def to_json(self) -> str:
         ordered = {k: getattr(self, k) for k in _KEY_ORDER}
@@ -68,5 +71,6 @@ def read_manifest(dir_path: str | Path) -> list[ManifestEntry]:
         if not line.strip():
             continue
         obj = json.loads(line)
-        out.append(ManifestEntry(**{k: obj[k] for k in _KEY_ORDER}))
+        # `degraded` may be absent in a legacy (Wave-1) manifest → default clean.
+        out.append(ManifestEntry(**{k: obj.get(k) for k in _KEY_ORDER}))
     return out

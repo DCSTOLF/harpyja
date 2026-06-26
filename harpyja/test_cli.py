@@ -5,6 +5,8 @@ HTTP transport bound to loopback by default; a non-loopback bind needs an
 explicit opt-out. Transport runners are monkeypatched so no server starts.
 """
 
+import json
+
 import pytest
 
 import harpyja.cli as cli
@@ -104,6 +106,15 @@ def test_cli_index_prints_summary(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "index_repo", lambda *a, **k: _FakeIndexResult())
     cli.main(["index", "--repo", str(tmp_path)])
     assert "files_indexed" in capsys.readouterr().out
+
+
+def test_cli_index_summary_shows_real_symbols_and_degraded(tmp_path, capsys):
+    # No mock: a real index over a clean def + a broken def.
+    (tmp_path / "a.py").write_text("def foo():\n    pass\ndef bad(:\n    pass\n", encoding="utf-8")
+    cli.main(["index", "--repo", str(tmp_path)])
+    out = json.loads(capsys.readouterr().out)
+    assert out["symbols_indexed"] == 1  # foo extracted; bad skipped
+    assert any("parse-error" in d for d in out["degraded"])
 
 
 def test_cli_locate_passes_query_mode_maxresults_langhint(monkeypatch, tmp_path):

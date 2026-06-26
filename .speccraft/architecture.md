@@ -8,12 +8,20 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
 2. `harpyja/orchestrator/` — router, query classifier, verification gate, citation formatter. Owns per-request state.
 3. `harpyja/index/` — file walker, ranked JSONL manifest, incremental hashing.
    Live as of Wave 1: `walk`/`ignore` (pathspec, no `git`), `classify`, `prior`,
-   `hash`, `manifest` (atomic same-dir temp + `os.replace`), `artifacts`
-   (in-repo `.harpyja/` or XDG-cache fallback), `indexer` (`(mtime,size)` gate
-   + prune + `--rehash`).
+   `hash`, `manifest` (atomic same-dir temp + `os.replace`, per-file `degraded`
+   field as of Wave 2), `artifacts` (in-repo `.harpyja/` or XDG-cache fallback),
+   `indexer` (`(mtime,size)` gate + prune + `--rehash`; Wave 2 also extracts
+   symbols on the change-of-record gate and forces a full symbol rebuild on a
+   cache integrity / engine-identity mismatch).
 4. `harpyja/symbols/` — tree-sitter engines + ripgrep engine behind one `CodeSpan`
-   interface (Tier 0). Live as of Wave 1: `RipgrepEngine` (literal `--fixed-strings`,
-   bounded); tree-sitter engines are Wave 2.
+   interface (Tier 0). Live as of Wave 2: `RipgrepEngine` (literal `--fixed-strings`,
+   bounded); `extract` (Python + Go tree-sitter, defs-only by syntactic form →
+   `SymbolRecord` / `ExtractResult`); `symbols_io` (byte-reproducible `symbols.jsonl`
+   + self-verifying `symbols.meta.json` sidecar; records-first/meta-last `os.replace`);
+   `engine_identity` (runtime + grammar versions, sentinel-safe cache key);
+   `symbol_locator` (`SymbolEngine` — exact case-sensitive name + `.`/`::` method
+   addressing, behind the `Locator` protocol). The remaining five grammars are a
+   follow-up spec.
 5. `harpyja/scout/` — FastContext adapter (Tier 1).
 6. `harpyja/deep/` — `dspy.RLM` driver + bounded read-only host tools (Tier 2).
 7. `harpyja/gateway/` — Model Gateway over the local OpenAI-compatible endpoint. Only outbound caller.
@@ -29,10 +37,14 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   / `::1` / `localhost`), reused for both the outbound model endpoint and the
   inbound HTTP bind; all other layers are filesystem-only — ARCHITECTURE.md §4.
 - Tier 0 (deterministic, model-free) is the floor every later tier is additive on:
-  index → ripgrep → citation formatter behind `harpyja_locate`. `rg` on `PATH` is a
-  hard precondition for search/locate only (not `index`); when absent, locate fails
-  loudly (`RipgrepMissingError`) rather than returning a silent empty result — see
-  history.md 2026-06-26.
+  index → (ripgrep + symbols) → citation formatter behind `harpyja_locate`. As of
+  Wave 2 it is symbol-aware: a query naming a symbol surfaces its **definition** above
+  its call sites via a formatter definition boost, composed from the ripgrep and
+  symbol `Locator`s without branching; a no-symbol-match query degrades byte-identically
+  to the Wave-1 ripgrep-only result. `rg` on `PATH` is a hard precondition for
+  search/locate only (not `index`); a missing/erroring parser, by contrast, degrades
+  gracefully (`grammar-missing` / `parse-error`) — symbols are an enhancement, not a
+  precondition. See history.md 2026-06-26.
 
 ## Boundaries
 

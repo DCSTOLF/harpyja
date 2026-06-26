@@ -20,6 +20,7 @@ class CodeSpan:
     end_line: int
     symbol: str | None = None
     language: str | None = None
+    kind: str | None = None  # Wave 2: symbol kind for a definition span (else None)
 
 
 @dataclass
