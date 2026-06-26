@@ -19,10 +19,16 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
 
 - Cheapest-tier-that-works escalation (Tier 0 → 1 → 2), gated by a read-back Verification Gate — see ARCHITECTURE.md §2.2 / §2.7.
 - Fresh `dspy.RLM` instance per request (RLM is not thread-safe with a custom interpreter) — ARCHITECTURE.md §4.
-- Air-gap enforced in the Model Gateway alone; all other layers are filesystem-only — ARCHITECTURE.md §4.
+- Air-gap enforced in one helper, `gateway.assert_local` (loopback = `127.0.0.0/8`
+  / `::1` / `localhost`), reused for both the outbound model endpoint and the
+  inbound HTTP bind; all other layers are filesystem-only — ARCHITECTURE.md §4.
 
 ## Boundaries
 
 - Inbound: MCP only (`locate` / `read` / `index`) over stdio or streamable HTTP.
+  The HTTP listener binds loopback only by default (`DEFAULT_HTTP_HOST =
+  127.0.0.1`); a non-loopback bind requires an explicit `--allow-remote-bind`
+  opt-out and is gated by the same `gateway.assert_local` check as the outbound
+  endpoint. As of Wave 0 only `harpyja_locate` is registered (stub).
 - Outbound: local model endpoint via the Model Gateway (llama.cpp / Ollama), localhost only.
 - Filesystem: read-only access to the target repo; manifest + symbol index are derived artifacts.

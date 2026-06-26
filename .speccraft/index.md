@@ -40,4 +40,5 @@ none
 
 ## Recent decisions (last 3)
 
-_none yet — updated by /spec:close_
+- 2026-06-26 — **Wave 0 foundations shipped** (specs/0001-wave-0-foundations/): stub-first `harpyja_locate` MCP contract; air-gap in one helper (`gateway.assert_local`, incl. inbound HTTP loopback default + `--allow-remote-bind`); config precedence on a frozen `Settings`; co-located `test_*.py`.
+- 2026-06-26 — **speccraft adopted**: spec-first TDD workflow; all code changes go through `/spec:new`.

@@ -14,23 +14,8 @@ input = "stdin"       # "stdin" | "argv" | "file"
 strengths = ["refactoring", "review"]
 
 [[agents]]
-name = "opencode"
-mode = "cli"
-cmd = ["opencode", "run"]
-input = "argv"
-strengths = ["analysis", "planning"]
-
-[[agents]]
 name = "claude-p"
 mode = "cli"
 cmd = ["claude", "-p"]
 input = "argv"
 strengths = ["general"]
-
-# Opt-in ACP. Requires `acpx` installed.
-[[agents]]
-name = "codex-acp"
-mode = "acp"
-acp_agent = "codex"
-strengths = ["refactoring"]
-enabled = false
