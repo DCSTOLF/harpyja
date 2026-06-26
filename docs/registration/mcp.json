@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "harpyja": {
+      "command": "uv",
+      "args": ["run", "harpyja", "serve", "--stdio"],
+      "env": {
+        "HARPYJA_LM_API_BASE": "http://localhost:11434/v1"
+      }
+    }
+  }
+}
