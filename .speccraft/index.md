@@ -40,5 +40,6 @@ none
 
 ## Recent decisions (last 3)
 
+- 2026-06-26 — **Wave 1 deterministic core shipped** (specs/0002-wave-1-deterministic-core/): model-free Tier-0 locator (index → ripgrep → formatter); `.gitignore` via `pathspec` (no git); two-level `(mtime,size)` incremental gate + prune + `--rehash`; `rg` hard precondition for search/locate only; `.harpyja/` derived artifacts + XDG fallback; literal-by-default search; honest hard-fail over silent empty.
 - 2026-06-26 — **Wave 0 foundations shipped** (specs/0001-wave-0-foundations/): stub-first `harpyja_locate` MCP contract; air-gap in one helper (`gateway.assert_local`, incl. inbound HTTP loopback default + `--allow-remote-bind`); config precedence on a frozen `Settings`; co-located `test_*.py`.
 - 2026-06-26 — **speccraft adopted**: spec-first TDD workflow; all code changes go through `/spec:new`.
