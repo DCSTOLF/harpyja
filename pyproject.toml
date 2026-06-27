@@ -19,6 +19,7 @@ dependencies = [
     "tree-sitter-c>=0.23",
     "tree-sitter-cpp>=0.23",
     "dspy>=3.2.1",
+    "fastcontext",
 ]
 
 [project.scripts]
@@ -53,3 +54,6 @@ norecursedirs = [".git", ".speccraft", "specs", "docs", ".venv", "build", "dist"
 markers = [
     "integration: spawns a real process / event loop; skippable in constrained envs",
 ]
+
+[tool.uv.sources]
+fastcontext = { git = "https://github.com/microsoft/fastcontext", rev = "1522d6d6b5e040e817b468e12826662aa069a8b0" }

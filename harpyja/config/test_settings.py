@@ -115,6 +115,41 @@ def test_settings_scout_loads_from_env(tmp_path, monkeypatch):
     assert s.scout_seed_top_n == 7  # env beats toml
 
 
+# --- Spec 0007: Scout FastContext model + FC_* params (AC3) ---
+
+_FC_GGUF = "hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest"
+
+
+def test_settings_scout_model_default():
+    s = Settings()
+    assert s.scout_model == _FC_GGUF
+    # Scout's fine-tune is distinct from Deep's driver model.
+    assert s.scout_model != s.lm_model
+
+
+def test_settings_scout_fc_param_defaults():
+    s = Settings()
+    assert s.scout_max_tokens == 1024
+    assert s.scout_temperature == "0"
+    assert s.scout_reasoning_effort == "none"
+
+
+def test_settings_scout_model_precedence(tmp_path, monkeypatch):
+    monkeypatch.delenv("HARPYJA_SCOUT_MODEL", raising=False)
+    toml = _write_toml(tmp_path / "harpyja.toml", 'scout_model = "from-toml"\n')
+    # toml beats default
+    base = load_settings(config_path=toml, repo_path=tmp_path)
+    assert base.scout_model == "from-toml"
+    # env beats toml
+    monkeypatch.setenv("HARPYJA_SCOUT_MODEL", "from-env")
+    env_base = load_settings(config_path=toml, repo_path=tmp_path)
+    assert env_base.scout_model == "from-env"
+    # per-request override beats env
+    resolved = resolve_settings(env_base, {"scout_model": "from-request"})
+    assert resolved.scout_model == "from-request"
+    assert env_base.scout_model == "from-env"  # base not mutated
+
+
 # --- Wave 4: Deep (Tier 2) budgets (AC10) ---
 
 

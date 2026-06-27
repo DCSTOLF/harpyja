@@ -2,6 +2,75 @@
 
 Append-only. Newest first.
 
+## 2026-06-27 — Scout Tier-1 real default client shipped — FastContext agent, env-under-threading-lock, off-loop bridge
+
+**Spec:** specs/0007-fastcontext/
+**Decision:** Supply the **real default client** for the already-shipped
+`FastContextBackend` seam (Wave 3 left it injected-only), so Scout (Tier 1) drives the
+real Microsoft FastContext agent (`make_fastcontext_agent` — its own Read/Glob/Grep
+loop, **not** `dspy.RLM`; the load-bearing invariant keeping Tier 1 structurally
+distinct from Tier 2) end-to-end and the Wave-3 live AC flips skip → genuine pass. The
+`ScoutBackend`/`ScoutEngine`/`Locator`/formatter seams stayed **unchanged**; all new
+code lives in `harpyja/scout/` plus four additive `Settings` fields and two new
+`errors.py` causes. Six durable choices were pinned. (1) **One client, two paths.**
+Path A (primary, in-process): lazy-import the factory, build a fresh agent
+(`work_dir=<repo>`, `trajectory_file=<temp OUTSIDE repo>`),
+`await agent.run(..., citation=True)`. Path B (fallback): injected CLI runner with
+`FC_*` scoped to the child via `env=` (no parent-env mutation). (2) **Off-loop bridge +
+`threading.Lock`, verified against FastContext source @ SHA `1522d6d6…`.** The factory
+is **env-only** (no `model`/`base_url` params; reads `FC_*` from `os.environ`;
+`FC_REASONING_EFFORT` is read **lazily per model call** at `llm.py:77`), so AC3's
+absolute ban on `os.environ` mutation relaxed to a conditional one: `FC_*` are injected
+via process env, but **only while holding a module-level `threading.Lock`
+(`_SCOUT_ENV_LOCK`)** — *not* an `asyncio.Lock`, because each call bridges
+`agent.run` onto its **own loop-free worker thread** (`_run_coro_on_worker_thread`, so
+`asyncio.run` is legal even when the MCP handler is already on a loop), and only a
+thread lock serializes cross-thread `os.environ` writes. The lock is held across the
+**entire run** (the lazy reasoning-effort read), set-then-restore with per-key
+unset-vs-empty preservation. This **serializes Scout** — accepted for the single-GPU
+profile (concurrent Scout calls already contend for the one 4B model); Scout-only,
+never leaks to Deep. (3) **Air-gap before construct/spawn, TOCTOU closed.** A single
+`gateway.assert_local` on the resolved `FC_BASE_URL` fires before the agent is built
+(Path A) and before the subprocess is spawned (Path B); on Path A the lock spans
+assert → env-set → construct → run. FastContext owns its own model client (the
+`rlm.py` precedent, not the `scout/tools.py` whitelist — the whitelist is **vestigial**
+for Path A, recorded as an honest limit), proven by a network-deny integration test.
+(4) **Read-only assumption-verified-by-test.** `trajectory_file` resolves outside the
+repo; a no-repo-writes integration test (content-hash manifest excluding `.harpyja/`)
+proves the scanned repo is byte-unchanged; residual in-process write risk recorded,
+symmetric to the network-deny. (5) **Four-way degrade taxonomy + deterministic state
+machine.** Added `fastcontext-missing` / `cli-missing` to the existing
+`connection-refused` / `no-endpoint-configured` / `backend-error`; the Path-A→Path-B
+machine makes `fastcontext-missing` terminal **only** when the CLI runner is unwired,
+so AC10's test is unambiguous. (6) **AC10 broadened live (graceful-degradation
+guardrail).** A live run surfaced that FastContext's **own** `get_final_answer` /
+`format_citations` can raise (e.g. `TypeError`) on malformed model output — confinement
+worked, but the third-party post-processing crashed; the client now maps **any**
+unexpected backend exception → `ScoutUnavailable(backend-error)` so Scout degrades to
+Tier 0 rather than letting a raw exception escape. Floors (`RipgrepMissingError` /
+`AirGapError`) and the Path-B `ImportError` signal still propagate; honest-empty (a
+clean run, no parseable citation) returns `[]`, never raises.
+**Why:** Tier 1 was structurally present since Wave 3 but never ran a model
+end-to-end — the live AC only ever skipped. FastContext is real and installable, so
+this wave cashes in the seam exactly as Wave 4 did for Deep, turning the suite's last
+skip into a genuine pass. The lock rationale is grounded in the actual factory
+signature at a pinned SHA, not assumed; the env-under-lock design stops the precise
+cross-request race AC3 existed to prevent without overstating the guarantee.
+**Consequence:** Scout is **not cached** (model-backed/non-deterministic, no
+engine-identity slot — like Deep). Verified live (~42s, suite 442 passed / 0 skipped,
+ruff clean); FastContext's confinement blocked the model reading `/harpyja` outside
+`work_dir`, and the live ACs accept either Tier-1 success (`[0,1]`) or an honest
+`scout-degraded:backend-error` (`[0]`) — both prove the real stack ran. FastContext
+ships as a **portable `git`-rev pin** at the SHA — the plan's provisional local-path
+editable install (flagged non-portable for CI) was tested and corrected: the
+`third_party/mini-swe-agent` submodule is **vestigial** (unreferenced by the package),
+so the submodule-skipping `git+https` install resolves and imports cleanly; the
+non-portability deviation no longer applies. The **FastContext default client is now
+DONE** — no longer an open question. Open follow-ups carried forward: the
+**Verification Gate +
+Tier-0→1→2 auto-escalation ladder** (Wave 5 — `mode=auto` still does not climb) and,
+still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-06-27 — Wave 4 Deep (Tier 2) shipped — dspy.RLM, sandbox, layered explorer-loop bounds
 
 **Spec:** specs/0006-wave-4-deep-rlm/

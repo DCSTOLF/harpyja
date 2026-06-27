@@ -32,10 +32,28 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    Tier-0 lookup **before** the backend, behind the shared `Locator` `.search` seam) +
    `normalize_spans` (drops/clamps untrusted `<final_answer>` output to the Scout budgets)
    + `build_tool_whitelist` (exact local-only four-tool set) + `FastContextBackend`
-   (injected client, no hard import — FastContext package/version is the sole open question).
-   Scout is **not cached** (model-backed/non-deterministic, no engine-identity slot).
-   Degradable failures carry a stable `ScoutUnavailable.cause`; `RipgrepMissingError` /
-   `AirGapError` propagate as the floor.
+   (injected client, no hard import). Wave 4 (spec 0007) supplied the **real default
+   client**: `client.py::DefaultFastContextClient` drives Microsoft's FastContext agent
+   (`make_fastcontext_agent` — its own Read/Glob/Grep loop, **not** `dspy.RLM`) over two
+   paths — Path A in-process (lazy-import the factory; `work_dir=<repo>`,
+   `trajectory_file=<temp outside repo>`; `agent.run(..., citation=True)` bridged onto a
+   loop-free worker thread `_run_coro_on_worker_thread`; `FC_*` injected from `Settings`
+   under a module-level `threading.Lock` `_SCOUT_ENV_LOCK` via the set-then-restore
+   `_managed_fc_env`, held across the full run because `FC_REASONING_EFFORT` is lazy-read
+   per call) and Path B fallback (injected CLI runner, `FC_*` scoped to the child via
+   `env=`). `wiring.py::build_scout_engine` is the production `scout_factory` (mirrors
+   `deep/wiring.py`); the `FastContextBackend` tool whitelist is **vestigial for Path A**
+   (FastContext owns its own tools) — an honest, recorded limit. Air-gap via
+   `gateway.assert_local` on the resolved `FC_BASE_URL` before construct (Path A) / spawn
+   (Path B), lock spanning assert→construct→run to close the TOCTOU window; read-only and
+   no-egress are assumptions verified by integration test (residual risk recorded). Scout
+   is **not cached** (model-backed/non-deterministic, no engine-identity slot). Degradable
+   failures carry a stable `ScoutUnavailable.cause` — a **four-way** taxonomy
+   (`fastcontext-missing` / `cli-missing` / `connection-refused` / `no-endpoint-configured`
+   / `backend-error`), with a deterministic Path-A→Path-B state machine making
+   `fastcontext-missing` terminal only when the CLI runner is unwired, and **any**
+   unexpected backend exception (incl. FastContext's own post-processing crash) mapped to
+   `backend-error`; `RipgrepMissingError` / `AirGapError` propagate as the floor.
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -85,7 +103,16 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   four-state degradation floor that never
   collapses model-down into a phantom "nothing found"; seed-before-backend ordering makes
   the loud precondition case win by construction. FastContext is an implementation detail
-  *inside* a `Locator`, not a parallel citation path. See history.md 2026-06-27.
+  *inside* a `Locator`, not a parallel citation path. As of Wave 4 (spec 0007) the real
+  default client ships: Scout drives Microsoft's FastContext agent
+  (`make_fastcontext_agent`, its own Read/Glob/Grep loop — **not** `dspy.RLM`, the
+  invariant keeping Tier 1 structurally distinct from Tier 2) end-to-end, so the Wave-3
+  live AC flips skip → genuine pass. The factory is env-only, so `FC_*` are injected from
+  `Settings` under a module-level `threading.Lock` (not `asyncio.Lock` — the run is
+  bridged onto a loop-free worker thread) held across the whole run; the air-gap is
+  enforced at the endpoint (FastContext owns its own model client), and read-only /
+  no-egress are assumptions verified by integration test with residual risk recorded.
+  See history.md 2026-06-27 (spec 0007).
 - Tier 2 (Deep) is live, explicit-opt-in (`mode=deep` only — `auto` does not climb),
   and additive on the Tier-0 floor: a `dspy.RLM` explorer in a Deno/Pyodide sandbox
   whose entire world is the four confined read-only host tools. A successful run is

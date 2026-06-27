@@ -57,6 +57,15 @@ class Settings:
     deep_token_ceiling: int = 32000
     deep_wall_clock_ms: int = 60000
 
+    # Spec 0007 — Scout's FastContext fine-tune + FC_* knobs (additive, last).
+    # `scout_model` is Scout-specific and distinct from Deep's `lm_model`; it maps
+    # to FC_MODEL. The rest map to FC_MAX_TOKENS / FC_TEMPERATURE /
+    # FC_REASONING_EFFORT (kept as strings — they become env values verbatim).
+    scout_model: str = "hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest"
+    scout_max_tokens: int = 1024
+    scout_temperature: str = "0"
+    scout_reasoning_effort: str = "none"
+
 
 _FIELD_TYPES = {f.name: f.type for f in fields(Settings)}
 
