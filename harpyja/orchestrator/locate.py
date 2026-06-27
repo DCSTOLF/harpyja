@@ -22,12 +22,15 @@ from harpyja.index.classify import KNOWN_LANGUAGES
 from harpyja.index.indexer import index_repo
 from harpyja.index.manifest import read_manifest
 from harpyja.orchestrator.format import format_citations
+from harpyja.scout.errors import NO_ENDPOINT_CONFIGURED, ScoutUnavailable
 from harpyja.server.types import CodeSpan, LocateRequest, LocateResult, Mode
 from harpyja.symbols.engine_identity import engine_identity
 from harpyja.symbols.symbol_locator import SymbolEngine
 from harpyja.symbols.symbols_io import load_symbols_or_none
 
 _MODE_NO_EFFECT = "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
+_DEEP_PENDING = "Deep pending: Tier 2 not yet implemented; routed to Scout (Tier 1)"
+_SCOUT_MODES = {"fast", "deep"}
 _VALID_MODES = set(get_args(Mode))
 
 
@@ -43,6 +46,7 @@ def locate(
     indexer: Callable[..., object] = index_repo,
     resolve_dir: Callable[..., object] = resolve_artifact_dir,
     symbol_engine: _Engine | None = None,
+    scout_engine: _Engine | None = None,
 ) -> LocateResult:
     if req.mode not in _VALID_MODES:
         raise ValueError(f"invalid mode: {req.mode!r}; expected one of {_VALID_MODES}")
@@ -53,34 +57,124 @@ def locate(
     indexer(req.repo_path, settings, artifact_dir=art_dir)
     manifest = {e.path: e for e in read_manifest(art_dir)}
 
-    # Compose the symbol and ripgrep Locators into one CodeSpan stream — the
-    # orchestrator never branches on which engine produced a span; the formatter
-    # promotes definitions via the boost. A no-symbol-match query degrades to the
-    # exact Wave-1 ripgrep-only result.
     if symbol_engine is None:
         records = load_symbols_or_none(art_dir, engine_identity()) or []
         symbol_engine = SymbolEngine(records, settings)
-
-    sym_spans = symbol_engine.search(req.query, scope=req.repo_path)
-    text_spans = engine.search(req.query, scope=req.repo_path)
-    spans = sym_spans + text_spans
-
-    notes: list[str] = [_MODE_NO_EFFECT]
-    spans, hint_note = _apply_language_hint(spans, manifest, req.language_hint)
-    if hint_note:
-        notes.append(hint_note)
 
     def prior_of(path: str) -> float:
         entry = manifest.get(path)
         return entry.prior if entry else 0.0
 
-    citations = format_citations(spans, prior_of, req.max_results)
+    if req.mode in _SCOUT_MODES:
+        return _locate_scout(req, manifest, prior_of, engine, symbol_engine, scout_engine)
 
+    # mode=auto — deterministic, symbol-aware Tier 0 (unchanged since Wave 2).
+    spans = _tier0_seed(req, engine, symbol_engine)
+    notes: list[str] = [_MODE_NO_EFFECT]
+    spans, hint_note = _apply_language_hint(spans, manifest, req.language_hint)
+    if hint_note:
+        notes.append(hint_note)
+
+    citations = format_citations(spans, prior_of, req.max_results)
     return LocateResult(
         citations=citations,
         confidence="medium" if citations else "low",
         tiers_run=[0],
         notes="; ".join(notes),
+    )
+
+
+def _tier0_seed(
+    req: LocateRequest,
+    engine: _Engine,
+    symbol_engine: _Engine,
+) -> list[CodeSpan]:
+    """Compose the symbol + ripgrep Locators into one Tier-0 CodeSpan stream.
+
+    Shared by the `auto` branch and the Scout degradation fallback. The
+    orchestrator never branches on which engine produced a span; the formatter
+    promotes definitions via the boost.
+    """
+    sym_spans = symbol_engine.search(req.query, scope=req.repo_path)
+    text_spans = engine.search(req.query, scope=req.repo_path)
+    return sym_spans + text_spans
+
+
+def _locate_scout(
+    req: LocateRequest,
+    manifest: dict,
+    prior_of: Callable[[str], float],
+    engine: _Engine,
+    symbol_engine: _Engine,
+    scout_engine: _Engine | None,
+) -> LocateResult:
+    """Tier 1 (Scout). Explicit-mode only; degrades to Tier 0 on model failure.
+
+    `RipgrepMissingError` (from Scout's self-seed) and `AirGapError` (a
+    non-loopback endpoint) propagate loudly — they are the degradation floor,
+    not a degrade state. Only `ScoutUnavailable` falls back to Tier 0.
+    """
+    deep = req.mode == "deep"
+
+    if scout_engine is None:
+        # Scout not wired → honest degrade, never a silent no-op.
+        return _degrade(
+            req, manifest, prior_of, engine, symbol_engine, NO_ENDPOINT_CONFIGURED, deep
+        )
+
+    try:
+        spans = scout_engine.search(req.query, scope=req.repo_path)
+    except ScoutUnavailable as err:
+        return _degrade(req, manifest, prior_of, engine, symbol_engine, err.cause, deep)
+
+    spans, hint_note = _apply_language_hint(spans, manifest, req.language_hint)
+    citations = format_citations(spans, prior_of, req.max_results, source_tier=1)
+
+    notes: list[str] = []
+    if deep:
+        notes.append(_DEEP_PENDING)
+    if hint_note:
+        notes.append(hint_note)
+
+    return LocateResult(
+        citations=citations,
+        confidence="medium" if citations else "low",
+        tiers_run=[0, 1],
+        notes="; ".join(notes) if notes else None,
+    )
+
+
+def _degrade(
+    req: LocateRequest,
+    manifest: dict,
+    prior_of: Callable[[str], float],
+    engine: _Engine,
+    symbol_engine: _Engine,
+    cause: str,
+    deep: bool,
+) -> LocateResult:
+    """Fall back to the deterministic Tier-0 result with a `degraded` flag.
+
+    Reached only via `ScoutUnavailable` (or an unwired Scout) — i.e. the model
+    boundary failed but Tier 0's own preconditions held (`rg`-missing would have
+    propagated from Scout's self-seed first). A distinct `+no-matches` suffix
+    keeps "Tier-0 honestly empty" distinguishable from "Tier-0 had results".
+    """
+    spans = _tier0_seed(req, engine, symbol_engine)
+    spans, _hint_note = _apply_language_hint(spans, manifest, req.language_hint)
+    citations = format_citations(spans, prior_of, req.max_results)
+
+    note = f"scout-degraded:{cause}"
+    if not citations:
+        note += "+no-matches"
+    if deep:
+        note = f"{note}; {_DEEP_PENDING}"
+
+    return LocateResult(
+        citations=citations,
+        confidence="degraded",
+        tiers_run=[0],
+        notes=note,
     )
 
 

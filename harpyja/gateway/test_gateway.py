@@ -77,3 +77,45 @@ def test_modelgateway_assert_local_raises_for_remote():
 
 def _forbidden_resolver(host):
     raise AssertionError(f"resolver should not be called for {host!r}")
+
+
+# --- Wave 3: Gateway request path (AC4) ---
+
+
+def test_gateway_complete_calls_injected_transport_for_loopback():
+    calls = []
+
+    def transport(url, payload):
+        calls.append((url, payload))
+        return {"choices": [{"message": {"content": "hello"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete([{"role": "user", "content": "hi"}], transport=transport)
+    assert out == "hello"
+    assert len(calls) == 1
+    url, payload = calls[0]
+    assert url.startswith("http://127.0.0.1:11434/v1")
+    assert payload["model"] == "local"
+
+
+def test_gateway_complete_asserts_local_before_send():
+    def transport(url, payload):  # pragma: no cover - must never run
+        raise AssertionError("transport called for a non-loopback endpoint")
+
+    gw = ModelGateway(api_base="http://8.8.8.8:11434/v1")
+    with pytest.raises(AirGapError):
+        gw.complete([{"role": "user", "content": "hi"}], transport=transport)
+
+
+def test_gateway_complete_rejects_resolved_non_loopback():
+    def transport(url, payload):  # pragma: no cover - must never run
+        raise AssertionError("transport called before air-gap rejection")
+
+    resolver = lambda host: ["93.184.216.34"]  # noqa: E731 - test stub
+    gw = ModelGateway(api_base="http://example.com:11434/v1")
+    with pytest.raises(AirGapError):
+        gw.complete(
+            [{"role": "user", "content": "hi"}],
+            transport=transport,
+            resolver=resolver,
+        )

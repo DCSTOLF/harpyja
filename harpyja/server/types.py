@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 Mode = Literal["auto", "fast", "deep"]
-Confidence = Literal["high", "medium", "low"]
+Confidence = Literal["high", "medium", "low", "degraded"]
 
 
 @dataclass

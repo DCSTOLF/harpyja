@@ -1,0 +1,134 @@
+"""RED (tasks 11/13/15/17): Scout backend + engine (Tier 1).
+
+Drives the self-seeding `ScoutEngine`, its normalization of backend output, the
+exact FastContext tool whitelist, and the `FastContextBackend` delegation — all
+against a fake backend / injected client, with no live model.
+"""
+
+import pytest
+
+from harpyja.config.settings import Settings
+from harpyja.scout.engine import ScoutEngine
+from harpyja.server.types import CodeSpan
+from harpyja.symbols.ripgrep import RipgrepMissingError
+
+
+class _RecordingBackend:
+    def __init__(self, returns=None):
+        self.returns = returns or []
+        self.calls = []
+
+    def run(self, query, seed):
+        self.calls.append((query, list(seed)))
+        return list(self.returns)
+
+
+def _seed_of(*spans):
+    def seed_fn(query):
+        return list(spans)
+
+    return seed_fn
+
+
+# --- task 11: self-seed ordering + top-N hints + seed error propagation ---
+
+
+def test_scout_engine_seeds_before_backend(tmp_path):
+    order = []
+
+    def seed_fn(query):
+        order.append("seed")
+        return []
+
+    backend = _RecordingBackend()
+    original_run = backend.run
+
+    def run(query, seed):
+        order.append("backend")
+        return original_run(query, seed)
+
+    backend.run = run
+    engine = ScoutEngine(backend, seed_fn, Settings(), str(tmp_path))
+    engine.search("q")
+    assert order == ["seed", "backend"]
+
+
+def test_scout_engine_passes_top_n_hints(tmp_path):
+    spans = [CodeSpan(path=f"f{i}.py", start_line=i, end_line=i) for i in range(1, 11)]
+    backend = _RecordingBackend()
+    engine = ScoutEngine(backend, _seed_of(*spans), Settings(scout_seed_top_n=5), str(tmp_path))
+    engine.search("q")
+    _query, hints = backend.calls[0]
+    assert len(hints) == 5
+    assert hints == spans[:5]  # formatter rank order preserved
+
+
+def test_scout_engine_seed_precondition_error_propagates(tmp_path):
+    def seed_fn(query):
+        raise RipgrepMissingError("rg not found")
+
+    backend = _RecordingBackend()
+    engine = ScoutEngine(backend, seed_fn, Settings(), str(tmp_path))
+    with pytest.raises(RipgrepMissingError):
+        engine.search("q")
+    assert backend.calls == []  # backend never reached
+
+
+# --- task 13: engine normalizes backend output ---
+
+
+def test_scout_engine_normalizes_hostile_output(tmp_path):
+    (tmp_path / "real.py").write_text("a\nb\nc\n", encoding="utf-8")
+    backend = _RecordingBackend(
+        returns=[
+            CodeSpan(path="real.py", start_line=1, end_line=2),
+            CodeSpan(path="../escape.py", start_line=1, end_line=1),  # outside repo
+            CodeSpan(path="nope.py", start_line=1, end_line=1),  # nonexistent
+        ]
+    )
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(tmp_path))
+    out = engine.search("q")
+    assert [(c.path, c.start_line, c.end_line) for c in out] == [("real.py", 1, 2)]
+
+
+# --- task 15: exact tool whitelist ---
+
+
+def test_build_tool_whitelist_exact_set():
+    from harpyja.scout.tools import build_tool_whitelist
+
+    client = object()
+    read, glob, grep = object(), object(), object()
+    tools = build_tool_whitelist(client, read=read, glob=glob, grep=grep)
+    assert set(tools) == {"read", "glob", "grep", "model"}
+    assert tools["model"] is client
+    assert tools["read"] is read and tools["glob"] is glob and tools["grep"] is grep
+
+
+# --- task 17: FastContextBackend delegates to an injected client ---
+
+
+def test_fastcontext_backend_delegates_to_injected_client():
+    from harpyja.scout.fastcontext import FastContextBackend
+
+    seen = {}
+
+    def fake_client(query, seed, tools):
+        seen["query"] = query
+        seen["seed"] = list(seed)
+        seen["tools"] = tools
+        return [CodeSpan(path="x.py", start_line=1, end_line=1)]
+
+    backend = FastContextBackend(
+        client=fake_client,
+        model_client=object(),
+        read=object(),
+        glob=object(),
+        grep=object(),
+    )
+    seed = [CodeSpan(path="seed.py", start_line=2, end_line=2)]
+    out = backend.run("find auth", seed)
+    assert seen["query"] == "find auth"
+    assert seen["seed"] == seed
+    assert set(seen["tools"]) == {"read", "glob", "grep", "model"}
+    assert out == [CodeSpan(path="x.py", start_line=1, end_line=1)]

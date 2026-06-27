@@ -12,6 +12,16 @@ def _flat_prior(_path):
     return 1.0
 
 
+def test_format_citations_defaults_source_tier_zero():
+    out = format_citations(_spans(("a.py", 1, 2)), _flat_prior, 8)
+    assert out[0].source_tier == 0
+
+
+def test_format_citations_threads_source_tier_one():
+    out = format_citations(_spans(("a.py", 1, 2)), _flat_prior, 8, source_tier=1)
+    assert all(c.source_tier == 1 for c in out)
+
+
 def test_formatter_dedupes_identical_spans():
     out = format_citations(_spans(("a.py", 1, 2), ("a.py", 1, 2)), _flat_prior, 8)
     assert len(out) == 1

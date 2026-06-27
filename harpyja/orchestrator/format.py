@@ -66,6 +66,7 @@ def format_citations(
     spans: list[CodeSpan],
     prior_of: PriorOf,
     max_results: int,
+    source_tier: int = 0,
 ) -> list[Citation]:
     # Dedupe identical spans — keyed on symbol identity too, so co-located distinct
     # definitions (e.g. `A = 1; B = 2`) are not collapsed.
@@ -104,7 +105,7 @@ def format_citations(
             end_line=m.end_line,
             symbol=m.symbol,
             kind=m.kind,
-            source_tier=0,
+            source_tier=source_tier,
             score=prior_of(m.path),
         )
         for m in merged

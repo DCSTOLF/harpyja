@@ -81,3 +81,35 @@ def test_resolve_settings_none_override_is_noop(tmp_path, monkeypatch):
     monkeypatch.delenv("HARPYJA_LM_API_BASE", raising=False)
     base = load_settings(config_path=None, repo_path=tmp_path)
     assert resolve_settings(base, None) == base
+
+
+# --- Wave 3: Scout budgets (AC3, AC7) ---
+
+
+def test_settings_scout_defaults():
+    s = Settings()
+    assert s.scout_seed_top_n == 5
+    assert s.scout_max_citations == 20
+    assert s.scout_max_span_lines == 200
+
+
+def test_settings_scout_loads_from_toml(tmp_path, monkeypatch):
+    for k in ("SCOUT_SEED_TOP_N", "SCOUT_MAX_CITATIONS", "SCOUT_MAX_SPAN_LINES"):
+        monkeypatch.delenv(f"HARPYJA_{k}", raising=False)
+    toml = _write_toml(
+        tmp_path / "harpyja.toml",
+        "scout_seed_top_n = 3\nscout_max_citations = 12\nscout_max_span_lines = 80\n",
+    )
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.scout_seed_top_n == 3
+    assert s.scout_max_citations == 12
+    assert s.scout_max_span_lines == 80
+    # Coerced to int, not left as raw strings.
+    assert isinstance(s.scout_seed_top_n, int)
+
+
+def test_settings_scout_loads_from_env(tmp_path, monkeypatch):
+    toml = _write_toml(tmp_path / "harpyja.toml", "scout_seed_top_n = 3\n")
+    monkeypatch.setenv("HARPYJA_SCOUT_SEED_TOP_N", "7")
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.scout_seed_top_n == 7  # env beats toml

@@ -27,9 +27,20 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    extraction: `classify.KNOWN_LANGUAGES == indexer.SYMBOL_LANGUAGES`
    (`index/test_routing.py`), so a language is never routed ahead of its rules.
    Remaining symbol follow-up: **Wave-2.1 substring/fuzzy matching**.
-5. `harpyja/scout/` — FastContext adapter (Tier 1).
+5. `harpyja/scout/` — FastContext adapter (Tier 1). Live as of Wave 3: `ScoutBackend`
+   Protocol (`run(query, seed) -> list[CodeSpan]`) + `ScoutEngine` (self-seeds its own
+   Tier-0 lookup **before** the backend, behind the shared `Locator` `.search` seam) +
+   `normalize_spans` (drops/clamps untrusted `<final_answer>` output to the Scout budgets)
+   + `build_tool_whitelist` (exact local-only four-tool set) + `FastContextBackend`
+   (injected client, no hard import — FastContext package/version is the sole open question).
+   Scout is **not cached** (model-backed/non-deterministic, no engine-identity slot).
+   Degradable failures carry a stable `ScoutUnavailable.cause`; `RipgrepMissingError` /
+   `AirGapError` propagate as the floor.
 6. `harpyja/deep/` — `dspy.RLM` driver + bounded read-only host tools (Tier 2).
-7. `harpyja/gateway/` — Model Gateway over the local OpenAI-compatible endpoint. Only outbound caller.
+7. `harpyja/gateway/` — Model Gateway over the local OpenAI-compatible endpoint. Only
+   outbound caller. Live as of Wave 3: `ModelGateway.complete()` asserts the air-gap at
+   name-resolution time (injected resolver + `ipaddress` loopback predicate) **before** an
+   injected transport — no request leaves the process until loopback is proven.
 8. `harpyja/config/` — settings load/merge, profiles.
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
@@ -50,6 +61,13 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   search/locate only (not `index`); a missing/erroring parser, by contrast, degrades
   gracefully (`grammar-missing` / `parse-error`) — symbols are an enhancement, not a
   precondition. See history.md 2026-06-26.
+- Tier 1 (Scout) is live, explicit-opt-in, and additive on the Tier-0 floor:
+  `mode=auto` is byte-identical to Wave 2 with **zero** Gateway calls; `mode=fast` →
+  Scout; `mode=deep` → Scout (provisional, `Deep pending`, asserts no Tier-2 marker)
+  until Deep lands. A Scout call resolves to a four-state degradation floor that never
+  collapses model-down into a phantom "nothing found"; seed-before-backend ordering makes
+  the loud precondition case win by construction. FastContext is an implementation detail
+  *inside* a `Locator`, not a parallel citation path. See history.md 2026-06-27.
 
 ## Boundaries
 

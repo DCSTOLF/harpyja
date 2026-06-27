@@ -1,0 +1,37 @@
+---
+spec: "0005"
+---
+
+# Tasks
+
+- [x] 01. RED: `degraded` is a valid Confidence value (harpyja/server/test_types.py::test_confidence_includes_degraded) [AC5]
+- [x] 02. GREEN: add `degraded` to Confidence Literal (harpyja/server/types.py) [AC5]
+- [x] 03. RED: Scout budget settings load/default (harpyja/config/test_settings.py::test_settings_scout_defaults, ::test_settings_scout_loads_from_toml, ::test_settings_scout_loads_from_env) [AC3][AC7]
+- [x] 04. GREEN: add scout_seed_top_n/scout_max_citations/scout_max_span_lines to Settings (harpyja/config/settings.py) [AC3][AC7]
+- [x] 05. RED: Gateway request path air-gap + transport (harpyja/gateway/test_gateway.py::test_gateway_complete_calls_injected_transport_for_loopback, ::test_gateway_complete_asserts_local_before_send, ::test_gateway_complete_rejects_resolved_non_loopback) [AC4]
+- [x] 06. GREEN: ModelGateway.complete() asserts_local before injected transport, reuse AirGapError (harpyja/gateway/gateway.py) [AC4]
+- [x] 07. RED: normalize hostile final_answer output (harpyja/scout/test_scout_normalize.py::test_normalize_drops_path_outside_repo_root, ::test_normalize_drops_nonexistent_file, ::test_normalize_drops_inverted_line_range, ::test_normalize_drops_out_of_range_line, ::test_normalize_dedupes_duplicate_spans, ::test_normalize_clamps_over_max_citations, ::test_normalize_clamps_span_over_max_lines) [AC7]
+- [x] 08. GREEN: implement normalize_spans (harpyja/scout/normalize.py) [AC7]
+- [x] 09. RED: formatter threads source_tier (harpyja/orchestrator/test_formatter.py::test_format_citations_threads_source_tier_one, ::test_format_citations_defaults_source_tier_zero) [AC1]
+- [x] 10. GREEN: add source_tier param to format_citations (harpyja/orchestrator/format.py) [AC1]
+- [x] 11. RED: ScoutEngine self-seeds before backend, top-N hints, seed error propagates (harpyja/scout/test_scout.py::test_scout_engine_seeds_before_backend, ::test_scout_engine_passes_top_n_hints, ::test_scout_engine_seed_precondition_error_propagates) [AC3][AC5][AC6]
+- [x] 12. GREEN: ScoutBackend Protocol + ScoutEngine.search self-seed (harpyja/scout/backend.py, harpyja/scout/engine.py) [AC3][AC6]
+- [x] 13. RED: ScoutEngine normalizes backend output (harpyja/scout/test_scout.py::test_scout_engine_normalizes_hostile_output) [AC7]
+- [x] 14. GREEN: wire normalize_spans into ScoutEngine.search (harpyja/scout/engine.py) [AC7]
+- [x] 15. RED: exact tool whitelist equality (harpyja/scout/test_scout.py::test_build_tool_whitelist_exact_set) [AC10]
+- [x] 16. GREEN: implement build_tool_whitelist (harpyja/scout/tools.py) [AC10]
+- [x] 17. RED: FastContextBackend delegates to injected client (harpyja/scout/test_scout.py::test_fastcontext_backend_delegates_to_injected_client) [AC6][AC10]
+- [x] 18. GREEN: implement FastContextBackend behind Protocol (harpyja/scout/fastcontext.py) [AC6]
+- [x] 19. RED: auto byte-identical + zero gateway calls (harpyja/orchestrator/test_locate.py::test_locate_auto_byte_identical_to_wave2, ::test_locate_auto_makes_zero_gateway_calls) [AC2][AC9]
+- [x] 20. GREEN: add scout_engine/gateway DI params to locate, auto unchanged (harpyja/orchestrator/locate.py) [AC2][AC9]
+- [x] 21. RED: mode=fast routes to Scout, tiers_run+source_tier (harpyja/orchestrator/test_locate.py::test_locate_fast_routes_to_scout, ::test_locate_fast_tiers_run_includes_one, ::test_locate_fast_citations_source_tier_one) [AC1][AC3][AC6]
+- [x] 22. GREEN: implement fast Scout branch in locate (harpyja/orchestrator/locate.py) [AC1][AC3][AC6]
+- [x] 23. RED: four degradation states + distinct notes + ordering + airgap floor (harpyja/orchestrator/test_locate.py::test_locate_degraded_connection_refused, ::test_locate_degraded_no_endpoint_configured, ::test_locate_degraded_backend_error, ::test_locate_degraded_empty_tier0_no_matches_suffix, ::test_locate_seed_precondition_error_propagates, ::test_locate_non_loopback_raises_airgap) [AC5]
+- [x] 24. GREEN: implement degradation handling in Scout branch (harpyja/orchestrator/locate.py) [AC5]
+- [x] 25. RED: mode=deep lockstep guard (harpyja/orchestrator/test_locate.py::test_locate_deep_attaches_pending_note, ::test_locate_deep_no_tier2_marker) [AC8]
+- [x] 26. GREEN: implement deep provisional routing + Deep pending note (harpyja/orchestrator/locate.py) [AC8]
+- [x] 27. REFACTOR: extract _tier0_seed shared by auto + Scout self-seed; auto stays byte-identical (harpyja/orchestrator/locate.py) [AC2][AC3]
+- [x] 28. RED: build_app Scout/Gateway wiring (harpyja/server/test_app.py::test_build_app_auto_zero_gateway_calls, ::test_build_app_fast_uses_scout_engine) [AC2][AC9]
+- [x] 29. GREEN: wire scout_factory/gateway into build_app and locate (harpyja/server/app.py) [AC2][AC9]
+- [x] 30. RED: AC1 live Scout fast path, integration (harpyja/scout/test_scout_integration.py::test_scout_fast_returns_tier1_citations_live) [AC1]
+- [x] 31. RED: AC11 Scout under network-deny, integration (harpyja/scout/test_scout_integration.py::test_scout_runs_under_network_deny) [AC11]

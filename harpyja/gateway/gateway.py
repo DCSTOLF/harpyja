@@ -18,12 +18,17 @@ makes no network call.
 from __future__ import annotations
 
 import ipaddress
+import json
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from typing import Any
+from urllib.parse import urljoin, urlsplit
+from urllib.request import Request, urlopen
 
 Resolver = Callable[[str], list[str]]
+# A transport takes (url, json-payload) and returns the parsed JSON response.
+Transport = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 
 class AirGapError(ValueError):
@@ -89,11 +94,25 @@ def assert_local(
         raise AirGapError(f"host {host!r} does not resolve to loopback-only: {addresses}")
 
 
+def _default_transport(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """POST an OpenAI-compatible chat-completions request to a local endpoint.
+
+    Only ever reached after :func:`assert_local` has passed, so ``url`` is
+    loopback. Kept tiny and stdlib-only; tests inject a fake transport instead.
+    """
+    body = json.dumps(payload).encode("utf-8")
+    req = Request(url, data=body, headers={"Content-Type": "application/json"})
+    with urlopen(req) as resp:  # noqa: S310 - loopback-only, air-gap asserted
+        return json.loads(resp.read().decode("utf-8"))
+
+
 @dataclass
 class ModelGateway:
     """Single outbound abstraction over the local model endpoint.
 
-    Wave 0: holds configuration and enforces the air-gap. No request path yet.
+    The air-gap is asserted (at name-resolution time) before any request leaves
+    the process; the request itself goes through an injectable transport so the
+    gateway stays endpoint-agnostic and unit-testable without a network.
     """
 
     api_base: str
@@ -102,3 +121,24 @@ class ModelGateway:
 
     def assert_local(self, resolver: Resolver | None = None) -> None:
         assert_local(self.api_base, allow_remote=self.allow_remote, resolver=resolver)
+
+    def complete(
+        self,
+        messages: Sequence[dict[str, str]],
+        *,
+        transport: Transport | None = None,
+        resolver: Resolver | None = None,
+        **params: Any,
+    ) -> str:
+        """Run a chat completion against the local endpoint, air-gap first.
+
+        ``assert_local`` runs **before** the transport is touched, so a
+        non-loopback (or non-loopback-resolving) endpoint raises
+        :class:`AirGapError` and nothing is ever sent.
+        """
+        self.assert_local(resolver=resolver)
+        send = transport or _default_transport
+        url = urljoin(self.api_base.rstrip("/") + "/", "chat/completions")
+        payload: dict[str, Any] = {"model": self.model, "messages": list(messages), **params}
+        response = send(url, payload)
+        return response["choices"][0]["message"]["content"]

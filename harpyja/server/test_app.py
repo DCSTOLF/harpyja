@@ -199,3 +199,48 @@ def test_build_app_locate_note_reflects_wave2_symbol_tier(tmp_path):
             )
 
     assert _run(go()).data["notes"].startswith("Wave 2:")
+
+
+# --- Wave 3: Scout/Gateway wiring (AC2, AC9) ---
+
+
+class _BoomScout:
+    def search(self, *args, **kwargs):
+        raise AssertionError("scout/gateway invoked on a non-Scout path")
+
+
+def test_build_app_auto_zero_gateway_calls(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    app = build_app(
+        engine_factory=lambda s: _FakeEngine([CodeSpan("a.py", 1, 1)]),
+        scout_factory=lambda s, repo: _BoomScout(),
+    )
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate", {"query": "needle", "repo_path": str(tmp_path)}
+            )
+
+    data = _run(go()).data
+    assert data["tiers_run"] == [0]  # _BoomScout never raised → Scout untouched on auto
+
+
+def test_build_app_fast_uses_scout_engine(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    app = build_app(
+        engine_factory=lambda s: _FakeEngine([]),
+        scout_factory=lambda s, repo: _FakeEngine([CodeSpan("a.py", 1, 1)]),
+    )
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate",
+                {"query": "needle", "repo_path": str(tmp_path), "mode": "fast"},
+            )
+
+    data = _run(go()).data
+    assert data["tiers_run"] == [0, 1]
+    assert data["citations"][0]["path"] == "a.py"
+    assert data["citations"][0]["source_tier"] == 1

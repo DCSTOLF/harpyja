@@ -2,6 +2,52 @@
 
 Append-only. Newest first.
 
+## 2026-06-27 — Wave 3 Scout (Tier 1) + Model Gateway request path shipped
+
+**Spec:** specs/0005-wave-3-scout/
+**Decision:** Land Harpyja's first model-backed tier (Scout, Tier 1) and the Model
+Gateway **request path** — the single outbound seam every later tier builds on — as an
+explicit-opt-in capability that leaves `mode=auto` byte-identical to Wave 2 with **zero**
+Gateway calls. Six durable choices were pinned. (1) **A four-state degradation floor.**
+A Scout call resolves to exactly one caller-visible state that never collapses into
+another: model-down → Tier-0 citations (`confidence="degraded"`, `tiers_run=[0]`,
+`scout-degraded:<cause>` note); Tier-0-has-results vs Tier-0-honestly-empty are kept
+distinct by a `+no-matches` suffix; and a Tier-0 hard precondition absent
+(`RipgrepMissingError`) **propagates loudly**, never swallowed into a degraded-empty.
+(2) **Seed-before-backend ordering makes the loud case win by construction.** `ScoutEngine`
+runs its own Tier-0 self-seed *before* the backend (under `mode=fast` the caller skipped
+`auto`'s pass), with no try/except around `seed_fn`, so `rg`-missing-and-model-down
+surfaces state 4 deterministically — the dangerous composition is impossible by ordering,
+not luck. (3) **Resolution-time air-gap reused from Wave 0, with a new guarded request
+path.** Rather than the spec's named `NonLoopbackEndpointError`, the new
+`ModelGateway.complete()` reuses the single air-gap helper (`assert_local` + `AirGapError`)
+and asserts loopback on **resolved** addresses **before** an injected transport is touched
+— a non-loopback endpoint raises a loud floor error, deliberately *not* one of the four
+degrade states. (4) **`ScoutBackend` Protocol + `FastContextBackend` (injected client)
+keep the FastContext dependency swappable** — no top-level hard import, so the sole open
+question (FastContext package/version) can never break the suite, and Scout sits behind
+the shared `Locator`/`CodeSpan` boundary so callers never branch on engine identity. (5)
+**`auto` byte-identical / zero-Gateway lock** landed before any routing (T19) and was
+re-checked after the `_tier0_seed` refactor (T27); `index`/`read`/`auto` make zero model
+calls. (6) **`mode=deep` lockstep guard** (no-false-capability): `deep` provisionally
+mirrors `fast`, attaching a `Deep pending` note and asserting **no** Tier-2 marker (no `2`
+in `tiers_run`, no Tier-2 identity/cache key) so its later divergence is not a surprise
+regression.
+**Why:** Tier 0 goes blind on conceptual / natural-language queries that name no symbol
+or literal — the honest Tier-0 answer is "nothing found," and a naive Scout fallback would
+silently re-create that phantom. The floor and the seed-ordering exist precisely so a
+model-down run can never read as a clean zero. Being the first model wave, the air-gap and
+the degradation floor — previously cheap — became load-bearing and are now specified at
+the Gateway request path and at resolution time, one helper, auditable in one place.
+**Consequence:** Scout is **not cached** (model-backed/non-deterministic, no engine-identity
+slot — the Wave-2 cache-slot question does not apply). Open follow-ups carried forward:
+**FastContext package/version pinning** (the sole genuinely-open item, de-risked behind the
+Protocol); a **process/WASM sandbox** for FastContext's in-process egress (tool injection
+can't stop third-party in-process code opening its own socket — Scout has no sandbox unlike
+Tier 2 Deep; the containment is an assumption verified by the network-deny integration test
+AC11, not an asserted guarantee); and, still open from Wave 2, **Wave-2.1 substring/fuzzy
+matching**.
+
 ## 2026-06-26 — Wave 2 symbol layer completed (all 10 grammars) + no-silent-coverage lockstep
 
 **Spec:** specs/0004-symbol-layer-remaining-grammars/

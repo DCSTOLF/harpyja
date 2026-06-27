@@ -32,8 +32,14 @@ def build_app(
     *,
     which: Callable[[str], str | None] = shutil.which,
     engine_factory: Callable[[Settings], Any] | None = None,
+    scout_factory: Callable[[Settings, str], Any] | None = None,
 ) -> FastMCP:
-    """Construct the FastMCP app with Harpyja's three tools registered."""
+    """Construct the FastMCP app with Harpyja's three tools registered.
+
+    `scout_factory(settings, repo_path)` builds the Tier-1 Scout engine for a
+    request; it is only consulted for `mode in {fast, deep}`, so a default
+    (`None`) keeps `auto` deterministic and free of any model/Gateway call.
+    """
     settings = settings if settings is not None else load_settings()
     if engine_factory is None:
 
@@ -68,7 +74,10 @@ def build_app(
             max_results=max_results,
             language_hint=language_hint,
         )
-        result = locate(req, settings, engine=engine_factory(settings))
+        scout_engine = scout_factory(settings, repo_path) if scout_factory else None
+        result = locate(
+            req, settings, engine=engine_factory(settings), scout_engine=scout_engine
+        )
         return asdict(result)
 
     return app

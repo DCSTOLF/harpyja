@@ -42,6 +42,11 @@ class Settings:
     manifest_page: int = 200
     cache_dir: str | None = None
 
+    # Wave 3 — Scout (Tier 1) budgets (spec 0005 §What).
+    scout_seed_top_n: int = 5
+    scout_max_citations: int = 20
+    scout_max_span_lines: int = 200
+
 
 _FIELD_TYPES = {f.name: f.type for f in fields(Settings)}
 

@@ -92,9 +92,11 @@ def test_locate_invalid_mode_rejected(tmp_path):
 
 
 def test_locate_valid_mode_sets_no_effect_note(tmp_path):
+    # Wave 3: `deep` now routes to Scout, so the inert no-effect note lives on the
+    # `auto` path (the one that still does no routing).
     _write(tmp_path, "a.py")
     engine = FakeEngine([CodeSpan(path="a.py", start_line=1, end_line=1)])
-    result = locate(_req(tmp_path, mode="deep"), Settings(), engine=engine)
+    result = locate(_req(tmp_path, mode="auto"), Settings(), engine=engine)
     assert result.notes == "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
 
 
@@ -231,3 +233,190 @@ def test_locate_language_hint_filters_new_language_by_manifest_language(tmp_path
     ]
     result = locate(_req(tmp_path, language_hint="rust"), Settings(), engine=FakeEngine(spans))
     assert {c.path for c in result.citations} == {"lib.rs"}
+
+
+# --- Wave 3: Scout routing (AC1, AC2, AC3, AC5, AC6, AC8, AC9) ---
+
+from harpyja.gateway.gateway import AirGapError  # noqa: E402
+from harpyja.scout.errors import ScoutUnavailable  # noqa: E402
+from harpyja.symbols.ripgrep import RipgrepMissingError  # noqa: E402
+
+
+class _BoomScout:
+    """A Scout double that explodes if it is ever consulted (auto must not)."""
+
+    def search(self, *args, **kwargs):
+        raise AssertionError("scout/gateway invoked on a non-Scout path")
+
+
+class _FakeScout:
+    """Returns preset Scout spans; records calls."""
+
+    def __init__(self, spans):
+        self.spans = spans
+        self.calls = []
+
+    def search(self, pattern, scope=None):
+        self.calls.append((pattern, scope))
+        return list(self.spans)
+
+
+class _UnavailableScout:
+    def __init__(self, cause):
+        self.cause = cause
+
+    def search(self, pattern, scope=None):
+        raise ScoutUnavailable(self.cause)
+
+
+def test_locate_auto_byte_identical_to_wave2(tmp_path):
+    _write(tmp_path, "a.py", "def foo():\n    pass\nfoo()\n")
+    engine = FakeEngine([CodeSpan("a.py", 3, 3)])
+    result = locate(_req(tmp_path, query="foo"), Settings(), engine=engine)
+    # Wave-2 invariants preserved verbatim.
+    assert result.tiers_run == [0]
+    assert result.notes == "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
+    assert result.citations[0].symbol == "foo"
+    assert all(c.source_tier == 0 for c in result.citations)
+    assert result.confidence == "medium"
+
+
+def test_locate_auto_makes_zero_gateway_calls(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    result = locate(
+        _req(tmp_path), Settings(), engine=FakeEngine([]), scout_engine=_BoomScout()
+    )
+    assert result.tiers_run == [0]  # _BoomScout never raised → Scout untouched
+
+
+def test_locate_fast_routes_to_scout(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="fast"), Settings(), engine=FakeEngine([]), scout_engine=scout
+    )
+    assert scout.calls  # Scout was consulted
+    assert {c.path for c in result.citations} == {"a.py"}
+
+
+def test_locate_fast_tiers_run_includes_one(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="fast"), Settings(), engine=FakeEngine([]), scout_engine=scout
+    )
+    assert result.tiers_run == [0, 1]
+
+
+def test_locate_fast_citations_source_tier_one(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="fast"), Settings(), engine=FakeEngine([]), scout_engine=scout
+    )
+    assert result.citations
+    assert all(c.source_tier == 1 for c in result.citations)
+
+
+def test_locate_degraded_connection_refused(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    engine = FakeEngine([CodeSpan(path="a.py", start_line=1, end_line=1)])  # Tier-0 has results
+    result = locate(
+        _req(tmp_path, mode="fast"),
+        Settings(),
+        engine=engine,
+        scout_engine=_UnavailableScout("connection-refused"),
+    )
+    assert result.confidence == "degraded"
+    assert result.tiers_run == [0]
+    assert result.notes == "scout-degraded:connection-refused"
+    assert {c.path for c in result.citations} == {"a.py"}
+
+
+def test_locate_degraded_no_endpoint_configured(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    engine = FakeEngine([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="fast"),
+        Settings(),
+        engine=engine,
+        scout_engine=_UnavailableScout("no-endpoint-configured"),
+    )
+    assert result.notes == "scout-degraded:no-endpoint-configured"
+
+
+def test_locate_degraded_backend_error(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    engine = FakeEngine([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="fast"),
+        Settings(),
+        engine=engine,
+        scout_engine=_UnavailableScout("backend-error"),
+    )
+    assert result.notes == "scout-degraded:backend-error"
+
+
+def test_locate_degraded_empty_tier0_no_matches_suffix(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    engine = FakeEngine([])  # Tier-0 honestly empty
+    result = locate(
+        _req(tmp_path, query="zzz_nomatch", mode="fast"),
+        Settings(),
+        engine=engine,
+        scout_engine=_UnavailableScout("connection-refused"),
+    )
+    assert result.citations == []
+    assert result.notes == "scout-degraded:connection-refused+no-matches"
+    assert result.confidence == "degraded"
+
+
+def test_locate_seed_precondition_error_propagates(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+
+    class _RgMissingScout:
+        def search(self, pattern, scope=None):
+            raise RipgrepMissingError("rg not found")
+
+    with pytest.raises(RipgrepMissingError):
+        locate(
+            _req(tmp_path, mode="fast"),
+            Settings(),
+            engine=FakeEngine([]),
+            scout_engine=_RgMissingScout(),
+        )
+
+
+def test_locate_non_loopback_raises_airgap(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+
+    class _AirGapScout:
+        def search(self, pattern, scope=None):
+            raise AirGapError("non-loopback endpoint rejected")
+
+    with pytest.raises(AirGapError):
+        locate(
+            _req(tmp_path, mode="fast"),
+            Settings(),
+            engine=FakeEngine([]),
+            scout_engine=_AirGapScout(),
+        )
+
+
+def test_locate_deep_attaches_pending_note(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="deep"), Settings(), engine=FakeEngine([]), scout_engine=scout
+    )
+    assert "Deep pending" in (result.notes or "")
+
+
+def test_locate_deep_no_tier2_marker(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="deep"), Settings(), engine=FakeEngine([]), scout_engine=scout
+    )
+    assert 2 not in result.tiers_run  # no Tier-2 capability claimed
+    assert result.tiers_run == [0, 1]  # behaviorally identical to fast this wave
