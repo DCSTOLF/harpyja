@@ -115,7 +115,12 @@ def test_index_languages_sum_le_files_indexed(tmp_path):
 # --- Wave 2: symbol extraction integration (AC1, AC3, AC5, AC6, AC4, AC8, AC16) ---
 
 from harpyja.symbols.extract import ExtractResult  # noqa: E402
-from harpyja.symbols.symbols_io import META_NAME, SYMBOLS_NAME, load_symbols_or_none  # noqa: E402
+from harpyja.symbols.symbols_io import (  # noqa: E402
+    META_NAME,
+    SYMBOLS_NAME,
+    load_symbols_or_none,
+    read_symbols,
+)
 
 
 def _spy_extractor():
@@ -146,12 +151,20 @@ def test_index_symbols_indexed_equals_total_records_in_index(tmp_path):
     assert len((art / SYMBOLS_NAME).read_text().splitlines()) == 3
 
 
-def test_index_null_language_and_grammarless_files_contribute_zero_symbols(tmp_path):
-    _write(tmp_path, "run", "#!/bin/sh\n")  # null-language
-    _write(tmp_path, "lib.rs", "fn main() {}\n")  # grammarless (no Wave-2 grammar)
+def test_index_truly_null_language_file_contributes_zero_symbols(tmp_path):
+    _write(tmp_path, "run", "#!/bin/sh\n")  # null-language (no extension)
+    _write(tmp_path, "notes.xyz", "free text\n")  # genuinely unmapped extension
     result = index_repo(tmp_path, Settings())
     assert result.symbols_indexed == 0
-    assert result.degraded == []  # grammarless ≠ grammar-missing
+    assert result.degraded == []  # null-language ≠ grammar-missing
+
+
+def test_index_rust_file_now_extracts_symbols(tmp_path):
+    # Tier A shipped: .rs is routed AND extracted — no longer a silent zero.
+    _write(tmp_path, "lib.rs", "fn main() {}\n")
+    result = index_repo(tmp_path, Settings())
+    assert result.symbols_indexed == 1
+    assert result.degraded == []
 
 
 def test_index_symbols_indexed_is_total_in_index_on_no_reparse(tmp_path):
@@ -287,4 +300,78 @@ def test_index_absent_to_present_grammar_rebuild_clears_stale_grammar_missing(tm
         tmp_path, Settings(), extractor=extract_symbols, engine_ident={"py": "0.25"}
     )
     assert second.degraded == []  # stale grammar-missing cleared
+    assert second.symbols_indexed == 1
+
+
+def test_index_symbols_indexed_total_across_all_languages(tmp_path):
+    _write(tmp_path, "a.py", "def foo():\n    pass\n")  # 1
+    _write(tmp_path, "lib.rs", "fn bar() {}\n")  # 1
+    _write(tmp_path, "M.java", "class C { void m() {} }\n")  # 2 (C + m)
+    result = index_repo(tmp_path, Settings())
+    assert result.symbols_indexed == 4  # total across python + rust + java
+
+
+def test_index_incremental_no_reparse_keeps_full_symbols_indexed_across_languages(tmp_path):
+    _write(tmp_path, "lib.rs", "fn bar() {}\n")
+    _write(tmp_path, "M.java", "class C { void m() {} }\n")
+    index_repo(tmp_path, Settings())
+    result = index_repo(tmp_path, Settings())  # unchanged → no re-parse
+    assert result.symbols_indexed == 3  # still total-in-index, not parsed-this-run
+
+
+def test_index_prune_deleted_new_language_file_drops_records_and_degraded(tmp_path):
+    _write(tmp_path, "keep.rs", "fn keep() {}\n")
+    f = _write(tmp_path, "gone.rs", "fn gone() {}\n")
+    index_repo(tmp_path, Settings())
+    f.unlink()
+    result = index_repo(tmp_path, Settings())
+    records = read_symbols(_artifact_dir(tmp_path))
+    paths = {r.path for r in records}
+    assert "gone.rs" not in paths
+    assert "keep.rs" in paths
+    assert result.symbols_indexed == 1
+
+
+def test_index_two_runs_byte_identical_symbols_and_meta_mixed_languages(tmp_path):
+    _write(tmp_path, "a.py", "def foo():\n    pass\n")
+    _write(tmp_path, "lib.rs", "fn bar() {}\n")
+    _write(tmp_path, "M.java", "class C { void m() {} }\n")
+    _write(tmp_path, "u.ts", "interface I { x: number }\nenum E { A }\n")
+    _write(tmp_path, "m.cpp", "class K { void mm(){} };\n")
+    index_repo(tmp_path, Settings())
+    art = _artifact_dir(tmp_path)
+    sym1, meta1 = (art / SYMBOLS_NAME).read_bytes(), (art / META_NAME).read_bytes()
+    index_repo(tmp_path, Settings())  # unchanged tree → byte-identical artifacts
+    sym2, meta2 = (art / SYMBOLS_NAME).read_bytes(), (art / META_NAME).read_bytes()
+    assert sym1 == sym2
+    assert meta1 == meta2
+
+
+def test_index_new_grammar_bump_forces_rebuild_mtime_size_unchanged(tmp_path):
+    # A grammar-only bump of a new (0004) grammar still invalidates the cache.
+    _write(tmp_path, "lib.rs", "fn main() {}\n")
+    ex, calls = _spy_extractor()
+    index_repo(tmp_path, Settings(), extractor=ex, engine_ident={"tree-sitter-rust": "0.23"})
+    calls.clear()
+    index_repo(tmp_path, Settings(), extractor=ex, engine_ident={"tree-sitter-rust": "0.24"})
+    assert any(c.endswith("lib.rs") for c in calls)  # rust bump rebuilt the cache
+
+
+def test_index_absent_to_present_new_grammar_clears_stale_grammar_missing(tmp_path):
+    from harpyja.symbols.extract import extract_symbols
+
+    _write(tmp_path, "lib.rs", "fn main() {}\n")
+
+    def absent(path, language, source):
+        return ExtractResult([], "grammar-missing")
+
+    first = index_repo(
+        tmp_path, Settings(), extractor=absent, engine_ident={"tree-sitter-rust": "missing"}
+    )
+    assert any("grammar-missing" in d and "lib.rs" in d for d in first.degraded)
+
+    second = index_repo(
+        tmp_path, Settings(), extractor=extract_symbols, engine_ident={"tree-sitter-rust": "0.24"}
+    )
+    assert second.degraded == []  # stale grammar-missing cleared once rust installed
     assert second.symbols_indexed == 1

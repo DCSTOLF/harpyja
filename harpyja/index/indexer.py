@@ -37,8 +37,23 @@ from harpyja.symbols.symbols_io import load_symbols_or_none, write_symbols
 HashFn = Callable[[Path], str]
 Extractor = Callable[[str, str, bytes], ExtractResult]
 
-# Languages with a bundled tree-sitter grammar in Wave 2.
-SYMBOL_LANGUAGES = frozenset({"python", "go"})
+# Languages with a bundled tree-sitter grammar + extraction rules. Kept in lockstep
+# with classify.KNOWN_LANGUAGES (the no-silent-coverage invariant, 0004 AC8 /
+# test_routing.py): a language is routed here only once its extraction ships.
+SYMBOL_LANGUAGES = frozenset(
+    {
+        "python",
+        "go",
+        "rust",
+        "java",
+        "csharp",
+        "javascript",
+        "typescript",
+        "tsx",
+        "c",
+        "cpp",
+    }
+)
 
 
 @dataclass

@@ -32,8 +32,16 @@ def test_index_and_locate_make_no_outbound_network_call(tmp_path, monkeypatch):
 
     (tmp_path / "a.py").write_text("def foo():\n    pass\n", encoding="utf-8")
     (tmp_path / "b.go").write_text("package m\nfunc F() {}\n", encoding="utf-8")
+    # 0004: the new grammars must parse just as locally (no runtime egress).
+    (tmp_path / "lib.rs").write_text("fn bar() {}\n", encoding="utf-8")
+    (tmp_path / "M.java").write_text("class C { void m() {} }\n", encoding="utf-8")
+    (tmp_path / "P.cs").write_text("class C { void M() {} }\n", encoding="utf-8")
+    (tmp_path / "u.ts").write_text("interface I { x: number }\n", encoding="utf-8")
+    (tmp_path / "v.tsx").write_text("const X = 1;\n", encoding="utf-8")
+    (tmp_path / "w.c").write_text("int f(){ return 0; }\n", encoding="utf-8")
+    (tmp_path / "x.cpp").write_text("class K { void mm(){} };\n", encoding="utf-8")
 
-    index_repo(tmp_path, Settings())  # real tree-sitter parsing
+    index_repo(tmp_path, Settings())  # real tree-sitter parsing, all grammars
     locate(
         LocateRequest(query="foo", repo_path=str(tmp_path)),
         Settings(),

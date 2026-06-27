@@ -181,3 +181,53 @@ def test_locate_after_edit_reflects_new_symbols_without_explicit_reindex(tmp_pat
     os.utime(f, (2_000_000_000, 2_000_000_000))
     result = locate(_req(tmp_path, query="bar"), Settings(), engine=FakeEngine([]))
     assert any(c.symbol == "bar" for c in result.citations)
+
+
+# --- 0004: new-language definition promotion through the unchanged pipeline (AC11, AC12) ---
+
+
+def test_locate_promotes_rust_definition_above_call_sites(tmp_path):
+    _write(tmp_path, "lib.rs", "fn parse_cfg() {}\nfn caller() { parse_cfg(); }\n")
+    engine = FakeEngine([CodeSpan("lib.rs", 2, 2)])  # ripgrep call-site hit
+    result = locate(_req(tmp_path, query="parse_cfg"), Settings(), engine=engine)
+    top = result.citations[0]
+    assert top.symbol == "parse_cfg"  # the definition outranks the call site
+    assert top.start_line == 1
+    assert result.tiers_run == [0]  # still Tier 0, zero model calls
+
+
+def test_locate_rust_method_address_colon_colon_promotes_method(tmp_path):
+    _write(tmp_path, "lib.rs", "struct Foo;\nimpl Foo { fn bar(&self) {} }\n")
+    result = locate(_req(tmp_path, query="Foo::bar"), Settings(), engine=FakeEngine([]))
+    assert any(c.symbol == "bar" and c.kind == "method" for c in result.citations)
+
+
+def test_locate_exact_case_sensitive_for_new_language(tmp_path):
+    _write(tmp_path, "M.java", "class C { void Parse() {} }\n")
+    # `parse` (lower) must NOT match the `Parse` definition.
+    result = locate(_req(tmp_path, query="parse"), Settings(), engine=FakeEngine([]))
+    assert all(c.symbol != "Parse" for c in result.citations)
+    # `Parse` (exact) does.
+    result2 = locate(_req(tmp_path, query="Parse"), Settings(), engine=FakeEngine([]))
+    assert any(c.symbol == "Parse" for c in result2.citations)
+
+
+def test_locate_no_symbol_match_degrades_to_wave1_on_mixed_tree(tmp_path):
+    _write(tmp_path, "lib.rs", "fn bar() {}\n")
+    _write(tmp_path, "M.java", "class C {}\n")
+    engine = FakeEngine([CodeSpan(path="lib.rs", start_line=1, end_line=1)])
+    result = locate(_req(tmp_path, query="zzz_nomatch"), Settings(), engine=engine)
+    # No symbol named zzz_nomatch → identical to the Wave-1 ripgrep-only result.
+    assert [(c.path, c.start_line) for c in result.citations] == [("lib.rs", 1)]
+    assert result.citations[0].symbol is None
+
+
+def test_locate_language_hint_filters_new_language_by_manifest_language(tmp_path):
+    _write(tmp_path, "lib.rs", "x\n")
+    _write(tmp_path, "M.java", "x\n")
+    spans = [
+        CodeSpan(path="lib.rs", start_line=1, end_line=1),
+        CodeSpan(path="M.java", start_line=1, end_line=1),
+    ]
+    result = locate(_req(tmp_path, language_hint="rust"), Settings(), engine=FakeEngine(spans))
+    assert {c.path for c in result.citations} == {"lib.rs"}

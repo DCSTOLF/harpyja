@@ -104,3 +104,49 @@ def test_search_orchestrator_never_branches_dedupes_identical():
     eng = _engine([rec])
     # `foo foo` — same name twice across segments — must not duplicate the span.
     assert len(eng.search("foo foo")) == 1
+
+
+# --- 0004: new-language method addressing reuses `.` / `::` (AC11) ---
+
+
+def _rec_lang(name, language, kind="function", parent=None, path="a", start=1, end=2):
+    return SymbolRecord(
+        path=path,
+        language=language,
+        name=name,
+        kind=kind,
+        parent=parent,
+        start_line=start,
+        end_line=end,
+    )
+
+
+def test_search_rust_colon_colon_method_address():
+    eng = _engine([_rec_lang("bar", "rust", kind="method", parent="Foo", path="m.rs")])
+    assert any(s.symbol == "bar" for s in eng.search("Foo::bar"))
+
+
+def test_search_cpp_colon_colon_method_address():
+    eng = _engine([_rec_lang("bar", "cpp", kind="method", parent="Foo", path="m.cpp")])
+    assert any(s.symbol == "bar" for s in eng.search("Foo::bar"))
+
+
+def test_search_cross_namespace_same_name_parent_both_match():
+    # Two `bar` under a `Foo` parent in different files — `parent` is immediate-only
+    # and namespaces are out of scope, so `Foo::bar` matches BOTH (documented
+    # addressing ambiguity, not a regression).
+    recs = [
+        _rec_lang("bar", "cpp", kind="method", parent="Foo", path="a.cpp", start=1, end=2),
+        _rec_lang("bar", "cpp", kind="method", parent="Foo", path="b.cpp", start=5, end=6),
+    ]
+    out = _engine(recs).search("Foo::bar")
+    assert {s.path for s in out} == {"a.cpp", "b.cpp"}
+
+
+def test_search_arrow_separator_does_not_glue_into_method_address():
+    # Only `.` / `::` glue parent→name. The parent token alone is inert, exactly as
+    # for whitespace — `->` is not a method-address separator (AC11).
+    eng = _engine([_rec_lang("bar", "cpp", kind="method", parent="Foo", path="m.cpp")])
+    assert eng.search("Foo") == []  # parent token alone matches nothing
+    # `Foo->bar` finds `bar` only via plain-name tokenization, never an address pair.
+    assert eng.search("Foo->bar") == eng.search("bar")
