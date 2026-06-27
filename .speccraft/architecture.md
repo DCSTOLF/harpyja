@@ -15,13 +15,18 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    cache integrity / engine-identity mismatch).
 4. `harpyja/symbols/` — tree-sitter engines + ripgrep engine behind one `CodeSpan`
    interface (Tier 0). Live as of Wave 2: `RipgrepEngine` (literal `--fixed-strings`,
-   bounded); `extract` (Python + Go tree-sitter, defs-only by syntactic form →
-   `SymbolRecord` / `ExtractResult`); `symbols_io` (byte-reproducible `symbols.jsonl`
-   + self-verifying `symbols.meta.json` sidecar; records-first/meta-last `os.replace`);
-   `engine_identity` (runtime + grammar versions, sentinel-safe cache key);
-   `symbol_locator` (`SymbolEngine` — exact case-sensitive name + `.`/`::` method
-   addressing, behind the `Locator` protocol). The remaining five grammars are a
-   follow-up spec.
+   bounded); `extract` (defs-only by syntactic form → `SymbolRecord` / `ExtractResult`
+   for all 10 grammars — Python, Go, Rust, Java, C#, JavaScript, TypeScript, TSX, C,
+   C++; minimal closed kind vocabularies, nested **types** extracted with immediate
+   `parent` but function-body-local defs dropped); `symbols_io` (byte-reproducible
+   `symbols.jsonl` + self-verifying `symbols.meta.json` sidecar; records-first/meta-last
+   `os.replace`); `engine_identity` (runtime + a per-grammar slot via `_GRAMMAR_SLOTS`,
+   sentinel-safe cache key; `typescript`/`tsx` coupled under one `tree-sitter-typescript`
+   version); `symbol_locator` (`SymbolEngine` — exact case-sensitive name + `.`/`::`
+   method addressing, behind the `Locator` protocol). Routing is held in lockstep with
+   extraction: `classify.KNOWN_LANGUAGES == indexer.SYMBOL_LANGUAGES`
+   (`index/test_routing.py`), so a language is never routed ahead of its rules.
+   Remaining symbol follow-up: **Wave-2.1 substring/fuzzy matching**.
 5. `harpyja/scout/` — FastContext adapter (Tier 1).
 6. `harpyja/deep/` — `dspy.RLM` driver + bounded read-only host tools (Tier 2).
 7. `harpyja/gateway/` — Model Gateway over the local OpenAI-compatible endpoint. Only outbound caller.

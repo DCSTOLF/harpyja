@@ -2,6 +2,52 @@
 
 Append-only. Newest first.
 
+## 2026-06-26 — Wave 2 symbol layer completed (all 10 grammars) + no-silent-coverage lockstep
+
+**Spec:** specs/0004-symbol-layer-remaining-grammars/
+**Decision:** Close the Wave-2 follow-up by adding the remaining eight tree-sitter
+grammars — Rust, Java, C#, JavaScript, TypeScript, TSX, C, C++ — behind the
+**unchanged** `SymbolEngine` / `Locator` / formatter path, so only more languages
+produce records (locate/orchestrator/contract untouched; AC15 held by construction).
+Three durable choices were pinned: (1) **No-silent-coverage lockstep invariant.**
+Wave 1 already shipped a latent no-false-capability violation — `classify._EXT_TO_LANG`
+over-routed all 9 languages while `indexer.SYMBOL_LANGUAGES` was only `{python, go}`,
+so a `.rs`/`.ts` file returned `([], None)`: a silent clean-zero indistinguishable
+from a genuinely symbol-less file ("we never looked" masquerading as "we looked and
+found nothing"). The fix is a permanent invariant `classify.KNOWN_LANGUAGES ==
+indexer.SYMBOL_LANGUAGES`, asserted by a new `index/test_routing.py` and re-checked at
+every tier boundary: a language's **routing + `engine_identity` slot + extraction
+rules ship in the same change**; an unshipped tier stays null-language/ripgrep-only,
+never silent zero. (2) **`.h`→C is a scoped, not absolute, guarantee.** Both reviewers
+flagged the original "never a wrong-range record" overclaim; impl confirmed it —
+tree-sitter-c *tolerates* a bare `class Foo {}` (parses it, no ERROR), so the test
+uses `template<…>`, which reliably triggers an ERROR. The shipped guarantee: degrade
+only when an `ERROR`/`MISSING` node is present; a C-legal subset of a C++ header
+parsing cleanly as `c` is the documented cost of the `.h`→C default, not claimed as
+rejected. (3) **Per-grammar identity slots, coupled where the package couples.**
+`engine_identity` now enumerates all 10 slots via a `_GRAMMAR_SLOTS` map
+(slot → dist, module, language-fn) that replaced the flat `_GRAMMARS` tuple;
+`typescript` and `tsx` ship from one `tree-sitter-typescript` package, so they are
+two identity keys with one version that bump/absent together (loaded via
+`language_typescript()` / `language_tsx()`, not `language()`).
+**Why:** Until this spec, the index advertised a symbol tier it delivered for only two
+of seven languages — a Rust `fn` or Java method fell to ripgrep line hits, the exact
+context-flooding Wave 2 exists to prevent. The lockstep invariant generalizes the
+project's no-false-capability rule to *coverage*: routing a capability ahead of its
+extraction is itself a false claim. Reuse kept the surface small — `_strip_go_type`
+(generic/pointer parent normalization), the `^[A-Z][A-Z0-9_]*$` constant filter, and
+`_own_region_errored` (parse-error scoping) were reused verbatim, with a shared
+`_emit_named` helper backing Java/C#/JS/C-family.
+**Consequence:** Tier 0 now covers all 10 grammars; the symbol-layer adapter is fully
+cashed in. Two accepted, documented limitations remain: a C-legal subset of a `.h`
+C++ header is parsed as `c`, and `parent` is immediate-only, so two same-named members
+under different outer types/namespaces both match `Foo::bar` (a known addressing
+ambiguity, not a regression). The 5-grammar follow-up opened at 0003's close is now
+closed by this spec; **Wave-2.1 substring/fuzzy matching** remains the sole open
+follow-up (still needs its own ranking rules + ACs). Method addressing stays a
+formatter-ranking signal (a subset of name results glued by `.`/`::`), not a
+membership filter.
+
 ## 2026-06-26 — Wave 2 symbol layer shipped (tree-sitter, Python + Go)
 
 **Spec:** specs/0003-wave-2-symbol-layer/
