@@ -36,7 +36,25 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    Scout is **not cached** (model-backed/non-deterministic, no engine-identity slot).
    Degradable failures carry a stable `ScoutUnavailable.cause`; `RipgrepMissingError` /
    `AirGapError` propagate as the floor.
-6. `harpyja/deep/` — `dspy.RLM` driver + bounded read-only host tools (Tier 2).
+6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
+   as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
+   injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
+   lookup **before** the backend; **dual surface** — `.search` for `Locator`
+   conformance and `run() -> (citations, truncated_bound)`, since the truncation bound
+   is metadata the bare `CodeSpan` list cannot carry) + `DeepBudget` (per-request meter:
+   tool-calls / tokens / depth / subqueries / wall-clock + `truncated_bound`) +
+   `build_host_tools` (exactly four confined, read-only tools —
+   `{list_manifest, search, symbols, read_span}` — each a thin wrapper over Tier-0
+   machinery, repo-path-confined via `server.tools.confine_path` and bounded by the
+   existing `Settings` clamps) + `DeepRunner` (in-process counter facet + out-of-band
+   subprocess `run_isolated` that **hard-kills** on `deep_wall_clock_ms`) + `RlmBackend`
+   (`dspy.RLM`, fresh instance per request, air-gap via `gateway.assert_local` on the
+   endpoint because the RLM owns its own LM, no top-level import) + `wiring.build_deep_engine`
+   (the `deep_factory`). Deep is **not cached** (model-backed/non-deterministic, no
+   engine-identity slot, like Scout). Degradable failures carry a stable
+   `DeepUnavailable.cause` (`sandbox-absent`/`rlm-down`/`backend-error`); a budget
+   truncation is a non-degrade `deep-truncated:<bound>` note; `RipgrepMissingError`
+   (seed) / `AirGapError` propagate as the floor.
 7. `harpyja/gateway/` — Model Gateway over the local OpenAI-compatible endpoint. Only
    outbound caller. Live as of Wave 3: `ModelGateway.complete()` asserts the air-gap at
    name-resolution time (injected resolver + `ipaddress` loopback predicate) **before** an
@@ -63,11 +81,27 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   precondition. See history.md 2026-06-26.
 - Tier 1 (Scout) is live, explicit-opt-in, and additive on the Tier-0 floor:
   `mode=auto` is byte-identical to Wave 2 with **zero** Gateway calls; `mode=fast` →
-  Scout; `mode=deep` → Scout (provisional, `Deep pending`, asserts no Tier-2 marker)
-  until Deep lands. A Scout call resolves to a four-state degradation floor that never
+  Scout; `mode=deep` → Tier 2 (Deep) as of Wave 4. A Scout call resolves to a
+  four-state degradation floor that never
   collapses model-down into a phantom "nothing found"; seed-before-backend ordering makes
   the loud precondition case win by construction. FastContext is an implementation detail
   *inside* a `Locator`, not a parallel citation path. See history.md 2026-06-27.
+- Tier 2 (Deep) is live, explicit-opt-in (`mode=deep` only — `auto` does not climb),
+  and additive on the Tier-0 floor: a `dspy.RLM` explorer in a Deno/Pyodide sandbox
+  whose entire world is the four confined read-only host tools. A successful run is
+  `tiers_run=[0,2]`, `source_tier=2`. The explorer loop is bounded **in layers** —
+  externally-enforced tool-calls/tokens/wall-clock (the load-bearing trio; wall-clock
+  by an out-of-band host-terminable subprocess hard-kill) plus host-mediated
+  depth/subqueries with recorded residual risk, transitively contained by the trio. A
+  budget truncation surfaces as a stable non-degrade `deep-truncated:<bound>` note;
+  Deep degrades to Scout best-effort **only** on a typed `DeepUnavailable` (weak/zero
+  citations stay an honest Tier-2 result — no ungated escalation, deferred to the
+  Wave-5 Gate). Because the RLM writes and runs code, it is untrusted *code*, not just
+  an untrusted caller: sandbox isolation (ambient FS + non-loopback egress denied) is
+  an **assumption verified by test** with residual risk recorded, and the air-gap is
+  enforced at the endpoint via `gateway.assert_local` (the RLM owns its own LM) and
+  proven by a network-deny integration test. Deep is **not cached**. See history.md
+  2026-06-27 (Wave 4).
 
 ## Boundaries
 

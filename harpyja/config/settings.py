@@ -47,6 +47,16 @@ class Settings:
     scout_max_citations: int = 20
     scout_max_span_lines: int = 200
 
+    # Wave 4 — Deep (Tier 2) budgets (spec 0006 §Concrete budgets).
+    deep_seed_top_n: int = 5
+    deep_max_citations: int = 20
+    deep_max_span_lines: int = 200
+    deep_max_depth: int = 3
+    deep_max_subqueries: int = 8
+    deep_max_tool_calls: int = 200
+    deep_token_ceiling: int = 32000
+    deep_wall_clock_ms: int = 60000
+
 
 _FIELD_TYPES = {f.name: f.type for f in fields(Settings)}
 

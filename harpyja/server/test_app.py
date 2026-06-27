@@ -244,3 +244,72 @@ def test_build_app_fast_uses_scout_engine(tmp_path):
     assert data["tiers_run"] == [0, 1]
     assert data["citations"][0]["path"] == "a.py"
     assert data["citations"][0]["source_tier"] == 1
+
+
+# --- Wave 4: Deep wiring (AC2, AC13) ---
+
+
+class _BoomDeep:
+    def run(self, *args, **kwargs):
+        raise AssertionError("deep invoked on a non-deep path")
+
+
+class _FakeDeep:
+    def __init__(self, spans):
+        self.spans = spans
+
+    def run(self, query):
+        return list(self.spans), None
+
+
+def test_build_app_deep_uses_deep_engine(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    app = build_app(
+        engine_factory=lambda s: _FakeEngine([]),
+        deep_factory=lambda s, repo: _FakeDeep([CodeSpan("a.py", 1, 1)]),
+    )
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate",
+                {"query": "needle", "repo_path": str(tmp_path), "mode": "deep"},
+            )
+
+    data = _run(go()).data
+    assert data["tiers_run"] == [0, 2]
+    assert data["citations"][0]["source_tier"] == 2
+
+
+def test_build_app_auto_makes_zero_deep_calls(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    app = build_app(
+        engine_factory=lambda s: _FakeEngine([CodeSpan("a.py", 1, 1)]),
+        deep_factory=lambda s, repo: _BoomDeep(),
+    )
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate", {"query": "needle", "repo_path": str(tmp_path)}
+            )
+
+    assert _run(go()).data["tiers_run"] == [0]  # _BoomDeep untouched on auto
+
+
+def test_build_app_fast_makes_zero_deep_calls(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    app = build_app(
+        engine_factory=lambda s: _FakeEngine([]),
+        scout_factory=lambda s, repo: _FakeEngine([CodeSpan("a.py", 1, 1)]),
+        deep_factory=lambda s, repo: _BoomDeep(),
+    )
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate",
+                {"query": "needle", "repo_path": str(tmp_path), "mode": "fast"},
+            )
+
+    assert _run(go()).data["tiers_run"] == [0, 1]  # Scout path; Deep untouched

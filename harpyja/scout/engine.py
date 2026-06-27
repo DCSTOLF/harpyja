@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 from harpyja.config.settings import Settings
 from harpyja.scout.backend import ScoutBackend
-from harpyja.scout.normalize import normalize_spans
+from harpyja.scout.normalize import normalize_spans_for_scout
 from harpyja.server.types import CodeSpan
 
 SeedFn = Callable[[str], list[CodeSpan]]
@@ -38,4 +38,4 @@ class ScoutEngine:
         seed = self._seed_fn(pattern)
         hints = seed[: self._settings.scout_seed_top_n]
         raw = self._backend.run(pattern, hints)
-        return normalize_spans(raw, self._repo_root, self._settings)
+        return normalize_spans_for_scout(raw, self._repo_root, self._settings)

@@ -21,9 +21,16 @@ def _line_count(path: Path) -> int:
 def normalize_spans(
     raw: list[CodeSpan],
     repo_root: str,
-    settings: Settings,
+    *,
+    max_citations: int,
+    max_span_lines: int,
 ) -> list[CodeSpan]:
-    """Drop/clamp hostile spans; return at most ``scout_max_citations`` of them."""
+    """Drop/clamp hostile spans; return at most ``max_citations`` of them.
+
+    The budgets are explicit so both tiers reuse this one clamp: Scout calls it
+    via :func:`normalize_spans_for_scout` with the ``scout_*`` budgets; Deep
+    (Tier 2) calls it with the ``deep_*`` budgets.
+    """
     root = Path(repo_root).resolve()
     seen: set[tuple[str, int, int]] = set()
     out: list[CodeSpan] = []
@@ -46,8 +53,8 @@ def normalize_spans(
             continue
 
         end = min(span.end_line, n_lines)
-        # Clamp an over-long span to the first scout_max_span_lines lines.
-        end = min(end, span.start_line + settings.scout_max_span_lines - 1)
+        # Clamp an over-long span to the first max_span_lines lines.
+        end = min(end, span.start_line + max_span_lines - 1)
 
         key = (str(rel), span.start_line, end)
         if key in seen:
@@ -63,7 +70,21 @@ def normalize_spans(
                 kind=span.kind,
             )
         )
-        if len(out) >= settings.scout_max_citations:
+        if len(out) >= max_citations:
             break
 
     return out
+
+
+def normalize_spans_for_scout(
+    raw: list[CodeSpan],
+    repo_root: str,
+    settings: Settings,
+) -> list[CodeSpan]:
+    """Scout-budget wrapper over :func:`normalize_spans` (byte-identical clamp)."""
+    return normalize_spans(
+        raw,
+        repo_root,
+        max_citations=settings.scout_max_citations,
+        max_span_lines=settings.scout_max_span_lines,
+    )

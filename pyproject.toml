@@ -18,6 +18,7 @@ dependencies = [
     "tree-sitter-typescript>=0.23",
     "tree-sitter-c>=0.23",
     "tree-sitter-cpp>=0.23",
+    "dspy>=3.2.1",
 ]
 
 [project.scripts]

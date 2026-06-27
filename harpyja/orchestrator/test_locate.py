@@ -403,20 +403,176 @@ def test_locate_non_loopback_raises_airgap(tmp_path):
         )
 
 
-def test_locate_deep_attaches_pending_note(tmp_path):
-    _write(tmp_path, "a.py", "x = 1\n")
-    scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
-    result = locate(
-        _req(tmp_path, mode="deep"), Settings(), engine=FakeEngine([]), scout_engine=scout
-    )
-    assert "Deep pending" in (result.notes or "")
+# --- Wave 4: Deep (Tier 2) routing — supersedes the Wave-3 provisional guard ---
+
+from harpyja.deep.errors import DeepUnavailable  # noqa: E402
 
 
-def test_locate_deep_no_tier2_marker(tmp_path):
+class _BoomDeep:
+    """A Deep double that explodes if consulted (auto/fast must not)."""
+
+    def run(self, *args, **kwargs):
+        raise AssertionError("deep invoked on a non-deep path")
+
+
+class _FakeDeep:
+    """Returns (citations, truncated_bound); records calls."""
+
+    def __init__(self, spans, truncated=None):
+        self.spans = spans
+        self.truncated = truncated
+        self.calls = []
+
+    def run(self, query):
+        self.calls.append(query)
+        return list(self.spans), self.truncated
+
+
+class _UnavailableDeep:
+    def __init__(self, cause):
+        self.cause = cause
+
+    def run(self, query):
+        raise DeepUnavailable(self.cause)
+
+
+def test_locate_deep_emits_tier2_marker_when_wired(tmp_path):
+    # Inverts the Wave-3 "no Tier-2 marker" guard: deep now legitimately reports Tier 2.
     _write(tmp_path, "a.py", "x = 1\n")
+    deep = _FakeDeep([CodeSpan(path="a.py", start_line=1, end_line=1)])
+    result = locate(
+        _req(tmp_path, mode="deep"),
+        Settings(),
+        engine=FakeEngine([]),
+        deep_engine=deep,
+    )
+    assert result.tiers_run == [0, 2]
+    assert result.citations and all(c.source_tier == 2 for c in result.citations)
+
+
+def test_locate_deep_seed_rg_missing_propagates(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+
+    class _RgMissingDeep:
+        def run(self, query):
+            raise RipgrepMissingError("rg not found")
+
+    with pytest.raises(RipgrepMissingError):
+        locate(
+            _req(tmp_path, mode="deep"),
+            Settings(),
+            engine=FakeEngine([]),
+            deep_engine=_RgMissingDeep(),
+        )
+
+
+def test_locate_deep_unavailable_degrades_to_scout(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
     scout = _FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)])
     result = locate(
-        _req(tmp_path, mode="deep"), Settings(), engine=FakeEngine([]), scout_engine=scout
+        _req(tmp_path, mode="deep"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_UnavailableDeep("rlm-down"),
     )
-    assert 2 not in result.tiers_run  # no Tier-2 capability claimed
-    assert result.tiers_run == [0, 1]  # behaviorally identical to fast this wave
+    assert result.tiers_run == [0, 1]  # Scout best-effort ran
+    assert result.notes.startswith("deep-degraded:rlm-down")
+    assert all(c.source_tier == 1 for c in result.citations)
+
+
+def test_locate_deep_double_degrade_carries_both_notes(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    engine = FakeEngine([CodeSpan(path="a.py", start_line=1, end_line=1)])  # Tier-0 has results
+    result = locate(
+        _req(tmp_path, mode="deep"),
+        Settings(),
+        engine=engine,
+        scout_engine=_UnavailableScout("connection-refused"),
+        deep_engine=_UnavailableDeep("rlm-down"),
+    )
+    assert result.tiers_run == [0]
+    assert "deep-degraded:rlm-down" in result.notes
+    assert "scout-degraded:connection-refused" in result.notes
+
+
+def test_locate_deep_distinct_cause_notes(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    notes = set()
+    for cause in ("sandbox-absent", "rlm-down", "backend-error"):
+        result = locate(
+            _req(tmp_path, mode="deep"),
+            Settings(),
+            engine=FakeEngine([]),
+            scout_engine=_FakeScout([CodeSpan("a.py", 1, 1)]),
+            deep_engine=_UnavailableDeep(cause),
+        )
+        notes.add(result.notes.split(";")[0])
+    assert notes == {
+        "deep-degraded:sandbox-absent",
+        "deep-degraded:rlm-down",
+        "deep-degraded:backend-error",
+    }
+
+
+def test_locate_deep_weak_or_zero_citations_stay_tier2(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    # Successful Deep run returning zero citations must NOT fall back to Scout.
+    result = locate(
+        _req(tmp_path, mode="deep"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_BoomScout(),  # explodes if a fallback is wrongly attempted
+        deep_engine=_FakeDeep([]),
+    )
+    assert result.tiers_run == [0, 2]
+    assert result.citations == []
+
+
+def test_locate_deep_airgap_propagates(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+
+    class _AirGapDeep:
+        def run(self, query):
+            raise AirGapError("non-loopback endpoint rejected")
+
+    with pytest.raises(AirGapError):
+        locate(
+            _req(tmp_path, mode="deep"),
+            Settings(),
+            engine=FakeEngine([]),
+            deep_engine=_AirGapDeep(),
+        )
+
+
+def test_locate_deep_truncated_note_plumbed(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)], truncated="wall-clock")
+    result = locate(
+        _req(tmp_path, mode="deep"),
+        Settings(),
+        engine=FakeEngine([]),
+        deep_engine=deep,
+    )
+    assert result.tiers_run == [0, 2]
+    assert "deep-truncated:wall-clock" in (result.notes or "")
+
+
+def test_locate_auto_makes_zero_deep_calls(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    result = locate(
+        _req(tmp_path), Settings(), engine=FakeEngine([]), deep_engine=_BoomDeep()
+    )
+    assert result.tiers_run == [0]  # _BoomDeep never raised → Deep untouched
+
+
+def test_locate_fast_makes_zero_deep_calls(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    result = locate(
+        _req(tmp_path, mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_FakeScout([CodeSpan("a.py", 1, 1)]),
+        deep_engine=_BoomDeep(),
+    )
+    assert result.tiers_run == [0, 1]  # Scout path; Deep untouched

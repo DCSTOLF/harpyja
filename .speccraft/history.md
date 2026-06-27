@@ -2,6 +2,71 @@
 
 Append-only. Newest first.
 
+## 2026-06-27 — Wave 4 Deep (Tier 2) shipped — dspy.RLM, sandbox, layered explorer-loop bounds
+
+**Spec:** specs/0006-wave-4-deep-rlm/
+**Decision:** Land Harpyja's strongest, most expensive tier — Tier 2 Deep, a
+`dspy.RLM` explorer running inside a Deno/Pyodide sandbox whose **entire world** is
+four bounded, read-only host tools — reached only via `mode=deep`, and make the
+Wave-3 provisional `deep` real by shipping routing **and** implementation together.
+`mode=auto` stays byte-identical and model-free; `mode=fast` stays Scout. Eight
+durable choices were pinned. (1) **Layered explorer-loop enforcement — no single
+ignorable counter is load-bearing.** An untrusted code-writing loop is bounded at
+different seams: *externally enforced* (the backend cannot evade) `deep_max_tool_calls`
+(host-tool wrappers stop dispatching), `deep_token_ceiling` (the Gateway refuses
+further completions), and `deep_wall_clock_ms` (a host deadline) are the load-bearing
+trio; `deep_max_depth` / `deep_max_subqueries` are *host-mediated* at the spawn seam
+with **recorded residual risk** (if the runtime exposes no spawn/recurse hook they
+become cooperative) and are **transitively contained** by the external trio — every
+sub-query spends tool-calls, tokens, and wall-clock, so a recursion storm terminates
+even if the mediation seam is cooperative. A bound the third party can ignore is not
+a bound. (2) **Wall-clock requires an out-of-band, host-terminable subprocess.** A
+same-thread/same-event-loop deadline can never fire while a synchronous WASM busy
+loop blocks it; `DeepRunner` therefore splits an in-process counter facet
+(unit-testable, no process) from an out-of-band `run_isolated` worker the host
+**hard-kills** — enforcement by termination, never cooperative cancellation; proven
+against a genuine `while True: pass` (AC10) and a real RLM runaway (AC10a). (3)
+**Typed-failure-only degradation boundary.** Deep degrades to Scout best-effort
+**only** on a typed `DeepUnavailable` (`sandbox-absent` / `rlm-down` / `backend-error`);
+weak or zero citations are an honest Tier-2 result, **not** a degrade — treating weak
+output as a reason to drop a tier would be the ungated escalation the deferred Wave-5
+Verification Gate is meant to govern, and must not be smuggled in here. (4)
+**`deep-truncated:<bound>` is a stable, caller-visible non-degrade note** (one of
+`depth` / `subqueries` / `tool-calls` / `tokens` / `wall-clock`) — a budget
+truncation is never silently indistinguishable from a complete run and never a
+tier-degrade. (5) **RlmBackend air-gap via `assert_local` on the endpoint.** The real
+`dspy.RLM` owns its own `dspy.LM` (litellm) and accepts no model_fn, so it cannot be
+routed through `gateway.complete` as the spec assumed; instead `RlmBackend` calls
+`gateway.assert_local(settings.lm_api_base)` **before** constructing the LM (single
+air-gap helper, no parallel check) and the air-gap is **proven** by the network-deny
+integration test (AC12) — assumption-verified-by-test, not asserted. (6) **`DeepEngine`
+dual surface.** It self-seeds Tier-0 before the backend and exposes both `.search` for
+`Locator` conformance and `run() -> (citations, truncated_bound)` because the
+truncation bound is metadata the bare `list[CodeSpan]` contract cannot carry. (7)
+**Sandbox isolation verified by test, residual risk recorded.** In the real sandbox an
+ambient `open()` (outside *and* inside the repo — the latter would bypass `read_span`'s
+clamps) and a non-loopback socket connect all fail (AC8b); the four-tool surface is
+also pinned by a deno-less positive-equality `[unit]` whitelist (AC8a). The
+runtime-change residual risk is recorded, exactly as the Wave-3 FastContext in-process
+egress risk was. (8) **Lockstep guard inversion shipped atomically:** the two Wave-3
+guards asserting `deep` emits *no* Tier-2 marker were deleted and replaced by the
+inverse invariant in the same change — the suite never holds both sides.
+**Why:** The hardest retrieval — trace a request across packages, find every consult
+of a budget — needs *iteration* (search, read, partition, spawn sub-queries, pull only
+what matters into token space), which a single Scout pass cannot do without blowing the
+context window. Because the RLM *writes and runs code* against the host tools, it is an
+untrusted **caller** and untrusted **code**: the confinement Wave 3 hardened at the
+FastContext boundary now applies one layer deeper, at every host tool, and the bounds
+had to be enforced where the backend cannot evade them.
+**Consequence:** Deep is **not cached** (model-backed/non-deterministic, no
+engine-identity slot — like Scout). Verified live against dspy 3.2.1 + Deno 2.9.0 +
+Ollama (loopback) + ripgrep 15.1.0 (cold ~50s, warm ~15s); a weak 4B model means the
+live ACs assert pipeline *shape* (valid possibly-empty `CodeSpan`s), not citation
+quality. Open follow-ups carried forward: the **Verification Gate + Tier-0→1→2
+auto-escalation ladder** (Wave 5 — `mode=auto` still does not climb); the **FastContext
+package** for Scout is still absent (Wave-3 live AC1 still skips); and, still open from
+Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-06-27 — Wave 3 Scout (Tier 1) + Model Gateway request path shipped
 
 **Spec:** specs/0005-wave-3-scout/

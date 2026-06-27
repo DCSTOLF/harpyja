@@ -14,9 +14,11 @@ request fields are honored distinctly:
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Protocol, get_args
 
 from harpyja.config.settings import Settings
+from harpyja.deep.errors import DeepUnavailable
 from harpyja.index.artifacts import resolve_artifact_dir
 from harpyja.index.classify import KNOWN_LANGUAGES
 from harpyja.index.indexer import index_repo
@@ -29,8 +31,6 @@ from harpyja.symbols.symbol_locator import SymbolEngine
 from harpyja.symbols.symbols_io import load_symbols_or_none
 
 _MODE_NO_EFFECT = "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
-_DEEP_PENDING = "Deep pending: Tier 2 not yet implemented; routed to Scout (Tier 1)"
-_SCOUT_MODES = {"fast", "deep"}
 _VALID_MODES = set(get_args(Mode))
 
 
@@ -47,6 +47,7 @@ def locate(
     resolve_dir: Callable[..., object] = resolve_artifact_dir,
     symbol_engine: _Engine | None = None,
     scout_engine: _Engine | None = None,
+    deep_engine: object | None = None,
 ) -> LocateResult:
     if req.mode not in _VALID_MODES:
         raise ValueError(f"invalid mode: {req.mode!r}; expected one of {_VALID_MODES}")
@@ -65,7 +66,11 @@ def locate(
         entry = manifest.get(path)
         return entry.prior if entry else 0.0
 
-    if req.mode in _SCOUT_MODES:
+    if req.mode == "deep":
+        return _locate_deep(
+            req, manifest, prior_of, engine, symbol_engine, scout_engine, deep_engine
+        )
+    if req.mode == "fast":
         return _locate_scout(req, manifest, prior_of, engine, symbol_engine, scout_engine)
 
     # mode=auto — deterministic, symbol-aware Tier 0 (unchanged since Wave 2).
@@ -114,34 +119,73 @@ def _locate_scout(
     non-loopback endpoint) propagate loudly — they are the degradation floor,
     not a degrade state. Only `ScoutUnavailable` falls back to Tier 0.
     """
-    deep = req.mode == "deep"
-
     if scout_engine is None:
         # Scout not wired → honest degrade, never a silent no-op.
-        return _degrade(
-            req, manifest, prior_of, engine, symbol_engine, NO_ENDPOINT_CONFIGURED, deep
-        )
+        return _degrade(req, manifest, prior_of, engine, symbol_engine, NO_ENDPOINT_CONFIGURED)
 
     try:
         spans = scout_engine.search(req.query, scope=req.repo_path)
     except ScoutUnavailable as err:
-        return _degrade(req, manifest, prior_of, engine, symbol_engine, err.cause, deep)
+        return _degrade(req, manifest, prior_of, engine, symbol_engine, err.cause)
 
     spans, hint_note = _apply_language_hint(spans, manifest, req.language_hint)
     citations = format_citations(spans, prior_of, req.max_results, source_tier=1)
 
+    return LocateResult(
+        citations=citations,
+        confidence="medium" if citations else "low",
+        tiers_run=[0, 1],
+        notes=hint_note,
+    )
+
+
+def _locate_deep(
+    req: LocateRequest,
+    manifest: dict,
+    prior_of: Callable[[str], float],
+    engine: _Engine,
+    symbol_engine: _Engine,
+    scout_engine: _Engine | None,
+    deep_engine: object | None,
+) -> LocateResult:
+    """Tier 2 (Deep). Explicit-mode only; degrades to Scout best-effort on a typed
+    `DeepUnavailable` (NOT on weak/zero output — that would be an ungated
+    escalation). `RipgrepMissingError` (Deep's self-seed) and `AirGapError`
+    propagate loudly as the floor; a budget truncation is an honest bounded
+    Tier-2 result carrying a `deep-truncated:<bound>` note, never a degrade.
+    """
+    if deep_engine is None:
+        # Deep not wired → degrade to Scout best-effort, honestly flagged.
+        fallback = _locate_scout(req, manifest, prior_of, engine, symbol_engine, scout_engine)
+        return _with_deep_note(fallback, f"deep-degraded:{NO_ENDPOINT_CONFIGURED}")
+
+    try:
+        spans, truncated = deep_engine.run(req.query)
+    except DeepUnavailable as err:
+        fallback = _locate_scout(req, manifest, prior_of, engine, symbol_engine, scout_engine)
+        return _with_deep_note(fallback, f"deep-degraded:{err.cause}")
+
+    spans, hint_note = _apply_language_hint(spans, manifest, req.language_hint)
+    citations = format_citations(spans, prior_of, req.max_results, source_tier=2)
+
     notes: list[str] = []
-    if deep:
-        notes.append(_DEEP_PENDING)
+    if truncated:
+        notes.append(f"deep-truncated:{truncated}")
     if hint_note:
         notes.append(hint_note)
 
     return LocateResult(
         citations=citations,
         confidence="medium" if citations else "low",
-        tiers_run=[0, 1],
+        tiers_run=[0, 2],
         notes="; ".join(notes) if notes else None,
     )
+
+
+def _with_deep_note(result: LocateResult, note: str) -> LocateResult:
+    """Prepend a `deep-degraded:<cause>` note to a Scout-fallback result."""
+    combined = note if not result.notes else f"{note}; {result.notes}"
+    return replace(result, notes=combined)
 
 
 def _degrade(
@@ -151,7 +195,6 @@ def _degrade(
     engine: _Engine,
     symbol_engine: _Engine,
     cause: str,
-    deep: bool,
 ) -> LocateResult:
     """Fall back to the deterministic Tier-0 result with a `degraded` flag.
 
@@ -167,8 +210,6 @@ def _degrade(
     note = f"scout-degraded:{cause}"
     if not citations:
         note += "+no-matches"
-    if deep:
-        note = f"{note}; {_DEEP_PENDING}"
 
     return LocateResult(
         citations=citations,

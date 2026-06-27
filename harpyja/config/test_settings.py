@@ -113,3 +113,43 @@ def test_settings_scout_loads_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("HARPYJA_SCOUT_SEED_TOP_N", "7")
     s = load_settings(config_path=toml, repo_path=tmp_path)
     assert s.scout_seed_top_n == 7  # env beats toml
+
+
+# --- Wave 4: Deep (Tier 2) budgets (AC10) ---
+
+
+def test_settings_deep_defaults():
+    s = Settings()
+    assert s.deep_seed_top_n == 5
+    assert s.deep_max_citations == 20
+    assert s.deep_max_span_lines == 200
+    assert s.deep_max_depth == 3
+    assert s.deep_max_subqueries == 8
+    assert s.deep_max_tool_calls == 200
+    assert s.deep_token_ceiling == 32000
+    assert s.deep_wall_clock_ms == 60000
+
+
+def test_settings_deep_loads_from_toml(tmp_path, monkeypatch):
+    for k in (
+        "DEEP_SEED_TOP_N",
+        "DEEP_MAX_DEPTH",
+        "DEEP_WALL_CLOCK_MS",
+    ):
+        monkeypatch.delenv(f"HARPYJA_{k}", raising=False)
+    toml = _write_toml(
+        tmp_path / "harpyja.toml",
+        "deep_max_depth = 2\ndeep_max_subqueries = 4\ndeep_wall_clock_ms = 5000\n",
+    )
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.deep_max_depth == 2
+    assert s.deep_max_subqueries == 4
+    assert s.deep_wall_clock_ms == 5000
+    assert isinstance(s.deep_max_depth, int)
+
+
+def test_settings_deep_loads_from_env(tmp_path, monkeypatch):
+    toml = _write_toml(tmp_path / "harpyja.toml", "deep_max_tool_calls = 50\n")
+    monkeypatch.setenv("HARPYJA_DEEP_MAX_TOOL_CALLS", "111")
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.deep_max_tool_calls == 111  # env beats toml
