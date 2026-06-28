@@ -188,9 +188,11 @@ def test_build_app_locate_promotes_definition_above_call_site(tmp_path):
     assert top["kind"] == "function"
 
 
-def test_build_app_locate_note_reflects_wave2_symbol_tier(tmp_path):
+def test_build_app_auto_no_longer_emits_mode_no_effect_lock(tmp_path):
+    # Spec 0008 (AC1): the Wave-0/2 "auto has no effect" lock note is retired.
+    # With no Scout wired, auto is the clean Tier-0 floor — never the lock note.
     _write(tmp_path, "a.py", "x = 1\n")
-    app = build_app(engine_factory=lambda s: _FakeEngine([]))
+    app = build_app(engine_factory=lambda s: _FakeEngine([CodeSpan("a.py", 1, 1)]))
 
     async def go():
         async with Client(app) as client:
@@ -198,22 +200,21 @@ def test_build_app_locate_note_reflects_wave2_symbol_tier(tmp_path):
                 "harpyja_locate", {"query": "x", "repo_path": str(tmp_path)}
             )
 
-    assert _run(go()).data["notes"].startswith("Wave 2:")
+    data = _run(go()).data
+    assert data["tiers_run"] == [0]
+    assert "mode has no effect" not in (data["notes"] or "")
 
 
 # --- Wave 3: Scout/Gateway wiring (AC2, AC9) ---
 
 
-class _BoomScout:
-    def search(self, *args, **kwargs):
-        raise AssertionError("scout/gateway invoked on a non-Scout path")
-
-
-def test_build_app_auto_zero_gateway_calls(tmp_path):
+def test_build_app_auto_consults_scout_when_wired(tmp_path):
+    # Spec 0008 (AC1): the Wave-0 zero-call lock is retired — auto now drives the
+    # ladder and consults Scout (Tier 1) when one is wired.
     _write(tmp_path, "a.py", "needle\n")
     app = build_app(
         engine_factory=lambda s: _FakeEngine([CodeSpan("a.py", 1, 1)]),
-        scout_factory=lambda s, repo: _BoomScout(),
+        scout_factory=lambda s, repo: _FakeEngine([CodeSpan("a.py", 1, 1)]),
     )
 
     async def go():
@@ -223,7 +224,7 @@ def test_build_app_auto_zero_gateway_calls(tmp_path):
             )
 
     data = _run(go()).data
-    assert data["tiers_run"] == [0]  # _BoomScout never raised → Scout untouched on auto
+    assert 1 in data["tiers_run"]  # Tier 1 reached — lock gone
 
 
 def test_build_app_fast_uses_scout_engine(tmp_path):
@@ -244,6 +245,37 @@ def test_build_app_fast_uses_scout_engine(tmp_path):
     assert data["tiers_run"] == [0, 1]
     assert data["citations"][0]["path"] == "a.py"
     assert data["citations"][0]["source_tier"] == 1
+
+
+# --- Spec 0008: gate wiring (AC10, AC12) ---
+
+
+class _PassGate:
+    def verify(self, query, citations, *, repo_path, settings):
+        from harpyja.orchestrator.gate import GateOutcome
+
+        return GateOutcome(passed=True, score=1.0, scored_count=1, dropped_count=0, failed=False)
+
+
+def test_build_app_auto_uses_gate_when_factory_wired(tmp_path):
+    # With scout + gate factories wired, auto gates the Tier-1 result; a passing
+    # gate resolves at [0,1] (no Tier-2 spent).
+    _write(tmp_path, "a.py", "needle\n")
+    app = build_app(
+        engine_factory=lambda s: _FakeEngine([]),
+        scout_factory=lambda s, repo: _FakeEngine([CodeSpan("a.py", 1, 1)]),
+        gate_factory=lambda s, repo: _PassGate(),
+    )
+
+    async def go():
+        async with Client(app) as client:
+            return await client.call_tool(
+                "harpyja_locate", {"query": "needle", "repo_path": str(tmp_path)}
+            )
+
+    data = _run(go()).data
+    assert data["tiers_run"] == [0, 1]
+    assert data["confidence"] == "high"
 
 
 # --- Wave 4: Deep wiring (AC2, AC13) ---

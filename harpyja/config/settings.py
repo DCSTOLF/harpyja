@@ -21,6 +21,19 @@ from harpyja.config.discovery import discover_config_path
 # Maps a Settings field name to its HARPYJA_* environment variable.
 _ENV_PREFIX = "HARPYJA_"
 
+# Spec 0008 — gate scoring backends that actually ship. Only `scout_model` is
+# implemented this wave; the seam is pluggable in code, but the config surface
+# rejects anything else loudly (no silent fall-through; no-false-capability).
+_VERIFY_METHODS = frozenset({"scout_model"})
+
+
+class UnsupportedVerifyMethod(ValueError):
+    """`verify_method` was set to a value Harpyja does not implement.
+
+    Raised loudly at construction so an accepted-but-inert backend can never
+    silently degrade to `scout_model` or no-op (spec 0008 AC13).
+    """
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -66,6 +79,27 @@ class Settings:
     scout_temperature: str = "0"
     scout_reasoning_effort: str = "none"
 
+    # Spec 0008 (Wave 5) — Verification Gate (additive, appended last).
+    # `verify_method` selects the scoring backend; only `scout_model` ships (OQ1).
+    # `verify_threshold` is the pass cutoff on a normalized [0,1] score and
+    # `verify_top_n` bounds how many ranked citations the gate scores (OQ2/OQ3 —
+    # provisional defaults, tuned against the eval repo).
+    verify_method: str = "scout_model"
+    verify_threshold: float = 0.6
+    verify_top_n: int = 3
+
+    def __post_init__(self) -> None:
+        # Fires on every construction path — defaults, toml/env merge, and
+        # per-request `replace` — so an unsupported backend is rejected uniformly
+        # (AC13). The default `scout_model` passes, so existing callers are
+        # unaffected.
+        if self.verify_method not in _VERIFY_METHODS:
+            accepted = ", ".join(sorted(_VERIFY_METHODS))
+            raise UnsupportedVerifyMethod(
+                f"verify_method={self.verify_method!r} is not implemented; "
+                f"accepted: {{{accepted}}}"
+            )
+
 
 _FIELD_TYPES = {f.name: f.type for f in fields(Settings)}
 
@@ -87,6 +121,8 @@ def _coerce(name: str, raw: Any) -> Any:
         return str(raw).strip().lower() in {"1", "true", "yes", "on"}
     if target is int or target_str == "int":
         return int(raw)
+    if target is float or target_str == "float":
+        return float(raw)
     return str(raw)
 
 

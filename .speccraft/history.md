@@ -2,6 +2,88 @@
 
 Append-only. Newest first.
 
+## 2026-06-27 — Wave 5 Verification Gate + Tier-0→1→2 auto-escalation shipped — `mode=auto` now climbs
+
+**Spec:** specs/0008-wave-5-verification-gate/
+**Decision:** Make `mode=auto` trustworthy by wiring the four seams Waves 3/4
+deferred — query classifier, planning matrix, Verification Gate, and the escalation
+ladder — so `auto` runs the cheapest tier that can answer and climbs only on a real
+signal. Tier internals (Tier-0 seed, Scout, Deep) are **unchanged**; this wave is
+orchestration only. Seven durable choices were pinned. (1) **The gate is the
+`scout_model` reuse judge, routed through the one outbound caller (OQ1 resolved).**
+The gate reads the cited lines back from disk and scores their relevance to the query
+by reusing the already-loaded Scout fine-tune as a generative judge — no new model to
+serve on the single-GPU profile. Because the gate is **in-house orchestrator code**,
+its judge call goes through `ModelGateway.complete()` (the only outbound caller, which
+already air-gaps at resolution time), **not** a parallel judge client — this is
+deliberately *not* the third-party-owns-its-client pattern (Deep/FastContext); it
+**additionally** calls `gateway.assert_local()` **before** the judge as a
+belt-and-suspenders pre-check (still the one helper, no parallel air-gap type), proven
+by a live network-deny integration test. (2) **A generative judge is affordable only
+because the scan is bounded top-N (OQ3 resolved) — one causal decision, not two.** The
+gate scores at most `verify_top_n` ranked citations (`max` over their scores: one
+strongly-relevant span carries the verdict); the dropped count is logged so a bounded
+scan is never indistinguishable from a full one (no-silent-truncation). An unbounded
+generative judge would put a result-set-sized model cost on the hot path. (3) **The
+Wave-0 "auto byte-identical / zero Gateway calls" lock was retired in lockstep** with
+the explicit new contract: `_MODE_NO_EFFECT` and its guard tests in **both**
+`orchestrator/test_locate.py` and `server/test_app.py` were deleted in the **same**
+change that wired the classifier→matrix→ladder, so the suite never holds a state where
+`auto` neither emits the old lock nor honors the new AC1 contract — the unspecified
+window is closed by construction (the same atomic-invariant-swap discipline as Wave 4's
+`deep` guard inversion). (4) **The planning matrix is the genuine single source of
+truth — driven by code, not duplicated by it.** `plan_ladder(mode, classification,
+index_ready)` over a 6-row `(mode, classification)` seeded table (×`index_ready`
+dropping the leading `0` → all 12 rows) is read by both `_locate_auto` and the tests;
+a refactor (T17) caught `_locate_auto` re-deriving routing and rewired it to consult
+`plan_ladder`, so the escalation branches are *derived from* the table, never a second
+authority. (5) **The empty-case three-way split** mirrors the codebase's entrenched
+typed-failure-vs-honest-result convention: a Scout **typed-unavailable** degrades to
+the Tier-0 floor (`scout-degraded:<cause>`, `confidence="degraded"` UNCHANGED, **no**
+climb); an **honest-empty** Scout (clean run, zero citations) skips the gate — nothing
+to score — and returns the Tier-0 seed tagged `gate-skipped:scout-empty` (+`no-matches`
+on an empty seed), **no** climb; only a **malformed** result escalates. Malformed is
+realized as "the gate cannot read back / score the returned citations →
+`GateOutcome.failed` → escalate" (Scout's contract is spans-or-`ScoutUnavailable`, so a
+malformed result manifests *at the gate*, e.g. a citation whose file is absent fails
+read-back — not as a separate Scout signal). (6) **Confidence is keyed on terminal-tier
++ flags, never path tokens alone**, so honest-empty — which shares the `[0,1]`/`[1]`
+tokens of a verified gated-pass — gets the distinguishing `gate-skipped:scout-empty`
+marker and a distinct `medium`/`low` row, never reading as `high` (no-false-capability:
+"nothing found" must never look high-confidence). The typed-unavailable `"degraded"`
+literal is preserved; the map's `low` rows are gate-states only, so AC8 and AC9 never
+collide. A best-effort gate **never blocks and never silently passes**: a scoring
+failure routes exactly like a gate-fail (escalates in `auto` where a tier remains, with
+`gate-scoring-failed` retained and `confidence=low`; best-effort un-gated Tier-1 in
+`fast`). (7) **`verify_method` honors no-false-capability at the config surface.** Three
+additive `Settings` fields are appended last (`verify_method="scout_model"`,
+`verify_threshold=0.6`, `verify_top_n=3`); `__post_init__` rejects any unsupported
+`verify_method` (`embedding`/`model_judge`/arbitrary) with a typed
+`UnsupportedVerifyMethod` naming the field + accepted set — on **every** construction
+path (defaults, toml, env, per-request `replace`), never a silent fall-through to
+`scout_model`. The seam is pluggable in *code*, but the config accepts only what
+actually functions.
+**Why:** All three tiers were live and verified end-to-end, but `auto` had nowhere to
+climb — it stayed pinned to Tier 0. The honest cost lever ("cheapest tier that works")
+only exists once a gate can decide whether the Scout answer is good enough to stop, and
+the gate is the precise mechanism the Wave-3/4 entries kept deferring (Deep's "weak
+output is NOT a degrade — that is the ungated escalation the Wave-5 gate governs" was a
+direct forward reference). Reusing `scout_model` makes the sharper judge free on the
+single-GPU profile; bounding it top-N is what keeps that generative call affordable on
+the hot path — the two resolutions are one coupled decision, not two.
+**Consequence:** `mode=auto` now realizes `tiers_run` as a prefix of the planned ladder
+(gated-pass `[0,1]` / `[1]`; escalated `[0,1,2]` / `[1,2]`; broad straight-to-Deep
+`[0,2]` / `[2]`); `fast` runs the gate **informationally** and never climbs (a
+would-fail gate tags `gate-low-confidence`); `deep` is unchanged. Shipped TDD-complete:
+513 tests pass with **all** integration ACs run live (FastContext Scout + scout_model
+gate judge + Deep `qwen2.5-coder:3b` over Deno — point resolved cheap, broad climbed to
+Tier-2), ruff clean. Three new stable flag ids join the taxonomy
+(`gate-low-confidence` / `gate-scoring-failed` / `gate-skipped:scout-empty`). Open
+follow-ups carried forward: **OQ2** — the provisional `verify_threshold=0.6` /
+`verify_top_n=3` defaults still need tuning against the eval repo (the ACs assert
+thresholding *behavior*, not the numbers); and, still open from Wave 2, **Wave-2.1
+substring/fuzzy matching**.
+
 ## 2026-06-27 — Scout Tier-1 real default client shipped — FastContext agent, env-under-threading-lock, off-loop bridge
 
 **Spec:** specs/0007-fastcontext/

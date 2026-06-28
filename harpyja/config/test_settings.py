@@ -3,7 +3,14 @@
 AC6 — resolution order is defaults < harpyja.toml < HARPYJA_* env < per-request.
 """
 
-from harpyja.config.settings import Settings, load_settings, resolve_settings
+import pytest
+
+from harpyja.config.settings import (
+    Settings,
+    UnsupportedVerifyMethod,
+    load_settings,
+    resolve_settings,
+)
 
 
 def test_settings_has_wave1_default_fields():
@@ -188,3 +195,60 @@ def test_settings_deep_loads_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("HARPYJA_DEEP_MAX_TOOL_CALLS", "111")
     s = load_settings(config_path=toml, repo_path=tmp_path)
     assert s.deep_max_tool_calls == 111  # env beats toml
+
+
+# --- Spec 0008 (Wave 5): Verification Gate settings (AC13) ---
+
+
+def test_settings_has_verify_defaults():
+    s = Settings()
+    assert s.verify_method == "scout_model"
+    assert s.verify_threshold == 0.6
+    assert s.verify_top_n == 3
+    # Defaults appended last keep the float typed as a float.
+    assert isinstance(s.verify_threshold, float)
+
+
+def test_verify_threshold_coerces_float_from_toml(tmp_path, monkeypatch):
+    monkeypatch.delenv("HARPYJA_VERIFY_THRESHOLD", raising=False)
+    toml = _write_toml(tmp_path / "harpyja.toml", "verify_threshold = 0.8\n")
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.verify_threshold == 0.8
+    assert isinstance(s.verify_threshold, float)
+
+
+def test_verify_threshold_coerces_float_from_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_VERIFY_THRESHOLD", "0.42")
+    s = load_settings(config_path=None, repo_path=tmp_path)
+    assert s.verify_threshold == 0.42
+    assert isinstance(s.verify_threshold, float)
+
+
+def test_verify_method_scout_model_loads_clean():
+    # The one shipping value constructs without error.
+    s = Settings(verify_method="scout_model")
+    assert s.verify_method == "scout_model"
+
+
+def test_verify_method_rejects_unsupported_value_at_load(tmp_path, monkeypatch):
+    # AC13 / no-false-capability: an accepted-but-inert backend must reject loudly,
+    # never silently fall through to scout_model.
+    monkeypatch.setenv("HARPYJA_VERIFY_METHOD", "embedding")
+    with pytest.raises(UnsupportedVerifyMethod) as exc:
+        load_settings(config_path=None, repo_path=tmp_path)
+    msg = str(exc.value)
+    assert "verify_method" in msg
+    assert "scout_model" in msg  # names the accepted set
+
+
+def test_verify_method_arbitrary_value_rejected():
+    for bad in ("model_judge", "embedding", "totally-made-up"):
+        with pytest.raises(UnsupportedVerifyMethod):
+            Settings(verify_method=bad)
+
+
+def test_verify_method_rejected_on_per_request_override(tmp_path, monkeypatch):
+    monkeypatch.delenv("HARPYJA_VERIFY_METHOD", raising=False)
+    base = load_settings(config_path=None, repo_path=tmp_path)
+    with pytest.raises(UnsupportedVerifyMethod):
+        resolve_settings(base, {"verify_method": "model_judge"})

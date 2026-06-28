@@ -91,13 +91,14 @@ def test_locate_invalid_mode_rejected(tmp_path):
         locate(_req(tmp_path, mode="bogus"), Settings(), engine=engine)
 
 
-def test_locate_valid_mode_sets_no_effect_note(tmp_path):
-    # Wave 3: `deep` now routes to Scout, so the inert no-effect note lives on the
-    # `auto` path (the one that still does no routing).
+def test_locate_auto_no_longer_emits_mode_no_effect(tmp_path):
+    # Spec 0008 (AC1): the Wave-0 "auto has no effect" lock is retired. auto with no
+    # Scout wired falls back cleanly to the Tier-0 floor — never the inert note.
     _write(tmp_path, "a.py")
     engine = FakeEngine([CodeSpan(path="a.py", start_line=1, end_line=1)])
     result = locate(_req(tmp_path, mode="auto"), Settings(), engine=engine)
-    assert result.notes == "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
+    assert "mode has no effect" not in (result.notes or "")
+    assert result.tiers_run == [0]
 
 
 def test_locate_language_hint_filters_to_matching_language(tmp_path):
@@ -137,12 +138,6 @@ def test_locate_unrecognized_hint_note(tmp_path):
 # --- Wave 2: symbol-aware composition (AC9, AC10, AC11, AC13, AC14) ---
 
 import os  # noqa: E402
-
-
-def test_locate_mode_note_is_wave2_symbol_aware_string(tmp_path):
-    _write(tmp_path, "a.py", "x = 1\n")
-    result = locate(_req(tmp_path), Settings(), engine=FakeEngine([]))
-    assert result.notes.startswith("Wave 2: deterministic + symbol-aware Tier 0")
 
 
 def test_locate_promotes_definition_above_call_site_for_same_token(tmp_path):
@@ -237,9 +232,28 @@ def test_locate_language_hint_filters_new_language_by_manifest_language(tmp_path
 
 # --- Wave 3: Scout routing (AC1, AC2, AC3, AC5, AC6, AC8, AC9) ---
 
-from harpyja.gateway.gateway import AirGapError  # noqa: E402
+from harpyja.gateway.gateway import AirGapError, ModelGateway  # noqa: E402
+from harpyja.orchestrator.gate import VerificationGate  # noqa: E402
+from harpyja.orchestrator.locate import (  # noqa: E402
+    GATE_LOW_CONFIDENCE,
+    GATE_SCORING_FAILED,
+    GATE_SKIPPED_SCOUT_EMPTY,
+)
 from harpyja.scout.errors import ScoutUnavailable  # noqa: E402
 from harpyja.symbols.ripgrep import RipgrepMissingError  # noqa: E402
+
+_LOOPBACK = "http://127.0.0.1:11434/v1"
+
+
+def _gate(score=None, *, raises=False):
+    """A VerificationGate over a loopback gateway with a fixed-score fake judge."""
+
+    def judge(query, cited_text):
+        if raises:
+            raise RuntimeError("judge boom")
+        return score
+
+    return VerificationGate(ModelGateway(api_base=_LOOPBACK, model="scout"), judge=judge)
 
 
 class _BoomScout:
@@ -269,24 +283,300 @@ class _UnavailableScout:
         raise ScoutUnavailable(self.cause)
 
 
-def test_locate_auto_byte_identical_to_wave2(tmp_path):
+def test_locate_auto_no_scout_falls_back_to_tier0(tmp_path):
+    # Spec 0008 (AC1): with no Scout wired, auto is the Tier-0 floor — the symbol-aware
+    # Tier-0 result, minus the retired "mode has no effect" lock note.
     _write(tmp_path, "a.py", "def foo():\n    pass\nfoo()\n")
     engine = FakeEngine([CodeSpan("a.py", 3, 3)])
     result = locate(_req(tmp_path, query="foo"), Settings(), engine=engine)
-    # Wave-2 invariants preserved verbatim.
     assert result.tiers_run == [0]
-    assert result.notes == "Wave 2: deterministic + symbol-aware Tier 0; mode has no effect"
-    assert result.citations[0].symbol == "foo"
+    assert "mode has no effect" not in (result.notes or "")
+    assert result.citations[0].symbol == "foo"  # definition still promoted
     assert all(c.source_tier == 0 for c in result.citations)
     assert result.confidence == "medium"
 
 
-def test_locate_auto_makes_zero_gateway_calls(tmp_path):
+# --- Spec 0008 (Wave 5): auto ladder contract (AC1, AC4, AC5, AC6, AC7) ---
+
+
+def test_locate_auto_gated_pass_runs_zero_one(tmp_path):
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_BoomDeep(),  # must NOT be reached on a gated pass
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0, 1]  # Tier-2 not spent (cost lever held)
+    assert result.confidence == "high"
+    assert all(c.source_tier == 1 for c in result.citations)
+
+
+def test_locate_auto_gate_fail_escalates_to_deep(tmp_path):
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=deep,
+        gate=_gate(0.1),  # below threshold → escalate
+    )
+    assert result.tiers_run == [0, 1, 2]
+    assert deep.calls
+    assert all(c.source_tier == 2 for c in result.citations)
+
+
+def test_locate_auto_broad_routes_straight_to_deep(tmp_path):
+    _write(tmp_path, "a.py", "needle here\n")
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="trace the whole request lifecycle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_BoomScout(),  # broad skips Scout entirely
+        deep_engine=deep,
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0, 2]
+    assert deep.calls
+
+
+def test_locate_auto_index_not_ready_gated_pass_is_one(tmp_path):
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_BoomDeep(),
+        gate=_gate(0.9),
+        index_ready=False,  # seed skipped → query-only
+    )
+    assert result.tiers_run == [1]
+
+
+def test_locate_auto_index_not_ready_escalated_is_one_two(tmp_path):
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=deep,
+        gate=_gate(0.1),
+        index_ready=False,
+    )
+    assert result.tiers_run == [1, 2]
+
+
+# --- Spec 0008: empty-case split + gate-scoring-failed contract (AC8) ---
+
+
+def test_locate_auto_scout_typed_unavailable_degrades(tmp_path):
+    # typed-unavailable → degrade to Tier-0 floor, confidence "degraded" (UNCHANGED,
+    # NOT "low"), no escalation.
+    _write(tmp_path, "a.py", "needle\n")
+    engine = FakeEngine([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=engine,
+        scout_engine=_UnavailableScout("connection-refused"),
+        deep_engine=_BoomDeep(),  # must NOT escalate
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0]
+    assert result.confidence == "degraded"
+    assert result.notes == "scout-degraded:connection-refused"
+
+
+def test_locate_auto_scout_honest_empty_skips_gate_returns_seed(tmp_path):
+    # Scout clean-empty + seed has matches → [0,1], gate-skipped flag, no climb.
+    _write(tmp_path, "a.py", "needle\n")
+    engine = FakeEngine([CodeSpan("a.py", 1, 1)])  # seed has results
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=engine,
+        scout_engine=_FakeScout([]),  # honest-empty
+        deep_engine=_BoomDeep(),
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0, 1]
+    assert "gate-skipped:scout-empty" in (result.notes or "")
+    assert "no-matches" not in (result.notes or "")
+    assert result.citations  # the seed
+
+
+def test_locate_auto_scout_honest_empty_query_only_is_one(tmp_path):
+    # index_ready=False + Scout clean-empty → [1], no seed, +no-matches.
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([CodeSpan("a.py", 1, 1)]),
+        scout_engine=_FakeScout([]),
+        deep_engine=_BoomDeep(),
+        gate=_gate(0.9),
+        index_ready=False,
+    )
+    assert result.tiers_run == [1]
+    assert result.notes == "gate-skipped:scout-empty+no-matches"
+    assert result.citations == []
+
+
+def test_locate_auto_scout_honest_empty_empty_seed_no_matches_suffix(tmp_path):
+    # Scout clean-empty + seed also empty → +no-matches suffix, still [0,1].
     _write(tmp_path, "a.py", "x = 1\n")
     result = locate(
-        _req(tmp_path), Settings(), engine=FakeEngine([]), scout_engine=_BoomScout()
+        _req(tmp_path, query="zzz_nomatch"),
+        Settings(),
+        engine=FakeEngine([]),  # empty seed
+        scout_engine=_FakeScout([]),
+        deep_engine=_BoomDeep(),
+        gate=_gate(0.9),
     )
-    assert result.tiers_run == [0]  # _BoomScout never raised → Scout untouched
+    assert result.tiers_run == [0, 1]
+    assert result.notes == "gate-skipped:scout-empty+no-matches"
+
+
+def test_locate_auto_malformed_citation_escalates(tmp_path):
+    # A Scout citation the gate cannot read back (file absent) → gate can't vouch
+    # → escalate to Tier-2 (the "malformed / un-scoreable" case).
+    _write(tmp_path, "a.py", "needle\n")
+    scout = _FakeScout([CodeSpan("ghost.py", 1, 1)])  # ghost.py does not exist
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=deep,
+        gate=_gate(0.9),  # would pass, but read-back fails first
+    )
+    assert result.tiers_run == [0, 1, 2]
+    assert deep.calls
+
+
+def test_locate_auto_gate_scoring_failed_escalates_retains_flag(tmp_path):
+    # Judge errors → gate-scoring-failed; in auto a tier remains → escalate,
+    # flag retained, confidence low.
+    _write(tmp_path, "a.py", "needle\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=deep,
+        gate=_gate(raises=True),
+    )
+    assert result.tiers_run == [0, 1, 2]
+    assert "gate-scoring-failed" in (result.notes or "")
+    assert result.confidence == "low"
+
+
+# --- Spec 0008: confidence map + stable flag ids (AC9) ---
+
+
+def test_flag_ids_are_stable_strings():
+    # Callers/tests branch on the identifier, never the wording.
+    assert GATE_LOW_CONFIDENCE == "gate-low-confidence"
+    assert GATE_SCORING_FAILED == "gate-scoring-failed"
+    assert GATE_SKIPPED_SCOUT_EMPTY == "gate-skipped:scout-empty"
+
+
+def test_locate_confidence_gated_pass_high(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_FakeScout([CodeSpan("a.py", 1, 1)]),
+        deep_engine=_BoomDeep(),
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0, 1]
+    assert result.confidence == "high"
+
+
+def test_locate_confidence_honest_empty_seed_matches_is_medium(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([CodeSpan("a.py", 1, 1)]),  # seed has matches
+        scout_engine=_FakeScout([]),
+        gate=_gate(0.9),
+    )
+    assert "gate-skipped:scout-empty" in (result.notes or "")
+    assert result.confidence == "medium"
+
+
+def test_locate_confidence_honest_empty_no_matches_is_low(tmp_path):
+    _write(tmp_path, "a.py", "x = 1\n")
+    result = locate(
+        _req(tmp_path, query="zzz_nomatch"),
+        Settings(),
+        engine=FakeEngine([]),  # empty seed
+        scout_engine=_FakeScout([]),
+        gate=_gate(0.9),
+    )
+    assert result.notes == "gate-skipped:scout-empty+no-matches"
+    assert result.confidence == "low"
+
+
+def test_locate_confidence_escalated_is_medium(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_FakeScout([CodeSpan("a.py", 1, 1)]),
+        deep_engine=_FakeDeep([CodeSpan("a.py", 1, 1)]),
+        gate=_gate(0.1),  # fail → escalate
+    )
+    assert result.tiers_run == [0, 1, 2]
+    assert result.confidence == "medium"
+
+
+def test_locate_confidence_broad_deep_is_medium(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="trace the whole request lifecycle"),
+        Settings(),
+        engine=FakeEngine([]),
+        deep_engine=_FakeDeep([CodeSpan("a.py", 1, 1)]),
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0, 2]
+    assert result.confidence == "medium"
+
+
+def test_locate_confidence_flag_override_is_low(tmp_path):
+    # A gate-scoring-failed flag pins confidence to low even on an escalated Deep run.
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_FakeScout([CodeSpan("a.py", 1, 1)]),
+        deep_engine=_FakeDeep([CodeSpan("a.py", 1, 1)]),
+        gate=_gate(raises=True),
+    )
+    assert result.tiers_run == [0, 1, 2]
+    assert "gate-scoring-failed" in (result.notes or "")
+    assert result.confidence == "low"
 
 
 def test_locate_fast_routes_to_scout(tmp_path):
@@ -316,6 +606,83 @@ def test_locate_fast_citations_source_tier_one(tmp_path):
     )
     assert result.citations
     assert all(c.source_tier == 1 for c in result.citations)
+
+
+# --- Spec 0008: fast informational gate (AC7, AC8) ---
+
+
+def test_locate_fast_gate_would_fail_flags_low_confidence(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle", mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_BoomDeep(),  # fast must never escalate
+        gate=_gate(0.1),
+    )
+    assert result.tiers_run == [0, 1]
+    assert "gate-low-confidence" in (result.notes or "")
+    assert result.confidence == "low"
+
+
+def test_locate_fast_never_escalates_even_for_broad(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="trace the whole request lifecycle", mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_BoomDeep(),
+        gate=_gate(0.1),
+    )
+    assert result.tiers_run == [0, 1]  # fast wins over broad — never Tier-2
+    assert "gate-low-confidence" in (result.notes or "")
+
+
+def test_locate_fast_gate_pass_no_flag(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle", mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        gate=_gate(0.9),
+    )
+    assert "gate-low-confidence" not in (result.notes or "")
+    assert result.confidence == "high"
+
+
+def test_locate_fast_honest_empty_no_low_confidence_flag(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, query="needle", mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_FakeScout([]),  # honest-empty
+        gate=_gate(0.1),
+    )
+    assert "gate-skipped:scout-empty" in (result.notes or "")
+    assert "gate-low-confidence" not in (result.notes or "")
+
+
+def test_locate_fast_gate_scoring_failed_best_effort_tier1(tmp_path):
+    _write(tmp_path, "a.py", "needle\n")
+    scout = _FakeScout([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle", mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_BoomDeep(),
+        gate=_gate(raises=True),
+    )
+    assert result.tiers_run == [0, 1]  # no further tier in fast
+    assert "gate-scoring-failed" in (result.notes or "")
+    assert result.confidence == "low"
 
 
 def test_locate_degraded_connection_refused(tmp_path):

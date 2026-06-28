@@ -5,7 +5,19 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
 ## Layering (packages)
 
 1. `harpyja/server/` — FastMCP app, tool registration, transports (stdio + HTTP). No business logic.
-2. `harpyja/orchestrator/` — router, query classifier, verification gate, citation formatter. Owns per-request state.
+2. `harpyja/orchestrator/` — router, query classifier, verification gate, citation
+   formatter. Owns per-request state. Live as of Wave 5 (spec 0008) the `mode=auto`
+   ladder is wired and **climbs**: `classify` (`classify_query` heuristic point/broad,
+   ambiguous → point, behind a pluggable `Classifier` seam) → `matrix`
+   (`plan_ladder` over the 12-row `(mode × classification × index_ready)` planning
+   matrix — the **single source of truth** both `_locate_auto` and the tests read) →
+   `_locate_auto` executes the planned ladder (seed → Scout → `gate` → Deep), where
+   `gate` (`VerificationGate.verify`) reads the cited lines back from disk, scores the
+   top-N via an injected `Judge` (default `make_scout_model_judge`, routed through
+   `ModelGateway.complete`), and decides whether the trailing Tier-2 step runs — so the
+   realized `tiers_run` is a prefix of the planned ladder. `wiring.build_verification_gate`
+   is the production `gate_factory`. Stable gate flags: `gate-low-confidence` /
+   `gate-scoring-failed` / `gate-skipped:scout-empty`.
 3. `harpyja/index/` — file walker, ranked JSONL manifest, incremental hashing.
    Live as of Wave 1: `walk`/`ignore` (pathspec, no `git`), `classify`, `prior`,
    `hash`, `manifest` (atomic same-dir temp + `os.replace`, per-file `degraded`
@@ -83,7 +95,11 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
 
 ## Key decisions
 
-- Cheapest-tier-that-works escalation (Tier 0 → 1 → 2), gated by a read-back Verification Gate — see ARCHITECTURE.md §2.2 / §2.7.
+- Cheapest-tier-that-works escalation (Tier 0 → 1 → 2), gated by a read-back
+  Verification Gate — LIVE as of Wave 5 (spec 0008): `mode=auto` classifies the query,
+  plans a tier ladder from the matrix, and the gate decides whether the Tier-1 answer
+  is good enough to stop or must escalate to Deep. See ARCHITECTURE.md §2.2 / §2.7 and
+  history.md 2026-06-27 (Wave 5).
 - Fresh `dspy.RLM` instance per request (RLM is not thread-safe with a custom interpreter) — ARCHITECTURE.md §4.
 - Air-gap enforced in one helper, `gateway.assert_local` (loopback = `127.0.0.0/8`
   / `::1` / `localhost`), reused for both the outbound model endpoint and the
@@ -97,9 +113,17 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   search/locate only (not `index`); a missing/erroring parser, by contrast, degrades
   gracefully (`grammar-missing` / `parse-error`) — symbols are an enhancement, not a
   precondition. See history.md 2026-06-26.
-- Tier 1 (Scout) is live, explicit-opt-in, and additive on the Tier-0 floor:
-  `mode=auto` is byte-identical to Wave 2 with **zero** Gateway calls; `mode=fast` →
-  Scout; `mode=deep` → Tier 2 (Deep) as of Wave 4. A Scout call resolves to a
+- Tier 1 (Scout) is live and additive on the Tier-0 floor. **As of Wave 5 (spec 0008)
+  `mode=auto` climbs** (the Wave-3 "auto byte-identical / zero Gateway calls" statement
+  is **superseded**): a point query runs seed → Scout → gate → maybe Deep, and the gate
+  decides whether Tier-2 is spent (gated-pass `[0,1]`/`[1]`, escalated
+  `[0,1,2]`/`[1,2]`); a broad query routes straight to Deep (`[0,2]`/`[2]`, Scout
+  skipped, no gate). `mode=fast` → Scout with the gate run **informationally** (never
+  climbs — a would-fail gate tags `gate-low-confidence`); `mode=deep` → Tier 2 (Deep),
+  unchanged from Wave 4. The empty-case three-way split keeps the typed-vs-honest rule:
+  a Scout typed-unavailable degrades to the Tier-0 floor (`confidence="degraded"`, no
+  climb), an honest-empty Scout returns the seed tagged `gate-skipped:scout-empty` (no
+  climb), only a malformed/un-scoreable result escalates. A Scout call resolves to a
   four-state degradation floor that never
   collapses model-down into a phantom "nothing found"; seed-before-backend ordering makes
   the loud precondition case win by construction. FastContext is an implementation detail
@@ -113,8 +137,11 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   enforced at the endpoint (FastContext owns its own model client), and read-only /
   no-egress are assumptions verified by integration test with residual risk recorded.
   See history.md 2026-06-27 (spec 0007).
-- Tier 2 (Deep) is live, explicit-opt-in (`mode=deep` only — `auto` does not climb),
-  and additive on the Tier-0 floor: a `dspy.RLM` explorer in a Deno/Pyodide sandbox
+- Tier 2 (Deep) is live and additive on the Tier-0 floor — reached via `mode=deep`
+  **and, as of Wave 5 (spec 0008), via an `auto` escalation** (a gate-fail /
+  gate-scoring-failed / malformed Scout result on a point query, or a broad
+  classification routing straight to Deep): a `dspy.RLM` explorer in a Deno/Pyodide
+  sandbox
   whose entire world is the four confined read-only host tools. A successful run is
   `tiers_run=[0,2]`, `source_tier=2`. The explorer loop is bounded **in layers** —
   externally-enforced tool-calls/tokens/wall-clock (the load-bearing trio; wall-clock
@@ -122,8 +149,8 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   depth/subqueries with recorded residual risk, transitively contained by the trio. A
   budget truncation surfaces as a stable non-degrade `deep-truncated:<bound>` note;
   Deep degrades to Scout best-effort **only** on a typed `DeepUnavailable` (weak/zero
-  citations stay an honest Tier-2 result — no ungated escalation, deferred to the
-  Wave-5 Gate). Because the RLM writes and runs code, it is untrusted *code*, not just
+  citations stay an honest Tier-2 result — no ungated escalation; the gated escalation
+  it referred to now ships as the Wave-5 Verification Gate). Because the RLM writes and runs code, it is untrusted *code*, not just
   an untrusted caller: sandbox isolation (ambient FS + non-loopback egress denied) is
   an **assumption verified by test** with residual risk recorded, and the air-gap is
   enforced at the endpoint via `gateway.assert_local` (the RLM owns its own LM) and
