@@ -142,3 +142,86 @@ def test_write_report_outside_repo_succeeds(tmp_path):
     assert written.exists()
     back = json.loads(written.read_text(encoding="utf-8"))
     validate_report(back)
+
+
+# --- spec 0010: additive durable fields + multi-repo shape (AC8) -------------
+
+# The SWE-bench-specific run_metadata block (populated by the per-case-repo
+# driver). For the 0009-6a single-run path these are absent and build_report
+# injects schema-stable defaults (null/0) so the legacy shape still validates.
+_NEW_RUN_METADATA = {
+    "protocol": "standalone-localization",
+    "dataset_provenance": {
+        "hf_dataset_id": "princeton-nlp/SWE-bench_Verified",
+        "hf_split": "test",
+        "hf_revision": "deadbeefcafe",
+        "raw_fixture_sha256": "0" * 64,
+        "sample_case_ids": ["django__django-1", "astropy__astropy-2"],
+    },
+    "span_inflation_tolerance": 3,
+    "contamination_caveat": "SWE-bench is public; treat as a relative instrument.",
+    "new_file_only_excluded_count": 1,
+    "malformed_skipped_count": 2,
+}
+
+
+def test_report_schema_version_bumped():
+    # The schema is additively extended this wave, so the version must move off
+    # the 0009-6a string.
+    assert SCHEMA_VERSION != "0009-6a/1"
+
+
+def test_report_legacy_single_run_shape_still_validates():
+    # 0009-6a three blocks with NO spec-0010 fields: build_report fills defaults
+    # so the legacy single-run report still conforms.
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    validate_report(rep)
+    assert rep["run_metadata"]["protocol"] is None
+    assert rep["run_metadata"]["new_file_only_excluded_count"] == 0
+    assert rep["run_metadata"]["dataset_provenance"] is None
+    assert rep["cases"][0]["production_gate_ran"] is None
+    assert rep["aggregate"]["classifier_agreement_rate"] is None
+
+
+def test_report_multi_repo_shape_validates():
+    rm = _run_metadata(**_NEW_RUN_METADATA)
+    case = _case(
+        production_gate_ran=True,
+        patch_shape_label="point",
+        production_classifier_label="broad",
+    )
+    agg = _aggregate(classifier_agreement_rate=0.5)
+    rep = build_report(rm, [case], agg)
+    validate_report(rep)
+    assert rep["run_metadata"]["protocol"] == "standalone-localization"
+    assert rep["run_metadata"]["dataset_provenance"]["hf_split"] == "test"
+    assert rep["aggregate"]["classifier_agreement_rate"] == 0.5
+    assert rep["cases"][0]["production_gate_ran"] is True
+
+
+def test_validate_report_rejects_missing_new_metadata_field():
+    rep = build_report(_run_metadata(**_NEW_RUN_METADATA), [_case()], _aggregate())
+    del rep["run_metadata"]["protocol"]
+    with pytest.raises(ReportSchemaError):
+        validate_report(rep)
+
+
+def test_validate_report_rejects_missing_provenance():
+    rep = build_report(_run_metadata(**_NEW_RUN_METADATA), [_case()], _aggregate())
+    del rep["run_metadata"]["dataset_provenance"]
+    with pytest.raises(ReportSchemaError):
+        validate_report(rep)
+
+
+def test_validate_report_rejects_case_missing_production_gate_ran():
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    del rep["cases"][0]["production_gate_ran"]
+    with pytest.raises(ReportSchemaError):
+        validate_report(rep)
+
+
+def test_validate_report_rejects_aggregate_missing_agreement_rate():
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    del rep["aggregate"]["classifier_agreement_rate"]
+    with pytest.raises(ReportSchemaError):
+        validate_report(rep)

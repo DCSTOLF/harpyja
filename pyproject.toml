@@ -20,6 +20,7 @@ dependencies = [
     "tree-sitter-cpp>=0.23",
     "dspy>=3.2.1",
     "fastcontext",
+    "datasets>=5.0.0",
 ]
 
 [project.scripts]

@@ -106,10 +106,29 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    (grid via `dataclasses.replace`, never mutation; K runs/point) → `report.py` (pinned
    D7 schema + loud `validate_report` + `atomic_write_json` that refuses to write inside
    the indexed repo) → `dataset.py` (`EvalCase` / loud `DatasetError`) + `live.py`
-   entrypoints + `fixtures/` (vendored `legacy/` repo + hand-labeled `seed.jsonl`). The
-   shipped seed is a 5-case **starter** (N < `n_floor=30`), so runs are
-   `indicative_only` and the incumbent OQ2 defaults are held, not recalibrated — a real
-   calibration awaits the larger curated D1 dataset. See history.md 2026-06-28.
+   entrypoints + `fixtures/` (vendored `legacy/` repo + hand-labeled `seed.jsonl`).
+   **As of spec 0010** the package also carries a **SWE-bench Verified adapter +
+   multi-repo driver** (`swebench_eval.py`) — still measurement, not a runtime tier.
+   Network-staged: `convert` (HuggingFace → portable committed
+   `swebench_verified.raw.jsonl`) → `provision` (`git clone` + worktree at
+   `base_commit` → gitignored `…resolved.jsonl`) → `prune`; `convert`/`provision` are
+   dev-time tools explicitly **out** of the runtime air-gap (the offline `run`/`sweep`
+   stages assert zero non-loopback egress). The ground-truth oracle is the
+   **standalone-localization protocol** (`parse_patch` derives gold-patch pre-image hunk
+   spans — no Docker/patch/test-exec; D-class `classify_by_patch_shape`,
+   `POINT_SPAN_MAX_LINES=25`; new-file-only instances flagged + excluded). The per-case
+   driver `run_swebench` builds its **own** `LocateStack` per case (one worktree per
+   case) and pools into the **unchanged** `metrics`/`recommend` layers + the
+   additively-extended report (`SCHEMA_VERSION` `0010/1`, additive defaults centralized
+   in `report.py` `_*_DEFAULTS`). **D-route is a recorded evaluation intervention**: the
+   driver injects a patch-shape classifier through the `LocateStack.classifier` seam so
+   the gate fires, captures the production `classify_query` label first, records both +
+   an aggregate `classifier_agreement_rate`, and guards the OQ2 recommendation by an
+   `AGREEMENT_FLOOR=0.5` (below it → deltas-only, never a calibration). The committed
+   N=50 raw fixture clears `n_floor=30` (38 point / 12 broad); the full live OQ2 sweep
+   is an operator opt-in (`make swebench-full`), and **no `Settings` default is flipped**
+   (recommend-only, B1) — the flip remains a follow-up spec. The earlier 5-case
+   `legacy/` seed remains the small `indicative_only` starter. See history.md 2026-06-28.
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

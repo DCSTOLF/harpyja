@@ -120,12 +120,17 @@ def run_case(
     *,
     repo_path: str,
     stack: LocateStack,
+    mode: str = "auto",
 ) -> CaseRun:
-    """Drive one case through the real auto path; build its event + outcome."""
+    """Drive one case through the real `locate` path; build its event + outcome.
+
+    `mode` defaults to `"auto"` (the OQ2 path); `"fast"` gives the Scout-terminal
+    Tier-1 line for the fast-vs-auto comparison (AC7).
+    """
     req = LocateRequest(
         query=case.query,
         repo_path=repo_path,
-        mode="auto",
+        mode=mode,
         max_results=settings.max_results,
     )
 
@@ -225,7 +230,10 @@ def run_dataset(
     mode: str = "auto",
 ) -> dict:
     """Run every case through the auto path; assemble (and optionally write) a report."""
-    runs = [run_case(c, settings, eval_config, repo_path=repo_path, stack=stack) for c in cases]
+    runs = [
+        run_case(c, settings, eval_config, repo_path=repo_path, stack=stack, mode=mode)
+        for c in cases
+    ]
     aggregate = aggregate_outcomes(runs, eval_config, model_calls=stack.model_calls)
 
     seed_n = len(cases)

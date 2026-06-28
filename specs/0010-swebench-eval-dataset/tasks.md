@@ -1,0 +1,41 @@
+---
+spec: "0010"
+---
+
+# Tasks
+
+- [x] T1 — Plumbing: `uv add datasets`; `.gitignore` `eval_work/` + resolved fixture (raw stays tracked)
+- [x] T2 — RED: additive durable report fields + SCHEMA bump; both report shapes validate (test_report.py) [AC8]
+- [x] T3 — GREEN: report.py append-last-with-defaults fields + bump SCHEMA_VERSION [AC8]
+- [x] T4 — RED: `parse_patch` pre-image oracle units (single/multi-hunk, deletion, new-file, insertion-anchor, malformed-skip) [AC1]
+- [x] T5 — GREEN: port `parse_patch` + `FileTarget` into swebench_eval.py [AC1]
+- [x] T6 — RED: `_to_eval_case` round-trips load_dataset + `base_commit` raw-only/ignored + provision reads raw [AC2]
+- [x] T7 — GREEN: reconcile `_to_eval_case` to real EvalCase shape; `provision` reads `base_commit` via `_read_jsonl` [AC2]
+- [x] T8 — RED: classification-by-patch-shape + named threshold constant boundary [AC3]
+- [x] T9 — GREEN: patch-shape classifier + `POINT_SPAN_MAX_LINES` (single-file-small ⇒ point) [AC3]
+- [x] T10 — RED: new-file flagged `new_file_only`, excluded from scoring, count durable (not silent zero) [AC4]
+- [x] T11 — GREEN: new-file flag + exclusion helper returning excluded count [AC4]
+- [x] T12 — RED: `convert` over mocked HF emits raw jsonl + provenance (id/split/revision, sha256, sample ids) + malformed count [AC8]
+- [x] T13 — GREEN: `convert` implementation (lazy `datasets` import, provenance, malformed-skipped count) [AC8]
+- [x] T14 — RED: `run_case` accepts `mode`, threads into LocateRequest (test_runner.py) [AC7]
+- [x] T15 — GREEN: thread `mode` through `run_case`; `run_dataset` forwards it [AC7]
+- [x] T16 — RED: per-case-repo driver pools ≥2 distinct-repo cases into pinned schema; writes outside every repo [AC6]
+- [x] T17 — GREEN: `run_swebench` driver (own repo_path + own stack per case, pool via aggregate_outcomes) [AC6]
+- [x] T18 — RED: D-route override + agreement (production label captured pre-override; production_gate_ran; no-override bypass) [AC5]
+- [x] T19 — GREEN: inject `classifier=lambda: case.classification`; record both labels + agreement + production_gate_ran [AC5]
+- [x] T20 — RED: driver `mode=fast` block schema-conforming, never escalates, distinct from auto [AC7]
+- [x] T21 — GREEN: driver threads `mode`; Scout-terminal fast block [AC7]
+- [x] T22 — RED: durable metadata + provenance populated (protocol, counts, agreement, inflation tol, caveat, provenance) [AC8]
+- [x] T23 — GREEN: thread provenance/counts/caveat/tolerance + per-case production_gate_ran into report [AC8]
+- [x] T24 — RED: driver per-case timeout + sample cap (timed-out = counted skip) [AC11]
+- [x] T25 — GREEN: budget enforcement (wall-clock timeout + sample cap) [AC11]
+- [x] T26 — REFACTOR: additive field set + defaults centralized in report.py (single source; both report families validate)
+- [x] T27 — RED: `run`/`sweep` CLI parse + missing resolved fixture exits non-zero actionable [AC9]
+- [x] T28 — GREEN: argparse subcommands (convert/provision/prune/run/sweep); missing-fixture guard [AC9]
+- [x] T29 — RED: Makefile targets invoke swebench_eval run/sweep, not the runner --fixture placeholder [AC9]
+- [x] T30 — GREEN: create root Makefile from Makefile.swebench reconciled to new subcommands [AC9]
+- [x] T31 — RED (integration): live `auto` e2e schema-conforming + zero non-loopback egress [AC10]
+- [x] T32 — GREEN: wire live per-case `build_live_stack` run path, fully offline [AC10]
+- [x] T33 — RED (integration): OQ2 sweep tradeoff table + n_floor + no-mutation + budget + low-agreement flag [AC11]
+- [x] T34 — GREEN: wire multi-repo sweep (grid via replace, K runs, agreement-floor deltas-only guard) [AC11]
+- [x] T35 — RED→GREEN (integration): live `convert` HF smoke (network-gated counterpart to T12) [AC8]

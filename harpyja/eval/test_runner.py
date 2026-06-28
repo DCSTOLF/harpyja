@@ -157,3 +157,62 @@ def test_runner_per_case_records_gate_decision_fields(tmp_path):
     assert p_esc["tier1_correct"] is False
     # broad case: tier1_correct is None (no Tier-1 to judge)
     assert by_id["b1"]["tier1_correct"] is None
+
+
+# --- spec 0010: run_case `mode` seam (AC7) -----------------------------------
+
+class _FakeResult:
+    citations = ()
+    tiers_run = (0,)
+    notes = None
+
+
+def test_run_case_accepts_mode_and_threads_into_locate_request(monkeypatch):
+    from harpyja.eval import runner as R
+
+    captured = {}
+
+    def fake_locate(req, settings, **kw):
+        captured["mode"] = req.mode
+        return _FakeResult()
+
+    monkeypatch.setattr("harpyja.orchestrator.locate.locate", fake_locate)
+    case = EvalCase("c", "q", "repo", (ExpectedSpan("a.py", 1, 2),), "broad")
+    stack = LocateStack(engine=FakeEngine([]))
+    R.run_case(case, _make_settings(), EvalConfig(), repo_path="repo", stack=stack, mode="fast")
+    assert captured["mode"] == "fast"
+
+
+def test_run_case_defaults_to_auto(monkeypatch):
+    from harpyja.eval import runner as R
+
+    captured = {}
+
+    def fake_locate(req, settings, **kw):
+        captured["mode"] = req.mode
+        return _FakeResult()
+
+    monkeypatch.setattr("harpyja.orchestrator.locate.locate", fake_locate)
+    case = EvalCase("c", "q", "repo", (ExpectedSpan("a.py", 1, 2),), "broad")
+    stack = LocateStack(engine=FakeEngine([]))
+    R.run_case(case, _make_settings(), EvalConfig(), repo_path="repo", stack=stack)
+    assert captured["mode"] == "auto"
+
+
+def test_run_dataset_forwards_mode_to_run_case(monkeypatch, tmp_path):
+    from harpyja.eval import runner as R
+
+    modes = []
+
+    def fake_locate(req, settings, **kw):
+        modes.append(req.mode)
+        return _FakeResult()
+
+    monkeypatch.setattr("harpyja.orchestrator.locate.locate", fake_locate)
+    cases = [EvalCase("b1", "q", "repo", (ExpectedSpan("m.py", 1, 9),), "broad")]
+    stack = LocateStack(engine=FakeEngine([]))
+    R.run_dataset(
+        cases, _make_settings(), EvalConfig(),
+        repo_path="repo", stack=stack, mode="fast",
+    )
+    assert modes == ["fast"]

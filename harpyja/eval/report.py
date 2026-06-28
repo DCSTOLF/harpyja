@@ -21,7 +21,9 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-SCHEMA_VERSION = "0009-6a/1"
+# Bumped for spec 0010 (additive durable fields; the 0009-6a single-run shape
+# still validates because build_report default-populates the new fields).
+SCHEMA_VERSION = "0010/1"
 
 # D7 — enumerated required field names (the pinned contract).
 _RUN_METADATA_FIELDS = (
@@ -34,6 +36,15 @@ _RUN_METADATA_FIELDS = (
     "settings_snapshot",
     "timestamp",
     "artifact_dir",
+    # spec 0010 — additive durable metadata (appended last). For the 0009-6a
+    # single-run path these default to null/0 (the legacy run declares no
+    # standalone-localization protocol, no dataset provenance, etc.).
+    "protocol",
+    "dataset_provenance",
+    "span_inflation_tolerance",
+    "contamination_caveat",
+    "new_file_only_excluded_count",
+    "malformed_skipped_count",
 )
 _SETTINGS_SNAPSHOT_FIELDS = ("verify_method", "verify_threshold", "verify_top_n")
 _CASE_FIELDS = (
@@ -51,6 +62,12 @@ _CASE_FIELDS = (
     "span_hit_primary",
     "span_hit_secondary",
     "notes",
+    # spec 0010 — additive. production_gate_ran is SUT-observed (from
+    # result.tiers_run / notes), kept distinct from the harness Scout-probe
+    # gate_triggered above. The two labels record the D-route intervention.
+    "production_gate_ran",
+    "patch_shape_label",
+    "production_classifier_label",
 )
 _AGGREGATE_FIELDS = (
     "span_hit_rate_primary",
@@ -65,7 +82,37 @@ _AGGREGATE_FIELDS = (
     "correct_tier1_count",
     "per_tier_latency_ms",
     "per_tier_model_calls",
+    # spec 0010 — additive: D-route classifier-agreement rate (None on the
+    # legacy path / when no point case carries both labels).
+    "classifier_agreement_rate",
 )
+
+# Schema-stable defaults for the additive fields, injected by build_report when a
+# block omits them — this is what keeps the 0009-6a single-run shape valid.
+_RUN_METADATA_DEFAULTS = {
+    "protocol": None,
+    "dataset_provenance": None,
+    "span_inflation_tolerance": None,
+    "contamination_caveat": None,
+    "new_file_only_excluded_count": 0,
+    "malformed_skipped_count": 0,
+}
+_CASE_DEFAULTS = {
+    "production_gate_ran": None,
+    "patch_shape_label": None,
+    "production_classifier_label": None,
+}
+_AGGREGATE_DEFAULTS = {
+    "classifier_agreement_rate": None,
+}
+
+
+def _with_defaults(block: Mapping[str, object], defaults: Mapping[str, object]) -> dict:
+    """Copy `block`, filling any missing additive field from `defaults`."""
+    merged = dict(block)
+    for key, val in defaults.items():
+        merged.setdefault(key, val)
+    return merged
 
 
 class ReportSchemaError(Exception):
@@ -84,9 +131,9 @@ def build_report(
     """
     return {
         "schema_version": SCHEMA_VERSION,
-        "run_metadata": dict(run_metadata),
-        "cases": [dict(c) for c in cases],
-        "aggregate": dict(aggregate),
+        "run_metadata": _with_defaults(run_metadata, _RUN_METADATA_DEFAULTS),
+        "cases": [_with_defaults(c, _CASE_DEFAULTS) for c in cases],
+        "aggregate": _with_defaults(aggregate, _AGGREGATE_DEFAULTS),
     }
 
 

@@ -97,6 +97,32 @@
   exceeds the incumbent's run-to-run spread over K repeated runs
   (`mean(A) - mean(B) > pstdev(B)`); within noise the incumbent is recorded *validated*,
   not guessed — never a default flip on noise. (See `harpyja/eval/recommend.py`.)
+- A **multi-target measurement driver** (one repo/worktree per case, vs a single
+  shared tree) builds its **own** SUT collaborator stack **per case** and **pools** the
+  per-case outcomes into the **unchanged** metrics/recommend layers + an
+  additively-extended report — never forking a parallel metrics/scoring path. Artifacts
+  still write **outside every** target tree (the same inside-`repo_path` refusal, per
+  target). (See `harpyja/eval/swebench_eval.py` `run_swebench`, which builds a per-case
+  `LocateStack` and reuses `metrics.py` / `recommend.py` unchanged.)
+- When a versioned report schema gains **additive** fields, append them
+  last-with-defaults AND **centralize the field set + its defaults in one anti-drift
+  source** (a `_*_DEFAULTS` map the builder injects), so an older-shape block and a
+  newer-shape block **both** pass the one loud validator and there is a single place a
+  new field is declared. Bump `SCHEMA_VERSION`. (See `harpyja/eval/report.py`
+  `_RUN_METADATA_DEFAULTS` / `_CASE_DEFAULTS` / `_AGGREGATE_DEFAULTS`, `_with_defaults`,
+  `SCHEMA_VERSION` `0009-6a/1` → `0010/1`.)
+- An **evaluation intervention** — injecting a non-production *input* through a
+  sanctioned seam to make a behavior measurable (e.g. forcing routing via
+  `LocateStack.classifier` so the gate fires), with **no** SUT code changed — must be
+  **recorded loudly, never silently observed as production**: capture the production
+  value **before** installing the override (so agreement never reads the injected
+  value), record both the intervened and production labels per case, report an
+  aggregate **agreement rate**, and keep the SUT-observed effect (`production_gate_ran`
+  from `result.tiers_run`/`notes`) **distinct** from any harness-observed probe. A
+  recommendation derived under intervention is **guarded by an agreement floor**: below
+  it the result is flagged low-confidence / deltas-only — a relative ranking, never a
+  calibration to flip a default on. (See `harpyja/eval/swebench_eval.py` D-route,
+  `classifier_agreement_rate`, `AGREEMENT_FLOOR`, `production_gate_ran`.)
 
 ## Logging
 

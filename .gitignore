@@ -4,6 +4,11 @@
 # speccraft session state
 .speccraft/state.json
 
+# SWE-bench eval (spec 0010): machine-local artifacts only.
+# The raw fixture (swebench_verified.raw.jsonl) is portable and stays TRACKED.
+eval_work/
+harpyja/eval/fixtures/swebench_verified.resolved.jsonl
+
 # Python
 __pycache__/
 *.py[cod]
