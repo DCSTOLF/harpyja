@@ -2,6 +2,83 @@
 
 Append-only. Newest first.
 
+## 2026-06-28 — Wave 6a Eval harness + OQ2 calibration shipped — measurement-only, recommend-only, live-validated
+
+**Spec:** specs/0009-6a/
+**Decision:** Land a NEW **measurement-only** package `harpyja/eval/` that observes
+the real `mode=auto` `locate()` path and reports locate accuracy, escalation rate,
+and gate catch / false-escalation metrics, plus an OQ2 `(verify_threshold,
+verify_top_n)` recommendation — and flips **no** `Settings` default (B1; the flip is
+a future one-line follow-up spec, so "measurement only, no behavior change" stays
+literally true). The harness is the first non-tier layer: it does not answer queries,
+it *measures* the system that does. Seven durable choices were pinned. (1) **The
+harness observes the SUT through its real public seam and never mutates its config.**
+The runner drives the production `harpyja.orchestrator.locate.locate(...)` via an
+injected `LocateStack` (fakes for unit, `build_live_stack` real factories for
+integration); the only `Settings` interaction is the sweep building grid points via
+`dataclasses.replace` on the real `verify_threshold` / `verify_top_n` fields, never
+mutation (`test_sweep_does_not_mutate_settings`). (2) **Eval-only knobs live off the
+production frozen `Settings` (K-placement deviation).** The spec body's "additive
+eval-only `Settings` field carrying K" was reconciled at plan time to a dedicated
+frozen `EvalConfig` (k_runs / proximity_window_lines / n_floor / catch_rate_bar),
+**field-name-disjoint** from `Settings` (`test_eval_config_is_independent_of_settings`)
+— K is a runner loop count the SUT never reads, so putting it in the production config
+is a coupling smell with no compensating uniformity benefit. (3) **ONE overlap oracle
+defines correctness for every derived metric (D3/D5).** `_any_primary_overlap` (ANY
+cited span overlaps ANY expected span in the same file; touching ranges count, D6) is
+reused by span-hit accuracy, gate catch-rate, AND gate false-escalation — there is no
+second notion of correctness that could drift, asserted by
+`test_gate_metrics_use_same_oracle_as_span_hit`. The Tier-1 signal is captured
+**independently of escalation**: because the gate replaces citations when it
+escalates, `CaseOutcome` carries both `tier1_citations` (gate oracle, an honest extra
+Scout call on point cases) and `final_citations` (accuracy). (4) **Gate metrics are
+scoped to the point-query subset only (D1).** `gate_catch_rate` /
+`gate_false_escalation` range over `classification == "point"` cases; broad queries
+bypass the gate (straight to Deep per the 0008 matrix) and are EXCLUDED from both gate
+denominators, while `escalation_rate` is a separate aggregate over ALL auto cases —
+the two are never conflated. (5) **Null-with-count sentinel on a zero denominator
+(D2).** An undefined gate metric serializes as explicit `null` paired with its (zero)
+count field, so AC7 "all metrics populated" is honored by a present null-with-count,
+never an omitted key or a false `0.0`; the seed must carry ≥1 wrong- and ≥1
+correct-Tier-1 point case to keep live denominators non-zero. (6) **Recommendation is
+variance-gated and recommend-only (D3/D4, B1).** A sweep point displaces the incumbent
+`(0.6, 3)` only when its advantage strictly exceeds the incumbent's run-to-run spread
+(`mean(A) - mean(B) > pstdev(B)` over K runs); the D4 lexicographic scorer keeps points
+clearing the catch-rate bar, then minimizes false-escalation, tie-breaks lower top_n
+then lower threshold. Within noise, the incumbent is recorded **validated**, not
+guessed — a `0.55`-over-`0.6` flip on noise is the precise failure this prevents. (7)
+**Harness artifacts write outside the indexed repo + a pinned D7 schema.**
+`atomic_write_json` refuses (`ValueError`) to write inside or under `repo_path`
+(read-only guardrail mirroring the FastContext `trajectory_file`-outside-repo
+precedent) via a same-dir temp + `os.replace`; `validate_report` is loud
+(`ReportSchemaError`) over the enumerated D7 field set, and small-N runs self-flag
+`indicative_only`.
+**Why:** All three tiers and `mode=auto` were live and unit-green, but the design's
+core claims — escalation stays low, the gate catches wrong Tier-1 citations, the
+`scout_model` judge + `top_n=3` hold up — were **unfalsified**: no instrument measured
+locate accuracy on a real tree, and OQ2 (`verify_threshold=0.6` / `verify_top_n=3`,
+provisional since Wave 5) had no evidence behind it. This wave is that instrument. The
+single-oracle and point-scoped denominators exist so two implementers cannot produce
+silently incomparable harnesses; the variance gate exists so the recommendation cannot
+flap on model non-determinism.
+**Consequence — OQ2 partially resolved (the honest outcome).** The harness runs live
+and produces a recommendation, BUT the shipped seed is a **5-case starter** over one
+small vendored `legacy/` repo (N=5 ≪ the pinned `N_FLOOR=30`), so every run over it is
+correctly flagged `indicative_only=true` and the incumbent `(0.6, 3)` is **NOT
+displaced**. OQ2 therefore resolves as **"instrument built + live-validated;
+calibration deferred to a larger seed"** — NOT a fabricated tuning result. The
+provisional `0.6/3` and the `0.90` catch-rate bar remain provisional; a real
+calibration (one that could justify a default flip) needs the larger curated D1
+dataset (a vendored OSS legacy repo with ≥30 hand-labeled cases), which the plan
+explicitly delegates, and the flip itself is a separate one-line follow-up spec.
+Shipped TDD-complete: **557 unit tests pass** (+58 new), ruff clean; **5 integration
+tests (AC7 ×3 + AC8 ×2) passed LIVE in 634s** — real FastContext Scout + `scout_model`
+gate judge + Deep `qwen2.5-coder:3b` over Deno + rg (genuinely verified, not skipped).
+`per_tier_model_calls` is honest-`None` (no counter wired through `LocateStack` — a
+present null, not a false zero). Open follow-ups carried forward: **the larger D1
+dataset → a real OQ2 calibration → a potential default flip in a follow-up spec**; and,
+still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-06-27 — Wave 5 Verification Gate + Tier-0→1→2 auto-escalation shipped — `mode=auto` now climbs
 
 **Spec:** specs/0008-wave-5-verification-gate/

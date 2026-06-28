@@ -90,6 +90,26 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    name-resolution time (injected resolver + `ipaddress` loopback predicate) **before** an
    injected transport — no request leaves the process until loopback is proven.
 8. `harpyja/config/` — settings load/merge, profiles.
+9. `harpyja/eval/` — **measurement harness, not a runtime tier** (a request never
+   touches it). Live as of Wave 6a (spec 0009-6a): observes the real `mode=auto`
+   `locate()` path and reports locate accuracy, escalation, and gate catch /
+   false-escalation; emits an OQ2 `(verify_threshold, verify_top_n)` recommendation but
+   flips **no** `Settings` default (recommend-only). `runner.py` (`LocateStack` +
+   `build_live_stack` real factories; drives production `locate(...)`, captures Tier-1
+   citations independently of escalation) → `metrics.py` (ONE overlap oracle
+   `_any_primary_overlap` reused by span-hit + gate catch-rate + false-escalation;
+   gate metrics point-subset-scoped, broad excluded; null-with-count on a zero
+   denominator) → `config.py` (`EvalConfig` — k_runs / proximity_window_lines / n_floor
+   / catch_rate_bar, **field-disjoint from `Settings`**; `aggregate_runs` mean+pstdev) →
+   `recommend.py` (D3 variance gate `mean(A)-mean(B) > pstdev(B)` + D4 lexicographic
+   OQ2 scorer; incumbent `(0.6, 3)` validated-not-flipped within noise) → `sweep.py`
+   (grid via `dataclasses.replace`, never mutation; K runs/point) → `report.py` (pinned
+   D7 schema + loud `validate_report` + `atomic_write_json` that refuses to write inside
+   the indexed repo) → `dataset.py` (`EvalCase` / loud `DatasetError`) + `live.py`
+   entrypoints + `fixtures/` (vendored `legacy/` repo + hand-labeled `seed.jsonl`). The
+   shipped seed is a 5-case **starter** (N < `n_floor=30`), so runs are
+   `indicative_only` and the incumbent OQ2 defaults are held, not recalibrated — a real
+   calibration awaits the larger curated D1 dataset. See history.md 2026-06-28.
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

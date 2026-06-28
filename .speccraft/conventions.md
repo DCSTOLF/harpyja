@@ -55,6 +55,49 @@
 - The producer-identity cache key enumerates **one slot per external grammar/plugin entry point**, each with a real version or a `"missing"` / `"load-error:<abi>"` sentinel, via a slot→(dist, module, load-fn) map — not a flat per-package list. Entry points that ship in the **same package share one version and move together** (bump/absence is coupled) but keep distinct identity keys; install/bump of any slot invalidates the cache and triggers a rebuild that clears stale `grammar-missing` flags. (See `symbols/engine_identity.py` `_GRAMMAR_SLOTS`; `typescript` + `tsx` share `tree-sitter-typescript`.)
 - Additive dataclass / record fields are appended **last** with a default, so a legacy on-disk artifact still reads and an unchanged tree stays byte-reproducible (the field is absent from old entries, defaulted on read). E.g. the manifest per-file `degraded` field and `CodeSpan.kind`.
 
+## Measurement & eval harness
+
+- A measurement/eval harness observes the system under test through its **real public
+  seam** and never mutates its config or behavior — it measures, it does not modify.
+  Drive the production entrypoint via injected collaborators (fakes for unit, the real
+  `build_*` factories for integration through one stack object), and produce any
+  configuration override with `dataclasses.replace`, never mutation
+  (`test_sweep_does_not_mutate_settings`). (See `harpyja/eval/runner.py` `LocateStack`
+  / `build_live_stack`, `harpyja/eval/sweep.py`.)
+- Eval-only knobs live on a **dedicated config disjoint from the production frozen
+  `Settings`** — a loop count, proximity window, N-floor, or scoring bar the SUT never
+  reads must not bloat the production config (coupling smell with no uniformity
+  benefit). Only fields the SUT genuinely consults (e.g. `verify_threshold` /
+  `verify_top_n`) are ever overridden into it. Assert field-name disjointness
+  (`test_eval_config_is_independent_of_settings`). (See `harpyja/eval/config.py`
+  `EvalConfig`.)
+- **One oracle defines correctness for every derived metric.** When several metrics
+  share a notion of "right" (accuracy, catch-rate, false-escalation), route them all
+  through a single function so a second definition cannot drift; assert the reuse
+  (`test_gate_metrics_use_same_oracle_as_span_hit`). Scope each metric's denominator
+  explicitly (e.g. gate metrics over the point-query subset only; the rate over all
+  cases) and bake the scope into the function signature. (See `harpyja/eval/metrics.py`
+  `_any_primary_overlap`.)
+- An **undefined metric** (zero denominator) is an explicit `null` paired with its
+  (zero) count field — never an omitted key and never a false `0.0`; "all metrics
+  populated" is honored by a present null-with-count (the same honesty rule as a loud
+  empty result). A measurement over too few samples **self-flags** (`indicative_only`)
+  in its own report rather than relying on a post-hoc caveat. (See
+  `harpyja/eval/metrics.py`, `harpyja/eval/report.py`.)
+- A harness is **read-only on the target tree**: its artifacts write **outside** the
+  indexed repo. The writer refuses (raises) when the output dir is inside or under
+  `repo_path`, via the same atomic same-dir temp + `os.replace` as every durable write
+  (mirrors the FastContext `trajectory_file`-outside-repo precedent). Report shapes are
+  a **pinned, enumerated, version-stamped schema** with a loud validator, so consumers
+  and tests branch on stable field names. (See `harpyja/eval/report.py`
+  `atomic_write_json` / `validate_report`.)
+- A tuning/calibration recommendation is **variance-gated and recommend-only**: it
+  records a recommended value as data and does not flip a production default (the flip
+  is a separate follow-up). It displaces an incumbent only when the advantage strictly
+  exceeds the incumbent's run-to-run spread over K repeated runs
+  (`mean(A) - mean(B) > pstdev(B)`); within noise the incumbent is recorded *validated*,
+  not guessed — never a default flip on noise. (See `harpyja/eval/recommend.py`.)
+
 ## Logging
 
 - Use the standard `logging` module. Never log secrets, repo source content, or full file contents at info level. Keep stdout clean on the stdio MCP transport (logs go to stderr).
