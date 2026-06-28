@@ -85,12 +85,18 @@ integration passed LIVE in 185s** — live multi-repo driver e2e, zero non-loopb
 egress, live OQ2 sweep + agreement guard, and a **real HuggingFace `convert` smoke**.
 Real `convert --sample 50 --per-repo 5` → 50 real cases, 0 malformed, 0 new-file, 12
 repos, 38 point / 12 broad, committed as the portable raw fixture (clears `N_FLOOR=30`).
-Real `provision + run` (flask + requests, actually cloned + worktreed, 2/2 resolved, 0
-degraded) gave `span_hit_primary=0.5` (flask HIT in `src/flask/blueprints.py`, requests
-MISS), escalation 0.0, agreement 0.5 — and **both point cases resolved at Tier-0 (gate
-did not fire)**, a genuine real-data finding the instrument surfaced. The FULL live OQ2
-sweep (all 12 cloned repos × K) is compute-bound (hours, multi-GB) and is the documented
-opt-in (`make swebench-full` → `swebench-sweep`); **no `Settings` default flipped (B1)**
+Real `provision + run` (flask + requests, actually cloned + worktreed, 2/2 resolved) gave
+`span_hit_primary=0.5` (flask HIT, requests MISS), escalation 0.0 — and the instrument
+surfaced a **real Scout/FastContext defect**, NOT a gate finding: both cases carry
+`scout-degraded:backend-error` (FastContext's own `format_citations` crashes on real-query
+output → `ScoutUnavailable` → Tier-0 degrade, the spec-0007 AC10 case), so Tier-1/gate were
+**upstream-starved** and 0.5 is the Tier-0 degrade-floor, not an escalation-skip signal (an
+earlier draft mis-read this as "gate did not fire" — corrected per no-false-capability).
+**Implication:** Scout is non-functional on real SWE-bench until FastContext `format_citations`
+is made robust to string-shaped citations, so OQ2 cannot be calibrated from this dataset
+regardless of N — a new lead follow-up. The FULL live OQ2 sweep (all 12 cloned repos × K) is
+compute-bound and the documented opt-in (`make swebench-full` → `swebench-sweep`); **no
+`Settings` default flipped (B1)**
 — the flip remains a separate one-line follow-up spec citing this evidence. Open
 follow-ups carried forward: the **OQ2 default flip** (now backed by a real,
 N≥30-clearing instrument, guarded by the agreement floor); a **held-out

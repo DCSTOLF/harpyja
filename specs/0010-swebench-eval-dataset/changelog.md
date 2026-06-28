@@ -87,10 +87,35 @@ fully builds + live-validates the instrument on **real SWE-bench Verified data**
   all-broad risk the review caught is avoided; OQ2 is calibratable). Committed as the
   portable raw fixture (`raw_fixture_sha256` 34646c52…, HF revision 9730d2e041ee274e).
 - **Real provision + run** (flask + requests, actually cloned, worktrees at
-  `base_commit`, 2/2 resolved, 0 degraded): `span_hit_primary=0.5` (flask HIT in
+  `base_commit`, 2/2 resolved): `span_hit_primary=0.5` (flask HIT in
   `src/flask/blueprints.py`; requests MISS), escalation=0.0, agreement=0.5. Both point
-  cases resolved at **Tier-0** (gate did not fire) — a genuine real-data finding the
-  instrument surfaced.
+  cases terminated at **Tier-0** — but **NOT** because the cheap tier sufficed or the
+  gate was lax. The per-case `notes` are `scout-degraded:backend-error`: **FastContext
+  Scout crashed on every real-SWE-bench query** (its own `format_citations`,
+  `fastcontext/agent/utils.py:96`, does `c["path"]` on a string → `TypeError` →
+  `ScoutUnavailable: backend-error` → Tier-0 degrade — the exact spec-0007 AC10
+  third-party post-processing crash). So Tier-1/gate/escalation were **upstream-starved**:
+  the gate never had output to score, and the 0.5 span-hit is the **Tier-0 degrade-floor
+  accuracy**, not an escalation-skip finding. The instrument did its job — it surfaced a
+  real Scout/FastContext robustness defect on real data, not a gate-tuning signal. (An
+  earlier draft of this note mis-read it as "gate did not fire"; corrected per
+  no-false-capability.) **Follow-up:** make FastContext's `format_citations` robust to
+  string-shaped citations (or pin/patch upstream) before any Tier-1/gate/OQ2 measurement
+  on real SWE-bench is meaningful — until then Scout is non-functional on this dataset
+  and OQ2 cannot be calibrated from it regardless of N.
+- **Tier-0-in-isolation on the point subset (N=12, real cloned flask/requests/pylint/sphinx):**
+  follow-up measurement requested to disambiguate "cheapest-tier-works" from "Tier-0
+  misfiring." Result: **12/12 `scout-degraded:backend-error`** (Scout failure is
+  *systematic* on real data, not sporadic), escalation_rate **0.0**, terminal_tier 0 for
+  all. **Tier-0 span-hit = 2/12 = 0.167** (primary == secondary: the 10 misses get the
+  wrong *file*, not just the wrong lines). Verdict: this is the **low-accuracy +
+  high-escalation-skip** quadrant — i.e. retrieval would benefit from escalation — but the
+  cause is **not** lax gate triggers; the gate is *upstream-starved* by the Scout crash, so
+  the ladder above Tier-0 is entirely unavailable and bare keyword Tier-0 (16.7%) is what's
+  actually running. Two real defects surfaced: (1) **harden FastContext Scout** on real
+  data (top priority — the whole NL ladder is dead), then (2) re-measure the gate, which
+  cannot be assessed until Scout yields output. Bare Tier-0's 16.7% confirms the
+  Scout→gate→Deep ladder is load-bearing on real NL queries, not redundant.
 
 ## ADR proposed for history.md
 
