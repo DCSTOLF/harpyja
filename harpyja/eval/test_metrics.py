@@ -209,3 +209,38 @@ def test_gate_false_escalation_null_with_count_on_zero_denominator():
     rate, false_esc, correct_total = gate_false_escalation(outcomes)
     assert rate is None
     assert (false_esc, correct_total) == (0, 0)
+
+
+# --- Spec 0011 (citation-shape): file-level (line-less) path-only overlap (AC18) ---
+
+
+@dataclass(frozen=True)
+class _FileLevelSpan:
+    path: str
+    start_line: int | None = None
+    end_line: int | None = None
+
+
+def test_span_hit_path_only_for_file_level_citation():
+    # AC18: a file-level (line-less) citation in the same file as an expected span
+    # scores a PATH-ONLY match — counted as a hit, recorded distinctly from a line
+    # match, never a line hit.
+    from harpyja.eval.metrics import span_hit_kind
+
+    cited = _FileLevelSpan("a.py")  # None lines
+    expected = Span("a.py", 10, 20)
+    assert span_hit_primary(cited, expected) is True
+    assert span_hit_kind(cited, expected) == "file"
+    # a real line-overlap is a DISTINCT kind
+    assert span_hit_kind(Span("a.py", 12, 14), expected) == "line"
+    # different file → no match
+    assert span_hit_kind(_FileLevelSpan("other.py"), expected) is None
+
+
+def test_span_hit_file_level_branch_before_line_arithmetic():
+    # AC18: the path-only branch is taken BEFORE the line comparison, so a None
+    # cited line never reaches the arithmetic (no crash).
+    cited = _FileLevelSpan("a.py")
+    expected = Span("a.py", 1, 5)
+    # would raise TypeError (None <= int) if the branch were not taken first
+    assert span_hit_primary(cited, expected) is True

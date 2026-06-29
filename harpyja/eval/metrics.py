@@ -54,17 +54,43 @@ class CaseOutcome:
 
 # ---- the single overlap oracle (D3/D5) -------------------------------------
 
-def span_hit_primary(cited: Span, expected: Span) -> bool:
-    """Same file and overlapping inclusive line ranges (touching == overlap, D6)."""
+def span_hit_kind(cited: Span, expected: Span) -> str | None:
+    """Classify the overlap of one cited span against one expected span.
+
+    Returns ``"line"`` (same file + overlapping line ranges, D6), ``"file"`` (same
+    file but the cited span is **file-level** — line-less, spec 0011 — so it is a
+    coarse path-only match), or ``None`` (no match). The file-level branch is taken
+    **before** the line arithmetic, so a ``None`` cited line never reaches it. A
+    file-level (path-only) hit is recorded **distinctly** and is never a line hit.
+    """
     if cited.path != expected.path:
-        return False
-    return cited.start_line <= expected.end_line and expected.start_line <= cited.end_line
+        return None
+    if cited.start_line is None or cited.end_line is None:
+        return "file"  # path-only (coarse) match — honest precision in measurement
+    if cited.start_line <= expected.end_line and expected.start_line <= cited.end_line:
+        return "line"
+    return None
+
+
+def span_hit_primary(cited: Span, expected: Span) -> bool:
+    """Same file and overlapping ranges, OR a file-level path-only match (D6).
+
+    The one oracle, routed through :func:`span_hit_kind` so a second definition of
+    "hit" cannot drift; a coarse file-level hit still counts as a localization.
+    """
+    return span_hit_kind(cited, expected) is not None
 
 
 def span_hit_secondary(cited: Span, expected: Span, window: int) -> bool:
-    """Same file and within `window` lines (looser; overlap is distance 0)."""
+    """Same file and within `window` lines (looser; overlap is distance 0).
+
+    Spec 0011: a file-level (line-less) cited span is guarded **before** the line
+    arithmetic — same-file is a path-only match (distance 0, within any window).
+    """
     if cited.path != expected.path:
         return False
+    if cited.start_line is None or cited.end_line is None:
+        return True  # path-only proximity match (no line distance to compute)
     gap = max(expected.start_line - cited.end_line, cited.start_line - expected.end_line, 0)
     return gap <= window
 

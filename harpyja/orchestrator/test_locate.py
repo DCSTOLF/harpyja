@@ -237,6 +237,7 @@ from harpyja.orchestrator.gate import VerificationGate  # noqa: E402
 from harpyja.orchestrator.locate import (  # noqa: E402
     GATE_LOW_CONFIDENCE,
     GATE_SCORING_FAILED,
+    GATE_SKIPPED_NO_LINE_RANGE,
     GATE_SKIPPED_SCOUT_EMPTY,
 )
 from harpyja.scout.errors import ScoutUnavailable  # noqa: E402
@@ -943,3 +944,73 @@ def test_locate_fast_makes_zero_deep_calls(tmp_path):
         deep_engine=_BoomDeep(),
     )
     assert result.tiers_run == [0, 1]  # Scout path; Deep untouched
+
+
+# --- Spec 0011 (citation-shape): file-level (line-less) gate routing (AC13) ---
+
+
+def test_locate_auto_not_verifiable_escalates_to_deep(tmp_path):
+    # AC13: a file-level (line-less) Scout result is not-verifiable; in auto with a
+    # Deep tier remaining, it ESCALATES (verification was unavailable), and the
+    # stable marker records why.
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", None, None)])  # file-level span
+    deep = _FakeDeep([CodeSpan("a.py", 1, 1)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=deep,
+        gate=_gate(0.9),  # would pass a lined span, but a file-level one is skipped
+    )
+    assert result.tiers_run == [0, 1, 2]
+    assert deep.calls
+    assert GATE_SKIPPED_NO_LINE_RANGE in (result.notes or "")
+
+
+def test_locate_auto_not_verifiable_carries_marker_without_deep(tmp_path):
+    # AC13: no Deep tier remaining → carry the coarse file-level result best-effort,
+    # tagged with the marker, never at high confidence.
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", None, None)])
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=None,
+        gate=_gate(0.9),
+    )
+    assert result.tiers_run == [0, 1]
+    assert GATE_SKIPPED_NO_LINE_RANGE in (result.notes or "")
+    assert result.confidence != "high"
+    assert result.citations and result.citations[0].is_file_level
+
+
+def test_no_line_range_marker_distinct_from_other_gate_flags():
+    # AC13: the marker is a distinct stable id — it never collapses into the
+    # low-confidence / scoring-failed / scout-empty flags.
+    assert GATE_SKIPPED_NO_LINE_RANGE == "gate-skipped:no-line-range"
+    assert GATE_SKIPPED_NO_LINE_RANGE not in {
+        GATE_LOW_CONFIDENCE,
+        GATE_SCORING_FAILED,
+        GATE_SKIPPED_SCOUT_EMPTY,
+    }
+
+
+def test_locate_fast_file_level_tags_no_line_range_not_low_confidence(tmp_path):
+    # AC13 (fast): a file-level result in fast mode tags the distinct marker, never
+    # collapsing into gate-low-confidence.
+    _write(tmp_path, "a.py", "needle here\n")
+    scout = _FakeScout([CodeSpan("a.py", None, None)])
+    result = locate(
+        _req(tmp_path, query="needle", mode="fast"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=_BoomDeep(),  # fast never escalates
+        gate=_gate(0.9),
+    )
+    assert GATE_SKIPPED_NO_LINE_RANGE in (result.notes or "")
+    assert GATE_LOW_CONFIDENCE not in (result.notes or "")

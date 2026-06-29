@@ -40,6 +40,10 @@ _VALID_MODES = set(get_args(Mode))
 GATE_SKIPPED_SCOUT_EMPTY = "gate-skipped:scout-empty"
 GATE_LOW_CONFIDENCE = "gate-low-confidence"
 GATE_SCORING_FAILED = "gate-scoring-failed"
+# Spec 0011 — a file-level (line-less) citation reached the gate: not-verifiable
+# (no lines to read back). A distinct id so it never collapses into the
+# low-confidence / scoring-failed flags.
+GATE_SKIPPED_NO_LINE_RANGE = "gate-skipped:no-line-range"
 
 
 class _Engine(Protocol):
@@ -167,12 +171,23 @@ def _locate_auto(
         return LocateResult(citations, "medium", tier1_tiers, hint_note)
 
     outcome = gate.verify(req.query, citations, repo_path=req.repo_path, settings=settings)
+    no_line_range = outcome.skipped_reason == "no-line-range"
     if outcome.passed:
-        return LocateResult(citations, "high", tier1_tiers, _join(hint_note))
+        # A lined citation carried the pass; surface a coexisting coarse span (if
+        # any) with the marker so it is never silently read as line-verified.
+        marker = GATE_SKIPPED_NO_LINE_RANGE if no_line_range else None
+        return LocateResult(citations, "high", tier1_tiers, _join(marker, hint_note))
 
-    # gate fail OR gate-scoring-failed (the malformed/un-scoreable case): escalate
-    # to Deep if a tier remains, else best-effort Tier-1 + flag.
-    flag = GATE_SCORING_FAILED if outcome.failed else None
+    # Non-passing: gate-scoring-failed (un-scoreable), not-verifiable (file-level /
+    # no-line-range), or a plain below-threshold fail. Escalate to Deep if a tier
+    # remains, else best-effort Tier-1 + the distinct flag.
+    flag = (
+        GATE_SCORING_FAILED
+        if outcome.failed
+        else GATE_SKIPPED_NO_LINE_RANGE
+        if no_line_range
+        else None
+    )
     if deep_engine is None:
         conf = "low" if flag else ("medium" if citations else "low")
         return LocateResult(citations, conf, tier1_tiers, _join(flag, hint_note))
@@ -243,6 +258,10 @@ def _locate_scout(
         outcome = gate.verify(req.query, citations, repo_path=req.repo_path, settings=settings)
         if outcome.failed:
             flag, confidence = GATE_SCORING_FAILED, "low"
+        elif outcome.skipped_reason == "no-line-range":
+            # Distinct from gate-low-confidence (a file-level span is not-verifiable,
+            # not low-scoring). fast never escalates — informational only.
+            flag, confidence = GATE_SKIPPED_NO_LINE_RANGE, "low"
         elif not outcome.passed:
             flag, confidence = GATE_LOW_CONFIDENCE, "low"
         else:

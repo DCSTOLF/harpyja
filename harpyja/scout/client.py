@@ -9,7 +9,10 @@ Two paths, one client:
 
 - **Path A (primary, in-process):** lazy-import `make_fastcontext_agent`, build a
   fresh agent (`work_dir=<repo>`, `trajectory_file=<temp outside repo>`), and
-  `await agent.run(..., citation=True)`. Because the MCP handler may already be
+  `await agent.run(..., citation=False)` — spec 0011 seam (a): `citation=False`
+  bypasses FastContext's own `format_citations` (which crashes on bare-path model
+  output); Harpyja parses the raw `<final_answer>` text itself. Because the MCP
+  handler may already be
   on an event loop and FastContext is env-configured, the run is bridged onto a
   **dedicated loop-free worker thread** (D1) and the managed `FC_*` env is set
   **only while holding a module-level `threading.Lock`**, held across the *whole*
@@ -35,6 +38,7 @@ import tempfile
 import threading
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from harpyja.config.settings import Settings
@@ -59,8 +63,42 @@ Which = Callable[[str], str | None]
 AssertLocal = Callable[..., None]
 
 _FINAL_ANSWER = re.compile(r"<final_answer>(.*?)</final_answer>", re.DOTALL)
-# Lenient `path:line` / `path:start-end` extraction (mirrors deep/rlm.py).
-_CITATION = re.compile(r"([\w./\-]+\.[A-Za-z0-9_]+):(\d+)(?:-(\d+))?")
+# Spec 0011: parse the FastContext `citation=False` answer text PER LINE, anchored
+# to the whole line, against the observed FC grammar:
+#   <no-space-path-token>[:<linepart>] [optional (explanation)]
+# A line that isn't end-to-end a citation (e.g. prose that merely *mentions* a
+# filename) is NOT a citation — this is the AC22 guard against a naked `:\d+` that
+# would promote incidental prose filenames. `linepart` is captured loosely so a
+# malformed/non-numeric line still yields a usable path (→ file-level), and a bare
+# path (no `:linepart`) yields a file-level span. FastContext is not patched; this
+# is the in-`scout/` text seam (the corrected fix locus).
+_CITATION_LINE = re.compile(
+    r"^\s*(?P<path>\S+?)(?::(?P<linepart>\S+?))?\s*(?:\([^)]*\))?\s*$"
+)
+_LINE_RANGE = re.compile(r"^(?P<start>\d+)(?:-(?P<end>\d+))?$")
+
+
+def _looks_like_path(token: str) -> bool:
+    """A path-like token has a directory separator or a dotted file extension.
+
+    Keeps a bare single word (e.g. ``done``) from becoming a spurious file-level
+    citation while accepting real paths (``pkg/a.py``, ``/abs/db.py``).
+    """
+    if "<" in token or ">" in token:  # stray markup like `</tool_call>`
+        return False
+    return "/" in token or re.search(r"\.\w+$", token) is not None
+
+
+@dataclass(frozen=True)
+class ParseTally:
+    """Per-shape distribution of the text refs parsed from one answer (AC17).
+
+    The root-cause signal is how often the model emits a bare (file-level) path
+    vs a lined (`path:start`) one; carried so the eval harness can report it.
+    """
+
+    spanned: int = 0
+    filelevel: int = 0
 
 _DEFAULT_MAX_TURNS = 6
 _DEFAULT_CLI_TIMEOUT_S = 120.0
@@ -127,21 +165,56 @@ def _run_coro_on_worker_thread(make_coro: Callable[[], Any]) -> Any:
     return box["value"]
 
 
-def parse_final_answer(text: str) -> list[CodeSpan]:
-    """Extract `path:line` refs from a `<final_answer>` block (else whole text).
+def parse_final_answer_with_tally(text: str) -> tuple[list[CodeSpan], ParseTally]:
+    """Parse the FastContext `citation=False` answer text into `CodeSpan`s.
 
-    Output is untrusted (a weak model emits noise) and is confined/clamped by the
-    caller's `normalize_spans`; a parse that finds nothing yields an honest empty
-    Tier-1 result rather than an error.
+    Spec 0011 seam (a): the model's raw final message carries the citations as
+    newline-delimited `path[:start[-end]] (explanation)` entries inside a
+    `<final_answer>` block (else the whole text). Each line is matched **anchored**
+    so prose that merely mentions a filename is not a citation (AC22):
+
+    - ``path:start`` / ``path:start-end`` → **spanned** `CodeSpan` (int lines).
+    - bare ``path`` (no `:line`), or a path with a **malformed/non-numeric** line
+      → **file-level** `CodeSpan` (`None` lines — honest precision, no fabricated
+      range). Both-or-neither: a span is always emitted both-int or both-None.
+
+    Output is untrusted; the caller's `normalize_spans` confines/clamps it. A parse
+    that finds nothing yields an honest empty result, never an error. The returned
+    `ParseTally` reports the spanned-vs-file-level distribution (AC17).
     """
     body = text or ""
     match = _FINAL_ANSWER.search(body)
     if match:
         body = match.group(1)
     spans: list[CodeSpan] = []
-    for path, start, end in _CITATION.findall(body):
-        s = int(start)
-        spans.append(CodeSpan(path=path, start_line=s, end_line=int(end) if end else s))
+    spanned = filelevel = 0
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lm = _CITATION_LINE.match(line)
+        if lm is None:
+            continue
+        path = lm.group("path")
+        if not _looks_like_path(path):
+            continue
+        linepart = lm.group("linepart")
+        rng = _LINE_RANGE.match(linepart) if linepart is not None else None
+        if rng is not None:
+            start = int(rng.group("start"))
+            end = int(rng.group("end")) if rng.group("end") else start
+            spans.append(CodeSpan(path=path, start_line=start, end_line=end))
+            spanned += 1
+        else:
+            # bare path OR malformed/non-numeric line → file-level (no fabrication).
+            spans.append(CodeSpan(path=path, start_line=None, end_line=None))
+            filelevel += 1
+    return spans, ParseTally(spanned=spanned, filelevel=filelevel)
+
+
+def parse_final_answer(text: str) -> list[CodeSpan]:
+    """Spans-only view of :func:`parse_final_answer_with_tally` (legacy callers)."""
+    spans, _ = parse_final_answer_with_tally(text)
     return spans
 
 
@@ -228,7 +301,7 @@ class DefaultFastContextClient:
                     try:
                         agent = self._build_agent(self._repo_root, trajectory)
                         answer = _run_coro_on_worker_thread(
-                            lambda: agent.run(prompt, max_turns=self._max_turns, citation=True)
+                            lambda: agent.run(prompt, max_turns=self._max_turns, citation=False)
                         )
                     except ImportError:
                         raise  # signal the Path B fallback (caught by __call__)
@@ -255,6 +328,9 @@ class DefaultFastContextClient:
         # Air-gap before the subprocess is spawned (single helper, before egress).
         self._assert_local(self._settings.lm_api_base, allow_remote=self._settings.allow_remote)
         trajectory = self._new_trajectory_file()
+        # Spec 0011 seam (a): NO `--citation` — that flag makes FC run its own
+        # `format_citations` (which crashes on bare-path model output). We take the
+        # raw answer text and parse it ourselves (`parse_final_answer`).
         argv = [
             "fastcontext",
             "--query",
@@ -263,7 +339,6 @@ class DefaultFastContextClient:
             str(self._max_turns),
             "--traj",
             trajectory,
-            "--citation",
         ]
         # FC_* scoped to the child only — the parent os.environ is never mutated.
         child_env = {**os.environ, **_fc_env_from_settings(self._settings)}

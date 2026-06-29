@@ -57,6 +57,31 @@ class CaseRun:
     outcome: M.CaseOutcome
     terminal_tier: int | None
     latency_ms: float
+    # Spec 0011: the Scout shape tally for this case (None when Scout did not run).
+    scout_tally: object | None = None
+
+
+def _is_scout_degraded(notes: str | None) -> bool:
+    return bool(notes) and "scout-degraded" in notes
+
+
+# Spec 0011 — stable reliability-note identifiers (composable; machine-readable).
+RELIABILITY_DEGRADED_DOMINATED = "degraded-dominated"
+RELIABILITY_INDICATIVE_ONLY = "indicative-only"
+
+
+def compose_reliability_notes(*, degraded_dominated: bool, indicative_only: bool) -> list[str]:
+    """Compose the run's reliability notes — a run may carry several at once.
+
+    One helper so the runner and the SWE-bench driver cannot drift on how the
+    notes are spelled or combined (R2).
+    """
+    notes: list[str] = []
+    if degraded_dominated:
+        notes.append(RELIABILITY_DEGRADED_DOMINATED)
+    if indicative_only:
+        notes.append(RELIABILITY_INDICATIVE_ONLY)
+    return notes
 
 
 def _span_dict(s) -> dict:
@@ -134,6 +159,11 @@ def run_case(
         max_results=settings.max_results,
     )
 
+    # Reset the Scout shape-tally carrier so a stale tally from a prior case (e.g.
+    # a broad case that never calls Scout) can't leak into this one (spec 0011).
+    if stack.scout_engine is not None and hasattr(stack.scout_engine, "last_tally"):
+        stack.scout_engine.last_tally = None
+
     gate_eligible = case.classification == "point"
     tier1_spans: tuple = ()
     if gate_eligible and stack.scout_engine is not None:
@@ -145,6 +175,8 @@ def run_case(
     t0 = time.perf_counter()
     result = _locate(req, settings, stack)
     latency_ms = (time.perf_counter() - t0) * 1000.0
+    # The production locate run is the authoritative tally for this case.
+    scout_tally = getattr(stack.scout_engine, "last_tally", None)
 
     outcome = M.CaseOutcome(
         case_id=case.case_id,
@@ -177,7 +209,13 @@ def run_case(
         ),
         "notes": result.notes,
     }
-    return CaseRun(event=event, outcome=outcome, terminal_tier=terminal_tier, latency_ms=latency_ms)
+    return CaseRun(
+        event=event,
+        outcome=outcome,
+        terminal_tier=terminal_tier,
+        latency_ms=latency_ms,
+        scout_tally=scout_tally,
+    )
 
 
 def aggregate_outcomes(
@@ -198,6 +236,19 @@ def aggregate_outcomes(
         key = str(r.terminal_tier)
         per_tier_latency[key] = per_tier_latency.get(key, 0.0) + r.latency_ms
 
+    # Spec 0011 — scout-degrade visibility. degrade_rate is null-with-count on a
+    # zero denominator (never a false 0.0); degraded_dominated flags a run whose
+    # majority degraded (> threshold) so downstream metrics are unreliable.
+    attempted = len(runs)
+    degrade_count = sum(1 for r in runs if _is_scout_degraded(r.event.get("notes")))
+    degrade_rate = (degrade_count / attempted) if attempted else None
+    degraded_dominated = (
+        degrade_rate is not None and degrade_rate > eval_config.degraded_dominated_threshold
+    )
+    spanned = sum(getattr(r.scout_tally, "spanned", 0) for r in runs if r.scout_tally)
+    filelevel = sum(getattr(r.scout_tally, "filelevel", 0) for r in runs if r.scout_tally)
+    dropped = sum(getattr(r.scout_tally, "dropped", 0) for r in runs if r.scout_tally)
+
     return {
         "span_hit_rate_primary": M.span_hit_rate_primary(outcomes),
         "span_hit_rate_secondary": M.span_hit_rate_secondary(
@@ -213,6 +264,12 @@ def aggregate_outcomes(
         "correct_tier1_count": correct_total,
         "per_tier_latency_ms": per_tier_latency,
         "per_tier_model_calls": (dict(model_calls) if model_calls is not None else None),
+        "scout_degrade_count": degrade_count,
+        "scout_degrade_rate": degrade_rate,
+        "degraded_dominated": degraded_dominated,
+        "fc_citation_spanned_count": spanned,
+        "fc_citation_filelevel_count": filelevel,
+        "fc_citation_dropped_count": dropped,
     }
 
 
@@ -237,11 +294,18 @@ def run_dataset(
     aggregate = aggregate_outcomes(runs, eval_config, model_calls=stack.model_calls)
 
     seed_n = len(cases)
+    indicative_only = seed_n < eval_config.n_floor
+    # Spec 0011 — composable reliability notes: a run can be BOTH degraded-dominated
+    # and indicative-only; the list never lets one reason overwrite another.
+    aggregate["reliability_notes"] = compose_reliability_notes(
+        degraded_dominated=bool(aggregate["degraded_dominated"]),
+        indicative_only=indicative_only,
+    )
     run_metadata = {
         "repo_revision": repo_revision,
         "seed_n": seed_n,
         "n_floor": eval_config.n_floor,
-        "indicative_only": seed_n < eval_config.n_floor,
+        "indicative_only": indicative_only,
         "mode": mode,
         "k_runs": 1,
         "settings_snapshot": {
@@ -251,6 +315,7 @@ def run_dataset(
         },
         "timestamp": timestamp,
         "artifact_dir": str(out_dir) if out_dir is not None else None,
+        "degraded_dominated_threshold": eval_config.degraded_dominated_threshold,
     }
 
     report = build_report(run_metadata, [r.event for r in runs], aggregate)

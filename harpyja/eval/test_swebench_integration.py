@@ -96,6 +96,47 @@ def test_swebench_driver_live_no_nonloopback_egress(tmp_path):
     validate_report(report)
 
 
+# ---- Spec 0011 AC21: degrade visibility is surfaced live, never silent --------
+
+@pytest.mark.integration
+def test_swebench_live_surfaces_degrade_visibility(tmp_path):
+    """AC21: re-running the driver live, the report SURFACES scout-degrade visibility
+    as first-class fields — it can never read as a silent all-degrade again.
+
+    With seam (a) the FastContext citation-formatter crash is gone, so Scout fires
+    instead of flooring at `backend-error`. Asserts the degrade-visibility contract
+    on a live run (legacy fixture stand-in; the real N=12 flask subset is the
+    compute-bound operator opt-in): the degrade rate is *measured* (non-null),
+    escalation is *measured*, every case records its per-case notes, and — the
+    load-bearing guarantee — a degrade-floor run is loudly flagged rather than
+    silent (rate < 1.0, OR rate == 1.0 ⇒ degraded_dominated + reliability note).
+    """
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+    repo = str(tmp_path / "legacy")
+    shutil.copytree(_LEGACY, repo)
+    report = run_swebench(
+        _live_cases(repo, cap=3), _settings_live(), EvalConfig(k_runs=1),
+        stack_factory=_factory(), out_dir=tmp_path / "out", write=True,
+    )
+    validate_report(report)
+    agg = report["aggregate"]
+    # First-class, machine-readable degrade visibility (no longer silent).
+    assert agg["scout_degrade_rate"] is not None  # measured, not a phantom 0.0/floor
+    assert agg["escalation_rate"] is not None
+    assert isinstance(agg["scout_degrade_count"], int)
+    assert isinstance(agg["reliability_notes"], list)
+    for f in ("fc_citation_spanned_count", "fc_citation_filelevel_count",
+              "fc_citation_dropped_count"):
+        assert isinstance(agg[f], int)
+    # Every case records its own notes (a per-case reason, never silence).
+    assert all("notes" in c for c in report["cases"])
+    # The load-bearing guarantee: an all-degrade run is impossible to MISS.
+    if agg["scout_degrade_rate"] >= 1.0:
+        assert agg["degraded_dominated"] is True
+        assert "degraded-dominated" in agg["reliability_notes"]
+
+
 # ---- AC11: live OQ2 sweep + budget -----------------------------------------
 
 @pytest.mark.integration

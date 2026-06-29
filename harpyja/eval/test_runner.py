@@ -216,3 +216,101 @@ def test_run_dataset_forwards_mode_to_run_case(monkeypatch, tmp_path):
         repo_path="repo", stack=stack, mode="fast",
     )
     assert modes == ["fast"]
+
+
+# --- Spec 0011 (citation-shape): degrade visibility + shape counts (AC14/17/19) ---
+
+from harpyja.config.settings import Settings  # noqa: E402
+from harpyja.scout import errors as _scout_errors  # noqa: E402
+from harpyja.scout.engine import ScoutTally  # noqa: E402
+from harpyja.scout.errors import ScoutUnavailable  # noqa: E402
+
+
+class _RaisingScout:
+    def search(self, query, scope=None):
+        raise ScoutUnavailable(_scout_errors.BACKEND_ERROR)
+
+
+class _TallyScout:
+    """Returns preset spans and exposes a fixed last_tally (the carrier seam)."""
+
+    def __init__(self, spans, tally):
+        self._spans = list(spans)
+        self._tally = tally
+        self.last_tally = None
+
+    def search(self, query, scope=None):
+        self.last_tally = self._tally
+        return list(self._spans)
+
+
+def _degrade_stack(scout, art):
+    return LocateStack(
+        engine=FakeEngine([]),
+        symbol_engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=None,
+        gate=FakeGate(True),
+        indexer=lambda *a, **k: None,
+        resolve_dir=lambda repo, settings: art,
+        index_ready=True,
+    )
+
+
+def _point(case_id="p", path="a.py"):
+    return EvalCase(case_id, "where is x", "repo", (ExpectedSpan(path, 1, 2),), "point")
+
+
+def test_runner_reports_scout_degrade_count_and_rate(tmp_path):
+    # AC14: a scout-degraded case is counted; rate = count / cases_attempted.
+    art = tmp_path / "art"
+    art.mkdir()
+    stack = _degrade_stack(_RaisingScout(), art)
+    rep = run_dataset(
+        [_point("p1"), _point("p2")], Settings(), EvalConfig(),
+        repo_path=str(tmp_path / "repo"), stack=stack,
+    )
+    agg = rep["aggregate"]
+    assert agg["scout_degrade_count"] == 2
+    assert agg["scout_degrade_rate"] == 1.0
+
+
+def test_runner_degrade_rate_null_with_zero_denominator(tmp_path):
+    # AC14: zero cases → explicit null paired with the (zero) count, never 0.0.
+    art = tmp_path / "art"
+    art.mkdir()
+    stack = _degrade_stack(_RaisingScout(), art)
+    rep = run_dataset([], Settings(), EvalConfig(), repo_path=str(tmp_path / "repo"), stack=stack)
+    agg = rep["aggregate"]
+    assert agg["scout_degrade_rate"] is None
+    assert agg["scout_degrade_count"] == 0
+
+
+def test_runner_aggregates_fc_citation_shape_counts(tmp_path):
+    # AC17 (aggregate): the per-case ScoutTally carrier is summed into the report.
+    art = tmp_path / "art"
+    art.mkdir()
+    scout = _TallyScout([_span("a.py", 1, 2)], ScoutTally(spanned=2, filelevel=1, dropped=3))
+    stack = _degrade_stack(scout, art)
+    rep = run_dataset(
+        [_point()], Settings(), EvalConfig(), repo_path=str(tmp_path / "repo"), stack=stack
+    )
+    agg = rep["aggregate"]
+    assert agg["fc_citation_spanned_count"] == 2
+    assert agg["fc_citation_filelevel_count"] == 1
+    assert agg["fc_citation_dropped_count"] == 3
+
+
+def test_runner_serializes_file_level_citation_lines_as_null(tmp_path):
+    # AC19: a file-level cited span serializes start/end as JSON null and the
+    # assembled report passes the one loud validator.
+    art = tmp_path / "art"
+    art.mkdir()
+    scout = _TallyScout([CodeSpan("a.py", None, None)], ScoutTally(filelevel=1))
+    stack = _degrade_stack(scout, art)
+    rep = run_dataset(
+        [_point()], Settings(), EvalConfig(), repo_path=str(tmp_path / "repo"), stack=stack
+    )
+    validate_report(rep)
+    cited = rep["cases"][0]["citations"]
+    assert cited and cited[0]["start_line"] is None and cited[0]["end_line"] is None

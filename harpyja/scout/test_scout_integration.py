@@ -114,6 +114,39 @@ def test_scout_fast_returns_tier1_citations_live(tmp_path):
 
 
 @pytest.mark.integration
+def test_scout_live_no_backend_error_citation_false(tmp_path):
+    """Spec 0011 AC20: the exact 12/12-broken case is fixed at the unit of failure.
+
+    Under seam (a) Scout drives FastContext with `citation=False`, so FC's own
+    `format_citations` (which raised `TypeError` on bare-path model output → the
+    `scout-degraded:backend-error` that floored every real query) is never called.
+    A live run must therefore NEVER carry a `backend-error` note: it either returns
+    Tier-1 citations (`[0,1]`) or honestly degrades for a *different*, real reason
+    (e.g. connection) — but the citation-formatter crash is structurally gone.
+    Citation *content* stays model-dependent and is not asserted.
+    """
+    if not _fastcontext_live_available():
+        pytest.skip(_NEEDS_FC)
+    from harpyja.scout.wiring import build_scout_engine
+
+    (tmp_path / "auth.py").write_text(
+        "def authenticate(token):\n    return token == 'ok'\n", encoding="utf-8"
+    )
+    settings = _settings_live()
+    scout = build_scout_engine(settings, str(tmp_path))
+    result = locate(
+        LocateRequest(
+            query="where is authentication handled?", repo_path=str(tmp_path), mode="fast"
+        ),
+        settings,
+        engine=_NoEngine(),
+        scout_engine=scout,
+    )
+    assert result.tiers_run in ([0, 1], [0])
+    assert "backend-error" not in (result.notes or "")  # the crash is gone (AC20)
+
+
+@pytest.mark.integration
 def test_scout_fast_path_a_leaves_repo_byte_unchanged(tmp_path):
     """AC8: an end-to-end Path-A run leaves the scanned repo byte-unchanged (no
     FastContext-authored files in `work_dir`), excluding the sanctioned `.harpyja/`

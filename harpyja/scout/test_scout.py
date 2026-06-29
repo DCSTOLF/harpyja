@@ -132,3 +132,26 @@ def test_fastcontext_backend_delegates_to_injected_client():
     assert seen["seed"] == seed
     assert set(seen["tools"]) == {"read", "glob", "grep", "model"}
     assert out == [CodeSpan(path="x.py", start_line=1, end_line=1)]
+
+
+# --- Spec 0011 (citation-shape): the Scout result carries the shape tally (AC17) ---
+
+
+def test_scout_engine_exposes_fc_citation_tally(tmp_path):
+    # AC17 (carrier): after search, the engine exposes the per-shape text-ref tally
+    # — spanned (lined) vs filelevel (bare path, the root-cause signal) emitted by
+    # the model, and dropped by normalize — as side-channel metadata the eval
+    # harness reads. The returned list[CodeSpan] (orchestrator seam) is unchanged.
+    (tmp_path / "real.py").write_text("a\nb\nc\n", encoding="utf-8")
+    backend = _RecordingBackend(
+        [
+            CodeSpan("real.py", 1, 2),  # spanned, survives
+            CodeSpan("real.py", None, None),  # file-level, survives
+            CodeSpan("ghost.py", None, None),  # file-level, dropped (no such file)
+        ]
+    )
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(tmp_path))
+    out = engine.search("q")
+    assert all(isinstance(c, CodeSpan) for c in out)  # seam unchanged
+    tally = engine.last_tally
+    assert (tally.spanned, tally.filelevel, tally.dropped) == (1, 2, 1)

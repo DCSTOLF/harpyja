@@ -2,6 +2,104 @@
 
 Append-only. Newest first.
 
+## 2026-06-28 — Scout citation-shape robustness (seam (a), `citation=False`) + harness degrade visibility shipped — line-less `CodeSpan`, the corrected fix locus, safe + observable degradation
+
+**Spec:** specs/0011-citation-shape/
+**Decision:** Fix the spec-0010 finding that Scout was **systematically dead on real
+SWE-bench queries** (12/12 `scout-degraded:backend-error`, gate upstream-starved, bare
+Tier-0 at 2/12 = 0.167) — and the second, enabling defect that the degrade was
+**invisible in aggregate metrics** — in **one** spec, because the visibility gap is
+*why* the Scout bug hid (degradation must be both **safe** and **observable**; shipping
+the fix alone would leave the next tier failure equally invisible). The
+**single-wire-format-owner** and **honest-precision** invariants held and **FastContext
+is NOT patched**. Six durable choices were pinned. (1) **The RCA's first framing was a
+false premise, corrected by a live spike (T0, the fail-fast first plan step).** Harpyja
+**never receives FC citation *objects***: FC's `format_citations` runs **inside**
+`agent.run(prompt, citation=True)` and raises `TypeError: string indices must be
+integers` when the model's final message has no parseable `<final_answer>` block
+(`parse_citations` returns a dict fallback whose string keys `format_citations`
+iterates) → caught → `ScoutUnavailable(backend-error)` → Tier-0 degrade. So the
+"normalize dict-vs-string citation objects" framing solved a problem that doesn't exist
+at Harpyja's seam. The spike confirmed live (FC-4B/Ollama): `citation=True` raises the
+exact `TypeError`; `citation=False` returns the raw final message and **structurally
+cannot reach** `format_citations`. **(2) Fix = seam (a):** Scout invokes FC
+**`citation=False`** (Path A `agent.run`; Path B drops the CLI `--citation` flag),
+bypassing the crashing formatter entirely — no exception on the hot path, **no
+catch-as-control-flow** — and `scout/client.py::parse_final_answer` parses the raw
+`<final_answer>` **text per line, anchored** to the spike-pinned FC grammar
+`<no-space-path>[:start[-end]] [(explanation)]`: `path:start` → spanned `CodeSpan`;
+bare path / malformed-or-non-numeric line → **file-level** `CodeSpan` (`None` lines, no
+fabricated range). A `_looks_like_path` guard (dir separator or dotted extension;
+markup rejected) and per-line anchoring (never a naked optional `:\d+` over free text)
+keep an incidental prose filename from becoming a spurious citation (AC22). This is the
+in-`scout/` text seam — the corrected fix locus; seam (c) (catch-the-crash fallback)
+was the pre-stated contingency and **was not needed**. **(3) Honest-precision
+representation: `CodeSpan.start_line/end_line` widened to `int | None`** (`None ⇒
+file-level`, no line range) with a new **`CodeSpan.is_file_level`** property as the
+**single predicate** every downstream consumer branches on, so a coarse path-only
+citation never reads as a line-verified one. **Both-or-neither:** a half-`None` span is
+not a sanctioned shape and is rejected at the parse/normalize boundary (AC23). **(4)
+The blast radius was closed by category, not piecemeal** — the round-2/3 review lesson
+(a `None`-line span crashes each int-line consumer in turn; the round-3 `format.py`
+miss was the same class as the round-2 representation miss) was generalized to a
+discipline: `grep -rn 'start_line\|end_line'` enumerates **all** consumers at once and
+each gets its **own** RED→GREEN, ordered producer→…→metrics so a `None` span is made
+safe before the next stage sees it. `normalize_spans` (file-level branch:
+repo-confine + `is_file` + dedup, skip the line clamp; `normalize_spans_with_tally`
+returns a dropped count + per-drop log; the Deep/Tier-2 lined path stays byte-identical);
+`format.py` (file-level spans survive un-merged, sort after lined on a None-safe rank
+key); `gate.py` (new `GateOutcome.skipped_reason="no-line-range"`, detected **before**
+read-back — not scored, not a verified pass); `locate.py` (stable
+`gate-skipped:no-line-range`, distinct from `gate-low-confidence`/`gate-scoring-failed`,
+escalate-if-a-tier-remains-else-carry-tagged in `auto`, informational in `fast`);
+`metrics.py` (`span_hit_kind` → `"line"`/`"file"`/`None`, the path-only branch taken
+**before** the line arithmetic in **both** the primary and the secondary/window
+oracle — `span_hit_secondary` was a blast-radius miss the spec hadn't enumerated,
+caught by the same grep discipline). **(5) Deliverable 2 — first-class degrade
+visibility on a bumped schema.** `SCHEMA_VERSION` `0010/1` → `0011/1` with 8 additive
+fields last-with-defaults in the centralized `_*_DEFAULTS`: aggregate
+`scout_degrade_count`, `scout_degrade_rate` (**null-with-count on a zero denominator**,
+never a false `0.0`), `degraded_dominated` (rate > threshold), composable
+`reliability_notes`, and `fc_citation_{spanned,filelevel,dropped}_count` (the text-ref
+shape distribution — the bare-path frequency is the root-cause signal, no drop silent);
+run-metadata `degraded_dominated_threshold`. A new **eval-only**
+`EvalConfig.degraded_dominated_threshold=0.5` (field-disjoint from the production frozen
+`Settings`) encodes the same judgment as the N-floor: a **majority**-degraded run
+characterizes the degrade floor, not the SUT, so its escalation/accuracy/OQ2 outputs
+are marked unreliable. **(6) The shape tally rides a Scout-result side-channel, not the
+orchestrator seam.** `ScoutEngine.last_tally` (`ScoutTally{spanned, filelevel, dropped}`)
+is metadata read **only** by `eval/runner.py` (reset+read per case, then aggregated);
+the orchestrator's `list[CodeSpan]` is unchanged so callers still never branch on which
+engine ran. `compose_reliability_notes` is shared by `runner.py` + `swebench_eval.py`
+so the two aggregation sites cannot drift (R2); `is_file_level` is the shared shape
+predicate (R1).
+**Why:** Spec 0010's instrument did its job and surfaced a **real Scout/FastContext
+robustness defect** on real data — but a floored Scout is indistinguishable from
+"cheapest tier works" at the metrics layer, so the defect hid behind the very spec-0007
+degrade floor that was working. The low bare-Tier-0 accuracy (16.7%) proves the
+Scout→gate→Deep NL ladder is load-bearing, not redundant; until Scout is robust the
+ladder is non-functional on exactly the real-world queries Harpyja targets and OQ2 is
+uncalibratable on real data. The corrected fix locus matters: the original "normalize
+FC's citation objects" plan would have written code against shapes Harpyja never
+receives; tracing `scout/client.py` against the RCA (and then the live spike) relocated
+the fix to where Harpyja genuinely sits — the answer **text** — where the
+honest-precision invariant fits *better* (a `path:start` match → spanned; a bare-`path`
+match → file-level).
+**Consequence — Scout is robust on real queries; OQ2 is now unblocked but not yet done.**
+Shipped TDD-complete: **656 unit pass** (+45 over the 0010 baseline), ruff clean;
+**7 live integration pass** (5 Scout + 2 SWE-bench driver, real FastContext-4B + Deep +
+Ollama). **AC20 proven live:** the exact 12/12-broken flask case now returns with
+**zero backend-error** (`test_scout_live_no_backend_error_citation_false`, 22.5s). One
+new stable flag id joins the taxonomy (`gate-skipped:no-line-range`). Deviations: the
+T0 spike was captured on a small temp repo (the 4B model returns empty on the full
+flask tree; the seam/grammar question is repo-independent) and the AC21 N=12 re-run was
+exercised on the legacy fixture (the full N=12 flask sweep is the compute-bound operator
+opt-in). Open follow-ups carried forward: the **production OQ2 calibration**
+(`verify_threshold`/`verify_top_n`) this UNBLOCKS but does not do — now meaningfully
+measurable since Scout fires on real data; **`degraded_dominated_threshold` revisit**
+to a data-driven value once a real degrade-rate distribution exists (sequenced after
+the production OQ2); and, still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-06-28 — SWE-bench Verified eval dataset + per-case-repo driver shipped — real-data instrument, measurement-only, recommend-only, live-validated
 
 **Spec:** specs/0010-swebench-eval-dataset/

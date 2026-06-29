@@ -110,3 +110,35 @@ def test_formatter_preserves_symbol_and_kind_on_citation():
     out = format_citations([_def("a.py", 1, 2, "foo", kind="function")], _flat_prior, 8)
     assert out[0].symbol == "foo"
     assert out[0].kind == "function"
+
+
+# --- Spec 0011 (citation-shape): file-level (line-less) spans survive ---
+
+
+def _file_level(path):
+    return CodeSpan(path=path, start_line=None, end_line=None)
+
+
+def test_formatter_passes_file_level_span_without_crash():
+    # AC12: a file-level (None-line) span flows through the formatter without
+    # line arithmetic raising, and is returned carrying None lines (no fabrication).
+    out = format_citations([_file_level("a.py")], _flat_prior, 8, source_tier=1)
+    assert [(c.path, c.start_line, c.end_line) for c in out] == [("a.py", None, None)]
+    assert out[0].is_file_level
+
+
+def test_formatter_does_not_merge_file_level_into_lined_span():
+    # AC12: a file-level span of a path is NOT adjacency-merged into a lined span
+    # of the same path; both survive and the file-level one sorts AFTER the lined.
+    spans = _spans(("a.py", 1, 2)) + [_file_level("a.py")]
+    out = format_citations(spans, _flat_prior, 8)
+    assert [(c.path, c.start_line, c.end_line) for c in out] == [
+        ("a.py", 1, 2),
+        ("a.py", None, None),
+    ]
+
+
+def test_formatter_dedupes_file_level_spans():
+    out = format_citations([_file_level("a.py"), _file_level("a.py")], _flat_prior, 8)
+    assert len(out) == 1
+    assert out[0].is_file_level

@@ -21,9 +21,9 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-# Bumped for spec 0010 (additive durable fields; the 0009-6a single-run shape
-# still validates because build_report default-populates the new fields).
-SCHEMA_VERSION = "0010/1"
+# Bumped for spec 0011 (additive scout-degrade-visibility fields; older shapes
+# still validate because build_report default-populates the new fields).
+SCHEMA_VERSION = "0011/1"
 
 # D7 — enumerated required field names (the pinned contract).
 _RUN_METADATA_FIELDS = (
@@ -45,6 +45,8 @@ _RUN_METADATA_FIELDS = (
     "contamination_caveat",
     "new_file_only_excluded_count",
     "malformed_skipped_count",
+    # spec 0011 — additive: the eval-only degraded-dominated threshold in effect.
+    "degraded_dominated_threshold",
 )
 _SETTINGS_SNAPSHOT_FIELDS = ("verify_method", "verify_threshold", "verify_top_n")
 _CASE_FIELDS = (
@@ -85,6 +87,17 @@ _AGGREGATE_FIELDS = (
     # spec 0010 — additive: D-route classifier-agreement rate (None on the
     # legacy path / when no point case carries both labels).
     "classifier_agreement_rate",
+    # spec 0011 — additive: scout-degrade visibility. degrade_rate is null-with-count
+    # on a zero denominator; degraded_dominated flags a degrade-floor run;
+    # reliability_notes is a composable list; fc_citation_* is the text-ref shape
+    # distribution (spanned vs file-level vs dropped).
+    "scout_degrade_count",
+    "scout_degrade_rate",
+    "degraded_dominated",
+    "reliability_notes",
+    "fc_citation_spanned_count",
+    "fc_citation_filelevel_count",
+    "fc_citation_dropped_count",
 )
 
 # Schema-stable defaults for the additive fields, injected by build_report when a
@@ -96,6 +109,7 @@ _RUN_METADATA_DEFAULTS = {
     "contamination_caveat": None,
     "new_file_only_excluded_count": 0,
     "malformed_skipped_count": 0,
+    "degraded_dominated_threshold": None,  # spec 0011 (eval-only knob in effect)
 }
 _CASE_DEFAULTS = {
     "production_gate_ran": None,
@@ -104,6 +118,16 @@ _CASE_DEFAULTS = {
 }
 _AGGREGATE_DEFAULTS = {
     "classifier_agreement_rate": None,
+    # spec 0011 — degrade visibility. Defaults are the "not computed" shape for a
+    # legacy/omitted block; a real run populates them. reliability_notes defaults to
+    # None (not-computed) to avoid a shared-mutable default; a run sets a real list.
+    "scout_degrade_count": 0,
+    "scout_degrade_rate": None,
+    "degraded_dominated": False,
+    "reliability_notes": None,
+    "fc_citation_spanned_count": 0,
+    "fc_citation_filelevel_count": 0,
+    "fc_citation_dropped_count": 0,
 }
 
 

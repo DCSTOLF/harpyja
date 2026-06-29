@@ -16,6 +16,14 @@ def test_eval_config_defaults_pin_provisional_constants():
     assert cfg.catch_rate_bar == 0.90
 
 
+def test_eval_config_has_degraded_dominated_threshold_default():
+    # Spec 0011 (AC15): the degraded-dominated threshold is an eval-only knob,
+    # provisional 0.5 (a majority of cases degraded ⇒ the run characterizes the
+    # degrade floor, not the SUT). The disjointness test above guards it from
+    # leaking into production Settings.
+    assert EvalConfig().degraded_dominated_threshold == 0.5
+
+
 def test_eval_config_is_frozen():
     cfg = EvalConfig()
     try:

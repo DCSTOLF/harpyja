@@ -367,3 +367,84 @@ def test_swebench_sweep_does_not_mutate_base_settings(tmp_path):
     before = (base.verify_threshold, base.verify_top_n)
     _sweep(tmp_path, prod_label="point")
     assert (base.verify_threshold, base.verify_top_n) == before  # replace-only
+
+
+# --- Spec 0011 (citation-shape): degrade-dominance + composable reliability notes (AC15) ---
+
+from harpyja.scout import errors as _scout_errors  # noqa: E402
+from harpyja.scout.errors import ScoutUnavailable  # noqa: E402
+
+
+class _RaisingScout:
+    def search(self, query, scope=None):
+        raise ScoutUnavailable(_scout_errors.BACKEND_ERROR)
+
+
+def _degrade_stack():
+    return LocateStack(
+        engine=FakeEngine([]),
+        symbol_engine=FakeEngine([]),
+        scout_engine=_RaisingScout(),
+        deep_engine=None,
+        gate=FakeGate(True),
+        indexer=lambda *a, **k: None,
+        resolve_dir=lambda repo, settings: _ART,
+        index_ready=True,
+    )
+
+
+def _point_case(cid, repo):
+    return EvalCase(cid, "where is x", repo, (ExpectedSpan("a.py", 1, 2),), "point")
+
+
+def test_swebench_sets_degraded_dominated_above_threshold(tmp_path):
+    # AC15: a majority-degraded run (rate > 0.5) flags degraded_dominated and the
+    # composable reliability_notes carry "degraded-dominated"; the threshold is
+    # recorded in run metadata.
+    _setart(tmp_path)
+    cases = [_point_case("p1", "/rA"), _point_case("p2", "/rB")]
+    factory = _Factory({"/rA": _degrade_stack(), "/rB": _degrade_stack()})
+    report = run_swebench(
+        cases, _settings(), _cfg(), stack_factory=factory,
+        production_classifier=lambda q: "point",
+    )
+    agg = report["aggregate"]
+    assert agg["scout_degrade_rate"] == 1.0
+    assert agg["degraded_dominated"] is True
+    assert "degraded-dominated" in agg["reliability_notes"]
+    assert report["run_metadata"]["degraded_dominated_threshold"] == 0.5
+
+
+def test_swebench_reliability_notes_compose(tmp_path):
+    # AC15: degraded-dominated and indicative-only co-exist (small-N run); neither
+    # overwrites the other.
+    _setart(tmp_path)
+    cases = [_point_case("p1", "/rA"), _point_case("p2", "/rB")]
+    factory = _Factory({"/rA": _degrade_stack(), "/rB": _degrade_stack()})
+    report = run_swebench(
+        cases, _settings(), _cfg(), stack_factory=factory,
+        production_classifier=lambda q: "point",
+    )
+    notes = report["aggregate"]["reliability_notes"]
+    assert "degraded-dominated" in notes
+    assert "indicative-only" in notes  # seed_n (2) < n_floor (30)
+
+
+def test_swebench_not_dominated_below_threshold(tmp_path):
+    # AC15: a minority-degraded run (rate <= 0.5) is NOT degraded_dominated.
+    _setart(tmp_path)
+    cases = [_point_case(f"p{i}", f"/r{i}") for i in range(4)]
+    factory = _Factory({
+        "/r0": _degrade_stack(),  # the only degrade → 1/4 = 0.25
+        "/r1": _stack(scout_spans=[("a.py", 1, 2)], gate_passed=True),
+        "/r2": _stack(scout_spans=[("a.py", 1, 2)], gate_passed=True),
+        "/r3": _stack(scout_spans=[("a.py", 1, 2)], gate_passed=True),
+    })
+    report = run_swebench(
+        cases, _settings(), _cfg(), stack_factory=factory,
+        production_classifier=lambda q: "point",
+    )
+    agg = report["aggregate"]
+    assert agg["scout_degrade_rate"] == 0.25
+    assert agg["degraded_dominated"] is False
+    assert "degraded-dominated" not in agg["reliability_notes"]

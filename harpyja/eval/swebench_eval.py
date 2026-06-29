@@ -517,7 +517,7 @@ def run_swebench(
     additive durable metadata. `per_case_timeout` / `sample_cap` bound the run.
     """
     from harpyja.eval.report import build_report
-    from harpyja.eval.runner import aggregate_outcomes, run_case
+    from harpyja.eval.runner import aggregate_outcomes, compose_reliability_notes, run_case
 
     if production_classifier is None:
         from harpyja.orchestrator.classify import classify_query
@@ -576,11 +576,19 @@ def run_swebench(
     )
 
     seed_n = len(runs)
+    indicative_only = seed_n < eval_config.n_floor
+    # Spec 0011 — composable reliability notes (degrade-dominated + indicative-only)
+    # so "12/12 scout-degraded" is impossible to miss at the report top.
+    aggregate["reliability_notes"] = compose_reliability_notes(
+        degraded_dominated=bool(aggregate["degraded_dominated"]),
+        indicative_only=indicative_only,
+    )
     run_metadata = {
         "repo_revision": repo_revision,
         "seed_n": seed_n,
         "n_floor": eval_config.n_floor,
-        "indicative_only": seed_n < eval_config.n_floor,
+        "indicative_only": indicative_only,
+        "degraded_dominated_threshold": eval_config.degraded_dominated_threshold,
         "mode": mode,
         "k_runs": 1,
         "settings_snapshot": {

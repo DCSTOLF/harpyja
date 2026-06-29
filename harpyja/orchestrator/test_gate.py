@@ -146,3 +146,52 @@ def test_gate_runs_under_network_deny_loopback_only(tmp_path, monkeypatch):
 
     assert outcome.passed is True
     assert tripped == []  # the judge path made no non-loopback egress
+
+
+# --- Spec 0011 (citation-shape): file-level (line-less) citation is not-verifiable ---
+
+
+def _file_level_cite(path="mod.py"):
+    return Citation(path=path, start_line=None, end_line=None, source_tier=1)
+
+
+def test_gate_skips_file_level_citation_as_not_verifiable(tmp_path):
+    # AC13: a file-level citation has no lines to read back. The gate detects it
+    # BEFORE read-back (no crash), does NOT score it, does NOT record a verified
+    # pass, and flags skipped_reason="no-line-range".
+    repo = _repo_with_file(tmp_path)
+    judge = _CountingJudge(0.9)
+    gate = _make_gate(judge)
+    outcome = gate.verify("q", [_file_level_cite()], repo_path=repo, settings=_settings())
+    assert outcome.skipped_reason == "no-line-range"
+    assert outcome.passed is False
+    assert outcome.scored_count == 0
+    assert judge.calls == 0  # never read/scored a line-less span
+
+
+def test_gate_skipped_reason_distinct_from_scoring_failure(tmp_path):
+    # AC13: not-verifiable (skipped_reason set, failed=False) is a DISTINCT state
+    # from could-not-vouch (failed=True, skipped_reason None).
+    repo = _repo_with_file(tmp_path)
+    skipped = _make_gate(_CountingJudge(0.9)).verify(
+        "q", [_file_level_cite()], repo_path=repo, settings=_settings()
+    )
+    failed = _make_gate(_CountingJudge(raises=True)).verify(
+        "q", [_cite()], repo_path=repo, settings=_settings()
+    )
+    assert (skipped.skipped_reason, skipped.failed) == ("no-line-range", False)
+    assert (failed.skipped_reason, failed.failed) == (None, True)
+
+
+def test_gate_scores_lined_citations_alongside_file_level(tmp_path):
+    # A mix: the lined citation is scored normally; the file-level one only sets
+    # the marker. The verdict comes from the lined score.
+    repo = _repo_with_file(tmp_path)
+    judge = _CountingJudge(0.9)
+    outcome = _make_gate(judge).verify(
+        "q", [_cite(), _file_level_cite()], repo_path=repo, settings=_settings()
+    )
+    assert outcome.passed is True  # lined score 0.9 >= 0.6
+    assert outcome.scored_count == 1
+    assert outcome.skipped_reason == "no-line-range"
+    assert judge.calls == 1

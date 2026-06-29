@@ -258,7 +258,9 @@ def test_client_path_b_drives_injected_runner(tmp_path):
     )("q", [], {})
     assert [(c.path, c.start_line) for c in out] == [("a.py", 7)]
     assert seen["cwd"] == str(tmp_path)
-    assert "--citation" in seen["argv"]
+    # Spec 0011 seam (a): the CLI runs WITHOUT --citation so FC never calls its
+    # crashing format_citations; Harpyja parses the raw answer text itself.
+    assert "--citation" not in seen["argv"]
     traj_idx = seen["argv"].index("--traj") + 1
     traj = Path(seen["argv"][traj_idx]).resolve()
     assert tmp_path.resolve() not in traj.parents  # temp trajectory outside repo
@@ -371,3 +373,117 @@ def test_client_weak_citations_stay_honest_empty(tmp_path):
     agent = _FakeAgent("I could not find anything relevant.")
     out = _client(Settings(), tmp_path, agent_factory=_factory_returning(agent))("q", [], {})
     assert out == []  # honest empty Tier-1 result, never a raise
+
+
+# --- Spec 0011 (citation-shape): seam (a) — citation=False + bare-path parsing ---
+
+_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "fc_citation_false_final_answer.txt"
+).read_text(encoding="utf-8")
+
+
+class _RecordingAgent:
+    """Records the `citation` kwarg agent.run was invoked with."""
+
+    def __init__(self, answer="", sink=None):
+        self._answer = answer
+        self._sink = sink if sink is not None else {}
+
+    async def run(self, prompt, max_turns=4, verbose=False, citation=False):
+        self._sink["citation"] = citation
+        return self._answer
+
+
+def _parse(text):
+    from harpyja.scout.client import parse_final_answer
+
+    return parse_final_answer(text)
+
+
+def _shape(spans):
+    return [(c.path, c.start_line, c.end_line) for c in spans]
+
+
+def test_parse_final_answer_bare_path_emits_file_level_span():
+    # AC1: a bare path (no :line) inside <final_answer> → a file-level CodeSpan.
+    spans = _parse("<final_answer>\npkg/migrations.py (no line)\n</final_answer>")
+    assert _shape(spans) == [("pkg/migrations.py", None, None)]
+    assert spans[0].is_file_level
+
+
+def test_parse_final_answer_bare_path_has_both_lines_none():
+    # AC4 (honest precision): no line range invented — BOTH fields None.
+    (span,) = _parse("<final_answer>\nsrc/app.py\n</final_answer>")
+    assert span.start_line is None and span.end_line is None
+
+
+def test_parse_final_answer_path_start_stays_spanned():
+    # AC2 (regression): path:start and path:start-end keep int lines.
+    assert _shape(_parse("<final_answer>\na.py:10-12\nb.py:3\n</final_answer>")) == [
+        ("a.py", 10, 12),
+        ("b.py", 3, 3),
+    ]
+
+
+def test_parse_final_answer_mixes_bare_and_spanned_refs():
+    # AC3: each ref normalized per its own shape in one answer.
+    assert _shape(_parse("<final_answer>\na.py:1-2\nb.py\n</final_answer>")) == [
+        ("a.py", 1, 2),
+        ("b.py", None, None),
+    ]
+
+
+def test_parse_final_answer_malformed_line_degrades_to_file_level():
+    # AC5: a usable path with a non-numeric line → file-level (don't drop the
+    # path over a bad line, don't fabricate a range).
+    assert _shape(_parse("<final_answer>\nparser.py:abc (bad line)\n</final_answer>")) == [
+        ("parser.py", None, None)
+    ]
+
+
+def test_parse_final_answer_prose_filename_not_spurious_file_level():
+    # AC22: an incidental filename inside a prose line is NOT promoted to a
+    # file-level span; the whole prose line is not a citation.
+    line = "the change is similar to test_app.py, see app.py:42 for context"
+    assert _parse(f"<final_answer>\n{line}\n</final_answer>") == []
+
+
+def test_parse_final_answer_fixture_covers_all_shapes():
+    # AC11: driven by the committed real-FC-grammar fixture. The two spanned and
+    # two file-level refs survive; the prose negative-control line is dropped.
+    assert _shape(_parse(_FIXTURE)) == [
+        ("auth.py", 1, 2),
+        ("validate.py", 20, 20),
+        ("db.py", None, None),
+        ("parser.py", None, None),
+    ]
+
+
+def test_parse_final_answer_output_has_no_half_none_span():
+    # AC23 (parse boundary): every emitted span is both-int or both-None.
+    for span in _parse(_FIXTURE):
+        both_int = span.start_line is not None and span.end_line is not None
+        assert span.is_file_level or both_int
+
+
+def test_parse_final_answer_no_ref_is_honest_empty():
+    # AC8 (honest-empty half): prose with no citation line → [], not a raise.
+    assert _parse("I looked around but found nothing of note here.") == []
+
+
+def test_parse_final_answer_reports_shape_tally():
+    # AC17 (producer side): the parser reports the per-shape text-ref tally.
+    from harpyja.scout.client import parse_final_answer_with_tally
+
+    spans, tally = parse_final_answer_with_tally(_FIXTURE)
+    assert tally.spanned == 2
+    assert tally.filelevel == 2
+
+
+def test_client_invokes_fastcontext_with_citation_false(tmp_path):
+    # Seam (a): the agent is driven with citation=False, bypassing FC's crashing
+    # format_citations entirely (supports AC20 — zero backend-error live).
+    sink = {}
+    agent = _RecordingAgent("<final_answer>a.py:1</final_answer>", sink)
+    _client(Settings(), tmp_path, agent_factory=_factory_returning(agent))("q", [], {})
+    assert sink["citation"] is False

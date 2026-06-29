@@ -26,6 +26,11 @@ class EvalConfig:
     proximity_window_lines: int = 50
     n_floor: int = 30
     catch_rate_bar: float = 0.90
+    # Spec 0011: a run is "degraded-dominated" when its scout-degrade rate exceeds
+    # this — a majority (> 0.5) of cases degraded ⇒ the run characterizes the
+    # degrade floor, not the SUT, so escalation/accuracy/OQ2 are marked unreliable.
+    # Provisional; revisit once Scout fires on real data. Eval-only (never the SUT).
+    degraded_dominated_threshold: float = 0.5
 
 
 def aggregate_runs(values: Sequence[float]) -> dict[str, float | None]:

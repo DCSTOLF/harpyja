@@ -1,0 +1,48 @@
+FastContext citation=False — RAW captured samples (spec 0011 T0 gating spike)
+=============================================================================
+Provenance: captured 2026-06-28 by running the real FastContext agent
+(make_fastcontext_agent, agent.run(..., citation=False)) against a small temp
+repo, model `hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest` via Ollama
+on http://127.0.0.1:11434/v1/ (FC_REASONING_EFFORT=none, the level at which this
+4B model engages; higher efforts returned empty content on this setup).
+
+These are verbatim `agent.run(citation=False)` return values (the model's raw
+final message). They are the evidence behind the spec-0011 gating check
+(Open Question 1) and the parser grammar in §Deliverable 1. Absolute temp paths
+are shown as captured.
+
+Key facts observed (vs FC source agent/agent.py:74 + agent/utils.py:56-114):
+- citation=False returns step_msg.content verbatim; it NEVER calls
+  get_final_answer/format_citations, so it cannot hit the TypeError the RCA
+  describes (confirmed live: citation=True raised
+  "TypeError: string indices must be integers" on the same setup).
+- Citations are newline-delimited `path:start-end (explanation)` /
+  `path:start (explanation)`; sometimes wrapped in <final_answer>...</final_answer>,
+  sometimes only a trailing </final_answer>, sometimes bare. The path token never
+  contains a space; the explanation is parenthesized.
+- BARE paths (no :line) occur (sample C) — the file-level case is real, not assumed.
+
+--- sample A (query: "where is the login function?") -------------------------
+/var/folders/.../t0_repo/auth.py:1-100 (Login function definition)
+</final_answer>
+
+--- sample B (query: "find the request validation logic") --------------------
+/var/folders/.../t0_repo/validate.py:1-20 (Core request validation logic)
+</final_answer>
+
+--- sample C (query: "where is authentication handled?", tiny repo) ----------
+/var/folders/.../t0_tinyrepo/db.py
+
+</tool_call>
+
+--- sample D (query: "locate the authenticate function and its line") --------
+/var/folders/.../t0_repo/auth.py:1-2 (The `authenticate` function definition)
+/var/folders/.../t0_repo/auth.py:4-5 (The `login` function that calls `authenticate`)
+<final_answer>
+/var/folders/.../t0_repo/auth.py:1-2 (Core `authenticate` function definition)
+/var/folders/.../t0_repo/auth.py:4-5 (`login` function that uses `authenticate`)
+</final_answer>
+
+--- sample E (query: "where are database migrations run?") -------------------
+{"name": "glob", "arguments": {"pattern": "**/*db*"}}
+</tool_call>

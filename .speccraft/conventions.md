@@ -8,6 +8,27 @@
 ## Types & interfaces
 
 - Public functions are fully type-annotated. Tier engines implement the shared `Locator` protocol and return the common `CodeSpan` / `Citation` shapes — callers never branch on which engine ran.
+- A shared cross-tier value type may express **coarser precision** rather than forcing
+  a fabricated value: `CodeSpan.start_line`/`end_line` are `int | None`, with `None ⇒
+  file-level` (a path-only citation with no honest line range — never a `0`/`1`/EOF
+  sentinel that reads as a real span). Expose the distinction as **one predicate**
+  (`CodeSpan.is_file_level`, both-lines-`None`) that every downstream consumer branches
+  on, so a coarse path-only result can never read as a line-verified one (the
+  honest-precision/no-false-capability rule, in the type). Enforce a **both-or-neither**
+  invariant at every boundary that constructs the type — a half-`None` span is not a
+  sanctioned shape and is rejected at the parse/normalize boundary, so a single-field
+  guard downstream is sound. (See `harpyja/server/types.py` `CodeSpan.is_file_level`,
+  AC23.)
+- A type-shape change to a shared contract (e.g. widening a required `int` field to
+  `int | None`) **enumerates its full blast radius by category, not piecemeal**: a
+  single `grep -rn '<field>'` surfaces **every** consumer at once, and each is made
+  shape-safe in the **same** change with its **own** RED→GREEN, ordered along the data
+  path (producer → … → sink) so the new shape is handled before the next stage sees it.
+  The failure mode this prevents is a missed consumer that crashes a tier on exactly
+  the case the change exists to fix (the round-3 formatter miss); the same class of
+  miss recurs once per stage left un-grepped (e.g. a primary metric oracle guarded but
+  its sibling secondary oracle missed). (See spec 0011's `start_line`/`end_line`
+  widening across `scout/`, `orchestrator/`, `eval/`.)
 - A routing/decision matrix is the **single source of truth**, *driven by* the routing code rather than duplicated by it. When dispatch depends on a small fixed product of dimensions, encode the full mapping in one table (e.g. `(mode × classification × index_ready) → planned ladder`) that both the executor and the tests read; the executor derives its branches **from** the table (a refactor that catches the executor re-deriving a routing rule is a real bug, not a style nit), and every row is asserted. Documented escalation/branch rules are *derived from* the table, never a second authority that can silently drift. (See `harpyja/orchestrator/matrix.py` `plan_ladder`, consulted by `_locate_auto`; AC3.)
 
 ## Config & immutable state
@@ -26,6 +47,21 @@
 - A budget/quality **truncation** is a distinct, caller-visible, **stable non-degrade marker** (`deep-truncated:<bound>`, one of `depth`/`subqueries`/`tool-calls`/`tokens`/`wall-clock`) — never silently indistinguishable from a complete result, and never a tier-degrade (dropping a tier on a *successful but truncated* run would be the ungated escalation a verification gate is meant to govern). Distinct from both a complete run and a typed `DeepUnavailable` degrade. (See `harpyja/orchestrator/locate.py`, `harpyja/deep/engine.py`.)
 - When a third-party tier owns its **own** model client and cannot be routed through the in-house Gateway, enforce the air-gap by calling `gateway.assert_local` on the configured endpoint **before** constructing that client, and **prove** no non-loopback egress with a network-deny integration test — assumption-verified-by-test, not an asserted guarantee. Still **one** air-gap helper, never a parallel check. (See `harpyja/deep/rlm.py`, AC6/AC12.) When that third party is **env-configured** (reads its endpoint/model from `os.environ`, with no constructor/config-file seam — verify against the pinned source) and must be bridged off the request loop, inject its env **only while holding a module-level `threading.Lock`** — *not* an `asyncio.Lock`: each call runs the awaitable on its **own loop-free worker thread** (`asyncio.run` is illegal inside a running loop, so a worker thread keeps the sync seam intact), so concurrent calls land on different OS threads and only a thread lock serializes their `os.environ` writes. Hold the lock across `assert_local` → env-set → construct → the **full** off-loop run when any config key is read lazily per model call (closes the TOCTOU window). The env guard is **set-then-restore** in `try/finally` preserving per-key **unset-vs-empty** (a key absent before is `del`-eted after; a `""` is restored to `""`). This serializes the tier — accept it only where calls already contend for one resource (e.g. a single local GPU), and confine the latitude to that tier (never leak it to a sibling that keeps "config from `Settings`, not ambient env"). The fallback subprocess path scopes env to the **child** via `subprocess env=`, never mutating the parent. (See `harpyja/scout/client.py` `_SCOUT_ENV_LOCK` / `_managed_fc_env` / `_run_coro_on_worker_thread`, AC3/AC4.)
 - A third-party **post-processing crash** is infra failure, not a result: when a backend's own output formatter/parser raises on malformed model output (e.g. FastContext's `get_final_answer` / `format_citations` raising `TypeError`), map **any** unexpected backend exception to the tier's typed degrade cause (`...Unavailable(backend-error)`) — never let a raw third-party exception escape the tier. Floors (`RipgrepMissingError` / `AirGapError`) and the package-absent import signal still propagate; an honest-empty result (a clean run that parsed no citation) still returns `[]`, never a raise. This honors "no model → Tier 0": a buggy backend degrades, it does not crash the request. (See `harpyja/scout/client.py`, AC10.)
+- When a third party's **own** output formatter is the thing that crashes and its
+  **raw input is available**, don't route the result through the crashing
+  post-processor and catch the exception as control flow — invoke the backend in the
+  mode that **bypasses** the formatter and parse the raw output **in-adapter**. (FC's
+  `format_citations` crashes inside `agent.run(citation=True)` on bare-path model
+  output; Scout invokes `citation=False` and parses the raw `<final_answer>` text
+  itself — no exception on the hot path, vs the alternative of keeping `citation=True`
+  and catching the crash every call.) This composes with the post-processing-crash
+  degrade rule above: that rule is the **floor** for a genuine backend exception
+  (`agent.run` itself raising → `backend-error`); bypass-and-parse is the **fix** that
+  keeps the hot path crash-free, and a clean run that parses no citation is still an
+  honest-empty `[]`, never a raise. The adapter remains the **single owner** of the
+  backend's wire format (parse the raw text in `scout/`, never upstream and never in the
+  orchestrator). (See `harpyja/scout/client.py` seam (a), `parse_final_answer`,
+  spec 0011 AC1/AC8/AC20.)
 - A best-effort verification/scoring step **never raises and never silently passes**: it maps **any** internal failure (a judge call erroring, an un-readable input) to a typed *could-not-vouch* outcome (`GateOutcome.failed=True`, `passed=False`) and routes it exactly like a negative verdict — escalate where a further tier remains (retaining a stable diagnostic flag, e.g. `gate-scoring-failed`), else return the best-effort current-tier result tagged with that same flag. A could-not-vouch is never a hard block and never an unflagged pass. Relatedly, **derived confidence keys on the terminal tier + flags, never path tokens alone**: a result that shares its `tiers_run` shape with a higher-confidence path (e.g. an honest-empty `[0,1]` vs a verified gated-pass `[0,1]`) is given a distinguishing marker (`gate-skipped:scout-empty`) and its own confidence row, so "nothing found" can never read as high confidence (no-false-capability). (See `harpyja/orchestrator/gate.py`, the `gate-scoring-failed` / `gate-low-confidence` / `gate-skipped:scout-empty` flags, AC8/AC9.)
 - When wrapping a foreign exception, preserve the cause (`raise ... from err`).
 - No-silent-coverage lockstep: a capability's routing, its identity/cache slot, and
@@ -104,6 +140,16 @@
   still write **outside every** target tree (the same inside-`repo_path` refusal, per
   target). (See `harpyja/eval/swebench_eval.py` `run_swebench`, which builds a per-case
   `LocateStack` and reuses `metrics.py` / `recommend.py` unchanged.)
+- Tier-internal **metadata the orchestrator must not see** (e.g. a per-run citation
+  shape distribution) rides a **Scout-result side-channel**, not the cross-tier
+  `list[CodeSpan]` seam: the engine exposes it as result metadata
+  (`ScoutEngine.last_tally`, a `ScoutTally`), the harness **resets it per case** (so a
+  prior case that never ran the tier can't leak a stale tally) and **reads the
+  production run's** value, and the orchestrator's `list[CodeSpan]` is unchanged so
+  callers still never branch on which engine ran. This is the one defined
+  production→aggregation path for a per-shape count — never inferred from the surviving
+  citations (which cannot show a *dropped* ref). (See `harpyja/scout/engine.py`
+  `last_tally` / `ScoutTally`, `harpyja/eval/runner.py`, spec 0011 AC17.)
 - When a versioned report schema gains **additive** fields, append them
   last-with-defaults AND **centralize the field set + its defaults in one anti-drift
   source** (a `_*_DEFAULTS` map the builder injects), so an older-shape block and a

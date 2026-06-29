@@ -27,8 +27,8 @@ PriorOf = Callable[[str], float]
 @dataclass
 class _Merged:
     path: str
-    start_line: int
-    end_line: int
+    start_line: int | None  # None ⇒ file-level (spec 0011)
+    end_line: int | None
     density: int
     is_def: bool
     symbol: str | None
@@ -42,14 +42,28 @@ def _merge_same_file(spans: list[CodeSpan]) -> list[_Merged]:
     A definition is a precise, individually-citable range — merging it away (e.g. a
     method span absorbed into its enclosing class span) would lose the very symbol
     the query promoted, so definitions are never merged.
+
+    Spec 0011: a **file-level** (line-less) span has no range to order or merge
+    against, so it is **never** adjacency-merged into a lined span — it survives as
+    its own coarse citation carrying ``None`` lines. The line-merge runs only over
+    lined text spans, so a ``None`` line never reaches the arithmetic.
     """
     out: list[_Merged] = [
         _Merged(s.path, s.start_line, s.end_line, 1, True, s.symbol, s.kind)
         for s in spans
         if s.symbol is not None
     ]
+    # File-level spans: distinct, never merged (no line range to merge on).
+    out.extend(
+        _Merged(s.path, None, None, 1, False, None, None)
+        for s in spans
+        if s.symbol is None and s.is_file_level
+    )
 
-    texts = sorted((s for s in spans if s.symbol is None), key=lambda s: (s.start_line, s.end_line))
+    texts = sorted(
+        (s for s in spans if s.symbol is None and not s.is_file_level),
+        key=lambda s: (s.start_line, s.end_line),
+    )
     merged_texts: list[_Merged] = []
     for s in texts:
         if merged_texts and s.start_line <= merged_texts[-1].end_line + 1:  # overlap/adjacency
@@ -85,14 +99,17 @@ def format_citations(
     # Rank: prior desc, then definition boost, then density desc, then a stable
     # total order. The boost (0 for defs, 1 otherwise) sits between prior and
     # density so a definition outranks a denser call-site cluster of equal prior.
+    # Stable order is None-safe: a file-level (line-less) span sorts AFTER lined
+    # spans of the same path (coarser precision last), never compared int-vs-None.
     merged.sort(
         key=lambda m: (
             -prior_of(m.path),
             0 if m.is_def else 1,
             -m.density,
             m.path,
-            m.start_line,
-            m.end_line,
+            m.start_line is None,
+            m.start_line or 0,
+            m.end_line or 0,
             m.kind or "",
             m.symbol or "",
         )

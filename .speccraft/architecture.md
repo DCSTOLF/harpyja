@@ -17,7 +17,13 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `ModelGateway.complete`), and decides whether the trailing Tier-2 step runs — so the
    realized `tiers_run` is a prefix of the planned ladder. `wiring.build_verification_gate`
    is the production `gate_factory`. Stable gate flags: `gate-low-confidence` /
-   `gate-scoring-failed` / `gate-skipped:scout-empty`.
+   `gate-scoring-failed` / `gate-skipped:scout-empty` / `gate-skipped:no-line-range`
+   (spec 0011 — a **file-level**, line-less citation reached the gate: detected
+   **before** read-back via `GateOutcome.skipped_reason="no-line-range"`, not scored and
+   not a verified pass; `locate.py` escalates if a tier remains in `auto` else carries it
+   tagged, never at high confidence — distinct from low-confidence / scoring-failed). The
+   Citation Formatter survives a line-less span un-merged (sorted after lined spans on a
+   None-safe rank key, no fabricated range).
 3. `harpyja/index/` — file walker, ranked JSONL manifest, incremental hashing.
    Live as of Wave 1: `walk`/`ignore` (pathspec, no `git`), `classify`, `prior`,
    `hash`, `manifest` (atomic same-dir temp + `os.replace`, per-file `degraded`
@@ -66,6 +72,19 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `fastcontext-missing` terminal only when the CLI runner is unwired, and **any**
    unexpected backend exception (incl. FastContext's own post-processing crash) mapped to
    `backend-error`; `RipgrepMissingError` / `AirGapError` propagate as the floor.
+   As of spec 0011 the FastContext citation path uses **seam (a)**: Scout invokes the agent
+   with **`citation=False`** (Path A `agent.run`; Path B drops the CLI `--citation` flag),
+   bypassing FastContext's own `format_citations` (which crashes on bare-path model output),
+   and `client.py::parse_final_answer` parses the raw `<final_answer>` text itself, **per
+   line, anchored** to the FC grammar `<no-space-path>[:start[-end]] [(explanation)]` —
+   `path:start` → a spanned `CodeSpan`, a bare path / malformed line → a **file-level**
+   `CodeSpan` (`None` lines, no fabricated range; `_looks_like_path` + per-line anchoring
+   guard against incidental prose filenames). `normalize_spans_with_tally` returns
+   `(spans, dropped_count)` with a file-level branch (repo-confine + `is_file` + dedup,
+   skipping the line clamp; Tier-2/Deep's lined path byte-identical) and a half-`None`
+   reject. The per-run text-ref shape distribution rides a side-channel —
+   `ScoutEngine.last_tally` (`ScoutTally{spanned, filelevel, dropped}`) — read only by the
+   eval harness; the orchestrator's `list[CodeSpan]` seam is unchanged.
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -129,6 +148,17 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    is an operator opt-in (`make swebench-full`), and **no `Settings` default is flipped**
    (recommend-only, B1) — the flip remains a follow-up spec. The earlier 5-case
    `legacy/` seed remains the small `indicative_only` starter. See history.md 2026-06-28.
+   **As of spec 0011** the report schema is `0011/1` (additive degrade-visibility fields,
+   centralized last-with-defaults in `_*_DEFAULTS`): aggregate `scout_degrade_count`,
+   `scout_degrade_rate` (null-with-count on a zero denominator), `degraded_dominated`,
+   composable `reliability_notes`, and `fc_citation_{spanned,filelevel,dropped}_count`;
+   run-metadata `degraded_dominated_threshold` (a new **eval-only**
+   `EvalConfig.degraded_dominated_threshold=0.5`, field-disjoint from `Settings` — a
+   majority-degraded run characterizes the degrade floor, not the SUT). The one overlap
+   oracle now classifies a file-level citation as a **path-only** hit via `span_hit_kind`
+   (`"line"`/`"file"`/`None`), guarded **before** the line arithmetic in both the primary
+   and the secondary oracle; `compose_reliability_notes` is shared by `runner.py` +
+   `swebench_eval.py`.
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

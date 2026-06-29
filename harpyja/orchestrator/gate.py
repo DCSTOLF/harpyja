@@ -47,6 +47,11 @@ class GateOutcome:
     scored_count: int
     dropped_count: int
     failed: bool
+    # Spec 0011: a third state, distinct from passed/failed. Set to "no-line-range"
+    # when a file-level (line-less) citation reached the gate — it has no lines to
+    # read back, so it is NOT scored and NOT a verified pass; the orchestrator maps
+    # this to the stable `gate-skipped:no-line-range` marker. Additive (last).
+    skipped_reason: str | None = None
 
 
 def _read_cited_lines(repo_path: str, citation: Citation) -> str:
@@ -120,10 +125,17 @@ class VerificationGate:
                 dropped,
             )
 
+        # Spec 0011: a file-level (line-less) citation has no lines to read back —
+        # detect it BEFORE any read-back (which would crash on `None` lines) and
+        # treat it as not-verifiable, not a verified pass. Only lined citations are
+        # scored; the marker records that a coarse span was present.
+        lined = [c for c in top if not c.is_file_level]
+        skipped_reason = "no-line-range" if any(c.is_file_level for c in top) else None
+
         judge = self._judge or make_scout_model_judge(self.gateway, settings)
         scores: list[float] = []
         try:
-            for citation in top:
+            for citation in lined:
                 cited_text = _read_cited_lines(repo_path, citation)
                 scores.append(judge(query, cited_text))
         except Exception:
@@ -135,15 +147,18 @@ class VerificationGate:
                 scored_count=len(scores),
                 dropped_count=dropped,
                 failed=True,
+                skipped_reason=skipped_reason,
             )
 
         # Aggregate: the best cited span carries the verdict — one strongly
-        # relevant citation is enough for a locate answer to be trustworthy.
+        # relevant citation is enough for a locate answer to be trustworthy. A
+        # pure file-level top scores nothing → passed=False (not-verifiable).
         score = max(scores) if scores else 0.0
         return GateOutcome(
             passed=score >= settings.verify_threshold,
             score=score,
-            scored_count=len(top),
+            scored_count=len(lined),
             dropped_count=dropped,
             failed=False,
+            skipped_reason=skipped_reason,
         )

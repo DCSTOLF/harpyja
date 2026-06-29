@@ -1,0 +1,7 @@
+<final_answer>
+auth.py:1-2 (The `authenticate` function definition)
+validate.py:20 (request validation entrypoint)
+db.py (migrations module — model gave no line range)
+parser.py:abc (model emitted a non-numeric line)
+the relevant change is similar to test_app.py, see app.py:42 for context
+</final_answer>

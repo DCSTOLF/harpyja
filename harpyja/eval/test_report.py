@@ -225,3 +225,63 @@ def test_validate_report_rejects_aggregate_missing_agreement_rate():
     del rep["aggregate"]["classifier_agreement_rate"]
     with pytest.raises(ReportSchemaError):
         validate_report(rep)
+
+
+# --- Spec 0011 (citation-shape): degrade-visibility fields + null cited lines ---
+
+
+def test_report_schema_version_is_0011():
+    # AC16: additive bump for the degrade-visibility fields.
+    assert SCHEMA_VERSION == "0011/1"
+
+
+def test_new_degrade_fields_present_with_defaults():
+    # AC16: the new aggregate + run-metadata fields appear via the centralized
+    # defaults even when a block omits them, and the report validates.
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    agg = rep["aggregate"]
+    for f in (
+        "scout_degrade_count",
+        "scout_degrade_rate",
+        "degraded_dominated",
+        "reliability_notes",
+        "fc_citation_spanned_count",
+        "fc_citation_filelevel_count",
+        "fc_citation_dropped_count",
+    ):
+        assert f in agg, f
+    assert "degraded_dominated_threshold" in rep["run_metadata"]
+    validate_report(rep)  # no raise
+
+
+def test_pre_0011_and_0011_shapes_both_validate():
+    # AC16: a block omitting the new fields (filled by defaults) AND a fully
+    # populated 0011 block both pass the one loud validator.
+    minimal = build_report(_run_metadata(), [_case()], _aggregate())
+    full = build_report(
+        _run_metadata(degraded_dominated_threshold=0.5),
+        [_case()],
+        _aggregate(
+            scout_degrade_count=3,
+            scout_degrade_rate=0.25,
+            degraded_dominated=False,
+            reliability_notes=["indicative-only"],
+            fc_citation_spanned_count=4,
+            fc_citation_filelevel_count=2,
+            fc_citation_dropped_count=1,
+        ),
+    )
+    validate_report(minimal)
+    validate_report(full)
+
+
+def test_validate_report_tolerates_null_cited_lines():
+    # AC19: a file-level cited span serializes its line fields as JSON null; the
+    # one loud validator accepts it (gold expected_spans stay int-only).
+    case = _case(
+        citations=[{"path": "a.py", "start_line": None, "end_line": None, "source_tier": 1}]
+    )
+    rep = build_report(_run_metadata(), [case], _aggregate())
+    validate_report(rep)  # no raise
+    # round-trips through JSON as null
+    assert json.loads(json.dumps(rep))["cases"][0]["citations"][0]["start_line"] is None
