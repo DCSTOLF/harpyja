@@ -74,7 +74,7 @@ The **Orchestrator** runs the cheapest tier that can answer, verifies the result
 back, and only escalates when verification fails or the query shape demands it. See
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full design and [`SPEC.md`](./SPEC.md) for the contracts.
 
-Tier 1 **uses Microsoft [FastContext](https://github.com/microsoft/fastcontext) directly** — Harpyja wraps it
+Tier 1 **uses Microsoft [FastContext](https://github.com/DCSTOLF/fastcontext) directly** — Harpyja wraps it
 as a pinned dependency, not a reimplementation. Tier 2 **reimplements the `dspy.RLM` approach** demonstrated by
 [megacode](https://github.com/mitkox/megacode), which serves only as reference and inspiration (not a
 dependency). Around both, Harpyja adds the language-agnostic indexing, symbol layer, routing, verification,

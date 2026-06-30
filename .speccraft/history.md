@@ -2,6 +2,35 @@
 
 Append-only. Newest first.
 
+## 2026-06-30 — FastContext dependency source swapped to the DCSTOLF fork (identical rev, no behavior change)
+
+**Spec:** specs/0013-fastcontext/
+**Decision:** Repoint the Tier-1 Scout FastContext git source from
+`microsoft/fastcontext` to `DCSTOLF/fastcontext` at the **same pinned rev**
+`1522d6d6b5e040e817b468e12826662aa069a8b0` — a pure source-of-supply swap with
+**no version bump and no behavior change** (the resolved code is byte-identical).
+`pyproject.toml` `[tool.uv.sources]` URL, the regenerated `uv.lock` source entry +
+dependency-edge marker, and the `README.md` / `FASTCONTEXT_INSTALL.md` clone URLs all
+move to the fork; a new `harpyja/test_fastcontext_source.py` drift-guards the source,
+the unchanged rev (AC3 byte-identity), and the absence of any surviving
+`microsoft/fastcontext` URL. **"Microsoft FastContext" prose attribution is left
+intact** (the fork is a fork of MS's project, so the credit stays accurate); only the
+URLs changed. No `harpyja/scout/` code touched.
+**Why:** Move to a controlled fork source so future local FastContext fixes (the open
+`format_citations` crash, recommended-Q4 quality leads) can be carried **without
+bumping the pin**. This spec is only the source swap; carrying actual patches is a
+deliberate later effort.
+**Consequence:** Scout now resolves FastContext from the owned fork at the identical
+rev. **683 unit pass** (+5 new source/rev/no-stale-URL guards), ruff clean; **38 Scout
+integration tests pass** against the fork (live), confirming no behavior change;
+`uv lock --check` resolves 144 packages consistently. The plan's "fork-not-pushed /
+network" risk was moot — the fork resolved and built cleanly on first `uv run`. Open
+follow-ups carried forward: **carrying the actual FastContext patches** onto the fork
+(the `format_citations` robustness fix, Q4 quality leads — now unblocked by owning the
+source); the **Q8 `scout_model` default flip** (deferred, variance-gated); the **gate
+false-escalation of a correct Scout answer**; the **Deep `AdapterParseError` robustness
+gap**; and, still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-06-29 — Scout path-suffix recovery shipped — rescue an out-of-repo hallucinated citation by its unique, manifest-keyed in-repo suffix, composing with (never bypassing) the 0011 drop + honesty floor
 
 **Spec:** specs/0012-path-prefix/

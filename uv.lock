@@ -654,7 +654,7 @@ wheels = [
 [[package]]
 name = "fastcontext"
 version = "0.1.0"
-source = { git = "https://github.com/microsoft/fastcontext?rev=1522d6d6b5e040e817b468e12826662aa069a8b0#1522d6d6b5e040e817b468e12826662aa069a8b0" }
+source = { git = "https://github.com/DCSTOLF/fastcontext?rev=1522d6d6b5e040e817b468e12826662aa069a8b0#1522d6d6b5e040e817b468e12826662aa069a8b0" }
 dependencies = [
     { name = "aiofiles" },
     { name = "asyncio" },
@@ -940,7 +940,7 @@ dev = [
 requires-dist = [
     { name = "datasets", specifier = ">=5.0.0" },
     { name = "dspy", specifier = ">=3.2.1" },
-    { name = "fastcontext", git = "https://github.com/microsoft/fastcontext?rev=1522d6d6b5e040e817b468e12826662aa069a8b0" },
+    { name = "fastcontext", git = "https://github.com/DCSTOLF/fastcontext?rev=1522d6d6b5e040e817b468e12826662aa069a8b0" },
     { name = "fastmcp", specifier = ">=2.0" },
     { name = "pathspec", specifier = ">=0.12" },
     { name = "tree-sitter", specifier = ">=0.23" },

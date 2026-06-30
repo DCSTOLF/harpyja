@@ -37,14 +37,14 @@ uv venv --python 3.12
 From your MCP server project root (the dir with *your* `pyproject.toml`):
 
 ```bash
-uv add "git+https://github.com/microsoft/fastcontext"
+uv add "git+https://github.com/DCSTOLF/fastcontext"
 ```
 
 There are **no published releases**, so `main` can move. Pin a commit for
 reproducibility once it installs cleanly:
 
 ```bash
-uv add "git+https://github.com/microsoft/fastcontext@<commit-sha>"
+uv add "git+https://github.com/DCSTOLF/fastcontext@<commit-sha>"
 ```
 
 **Already have the repo cloned locally** (you do — you installed the CLI from it)?
