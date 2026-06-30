@@ -465,6 +465,64 @@ def test_swebench_reliability_notes_compose(tmp_path):
     assert "indicative-only" in notes  # seed_n (2) < n_floor (30)
 
 
+# --- Spec 0014 (P10): Deep-degrade fields reach the SIBLING driver (no missed consumer) ---
+
+from harpyja.deep.errors import PARSE_ERROR as _DEEP_PARSE_ERROR  # noqa: E402
+from harpyja.deep.errors import DeepUnavailable as _DeepUnavailable  # noqa: E402
+
+
+class _UnavailableDeep:
+    def __init__(self, cause):
+        self.cause = cause
+
+    def run(self, query):
+        raise _DeepUnavailable(self.cause)
+
+
+def _deep_degrade_stack():
+    return LocateStack(
+        engine=FakeEngine([]),
+        symbol_engine=FakeEngine([]),
+        scout_engine=FakeScout([_span("a.py", 1, 2)]),  # healthy floor (Tier-1)
+        deep_engine=_UnavailableDeep(_DEEP_PARSE_ERROR),
+        gate=FakeGate(True),
+        indexer=lambda *a, **k: None,
+        resolve_dir=lambda repo, settings: _ART,
+        index_ready=True,
+    )
+
+
+def test_swebench_reports_deep_degrade_fields(tmp_path):
+    # AC7: the new Deep-degrade fields reach the per-case-repo SIBLING driver's
+    # report via the shared aggregate_outcomes — proving no parallel scoring path.
+    _setart(tmp_path)
+    cases = [_point_case("p1", "/rA"), _point_case("p2", "/rB")]
+    factory = _Factory({"/rA": _deep_degrade_stack(), "/rB": _deep_degrade_stack()})
+    report = run_swebench(
+        cases, _settings(), _cfg(), stack_factory=factory,
+        production_classifier=lambda q: "point", mode="deep",
+    )
+    agg = report["aggregate"]
+    assert agg["deep_degrade_count"] == 2
+    assert agg["deep_degrade_rate"] == 1.0
+
+
+def test_swebench_degraded_dominated_counts_deep_degrade(tmp_path):
+    # AC11: a Deep-degraded-majority run flags degraded_dominated (the union machinery
+    # accounts for Deep) and carries the composable note — sibling not a missed consumer.
+    _setart(tmp_path)
+    cases = [_point_case("p1", "/rA"), _point_case("p2", "/rB")]
+    factory = _Factory({"/rA": _deep_degrade_stack(), "/rB": _deep_degrade_stack()})
+    report = run_swebench(
+        cases, _settings(), _cfg(), stack_factory=factory,
+        production_classifier=lambda q: "point", mode="deep",
+    )
+    agg = report["aggregate"]
+    assert agg["deep_degrade_rate"] == 1.0
+    assert agg["degraded_dominated"] is True
+    assert "degraded-dominated" in agg["reliability_notes"]
+
+
 def test_swebench_not_dominated_below_threshold(tmp_path):
     # AC15: a minority-degraded run (rate <= 0.5) is NOT degraded_dominated.
     _setart(tmp_path)

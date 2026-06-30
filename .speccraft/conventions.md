@@ -175,6 +175,22 @@
   production→aggregation path for a per-shape count — never inferred from the surviving
   citations (which cannot show a *dropped* ref). (See `harpyja/scout/engine.py`
   `last_tally` / `ScoutTally`, `harpyja/eval/runner.py`, spec 0011 AC17.)
+- **Every typed-degrade floor reports its rate as a first-class aggregate field AND
+  feeds `degraded_dominated`** — or it can go dark exactly the way Scout's
+  `format_citations` crash did (a graceful floor hides the defect it floors on). When a
+  tier/backend gains a typed-unavailable degrade (a stable `<tier>-degraded:<cause>`
+  note), the eval report MUST surface a paired `<tier>_degrade_count` / `<tier>_degrade_rate`
+  twin (additive, last-with-defaults, **null-with-count on a zero denominator**, never a
+  false `0.0`), and the case MUST join the `degraded_dominated` reckoning. Dominance keys
+  off the **UNION** of all tiers' per-case degrades — a case counts **ONCE** even when
+  multiple tiers floor in it (a sum would double-count) — while each per-tier rate stays a
+  separate first-class field for attribution. This generalizes the spec-0011 Scout
+  machinery: Deep's `deep_degrade_*` twins (spec 0014) are one *instance* of the rule, not
+  the rule itself, so the next floor inherits visibility by default instead of
+  re-litigating it. (See `harpyja/eval/runner.py` `_has_degrade_note` /
+  `_is_scout_degraded` / `_is_deep_degraded` + the union-based `degraded_dominated` in
+  `aggregate_outcomes`, `harpyja/eval/report.py` `scout_degrade_*` / `deep_degrade_*`,
+  spec 0014 AC6/AC11.)
 - When a versioned report schema gains **additive** fields, append them
   last-with-defaults AND **centralize the field set + its defaults in one anti-drift
   source** (a `_*_DEFAULTS` map the builder injects), so an older-shape block and a

@@ -286,6 +286,96 @@ def test_runner_degrade_rate_null_with_zero_denominator(tmp_path):
     assert agg["scout_degrade_count"] == 0
 
 
+# --- Spec 0014 (P8): Deep-degrade visibility — twin of the scout machinery ---
+
+from harpyja.deep.errors import PARSE_ERROR as _DEEP_PARSE_ERROR  # noqa: E402
+from harpyja.deep.errors import DeepUnavailable as _DeepUnavailable  # noqa: E402
+
+
+class _UnavailableDeep:
+    def __init__(self, cause):
+        self.cause = cause
+
+    def run(self, query):
+        raise _DeepUnavailable(self.cause)
+
+
+def _deep_degrade_stack(deep, scout, art):
+    return LocateStack(
+        engine=FakeEngine([]),
+        symbol_engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=deep,
+        gate=FakeGate(True),
+        indexer=lambda *a, **k: None,
+        resolve_dir=lambda repo, settings: art,
+        index_ready=True,
+    )
+
+
+def test_runner_reports_deep_degrade_count_and_rate(tmp_path):
+    # AC6: a deep-degraded case is counted; rate = count / cases_attempted (mode=deep,
+    # Deep floors to a healthy Scout best-effort).
+    art = tmp_path / "art"
+    art.mkdir()
+    scout = _TallyScout([_span("a.py", 1, 2)], ScoutTally())
+    stack = _deep_degrade_stack(_UnavailableDeep(_DEEP_PARSE_ERROR), scout, art)
+    rep = run_dataset(
+        [_point("p1"), _point("p2")], Settings(), EvalConfig(),
+        repo_path=str(tmp_path / "repo"), stack=stack, mode="deep",
+    )
+    agg = rep["aggregate"]
+    assert agg["deep_degrade_count"] == 2
+    assert agg["deep_degrade_rate"] == 1.0
+
+
+def test_runner_deep_degrade_rate_null_with_zero_denominator(tmp_path):
+    # AC10: zero cases → explicit null paired with the (zero) count, never 0.0.
+    art = tmp_path / "art"
+    art.mkdir()
+    stack = _deep_degrade_stack(
+        _UnavailableDeep(_DEEP_PARSE_ERROR), _TallyScout([], ScoutTally()), art
+    )
+    rep = run_dataset(
+        [], Settings(), EvalConfig(), repo_path=str(tmp_path / "repo"), stack=stack, mode="deep"
+    )
+    agg = rep["aggregate"]
+    assert agg["deep_degrade_rate"] is None
+    assert agg["deep_degrade_count"] == 0
+
+
+def test_degrade_note_predicates_share_one_membership_check():
+    # Refactor guard (P12): scout/deep predicates are spelled once via a shared
+    # prefix membership helper, and a None/empty notes string is not degraded.
+    from harpyja.eval.runner import _has_degrade_note, _is_deep_degraded, _is_scout_degraded
+
+    assert _is_scout_degraded("scout-degraded:backend-error;x") is True
+    assert _is_deep_degraded("deep-degraded:parse-error") is True
+    assert _is_scout_degraded("deep-degraded:parse-error") is False
+    assert _is_deep_degraded(None) is False
+    assert _has_degrade_note("deep-degraded:parse-error", "deep-degraded") is True
+    assert _has_degrade_note("", "scout-degraded") is False
+
+
+def test_runner_degraded_dominated_counts_case_once_when_both_degrade(tmp_path):
+    # AC11: a case whose notes carry BOTH scout-degraded and deep-degraded is a
+    # single degraded case for degraded_dominated (union, not sum), while the per-tier
+    # rates stay separately attributed.
+    art = tmp_path / "art"
+    art.mkdir()
+    stack = _deep_degrade_stack(_UnavailableDeep(_DEEP_PARSE_ERROR), _RaisingScout(), art)
+    rep = run_dataset(
+        [_point("p1")], Settings(), EvalConfig(degraded_dominated_threshold=0.5),
+        repo_path=str(tmp_path / "repo"), stack=stack, mode="deep",
+    )
+    agg = rep["aggregate"]
+    assert agg["scout_degrade_count"] == 1  # attributed separately
+    assert agg["deep_degrade_count"] == 1  # attributed separately
+    # 1 case, both tiers floored → combined per-case degraded rate = 1/1 = 1.0 > 0.5,
+    # counted ONCE (a sum would be 2/1 = 2.0, still > .5, but the count must be 1).
+    assert agg["degraded_dominated"] is True
+
+
 def test_runner_aggregates_fc_citation_shape_counts(tmp_path):
     # AC17 (aggregate): the per-case ScoutTally carrier is summed into the report.
     art = tmp_path / "art"

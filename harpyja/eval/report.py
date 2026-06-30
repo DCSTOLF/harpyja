@@ -23,7 +23,7 @@ from pathlib import Path
 
 # Bumped for spec 0011 (additive scout-degrade-visibility fields; older shapes
 # still validate because build_report default-populates the new fields).
-SCHEMA_VERSION = "0012/1"
+SCHEMA_VERSION = "0013/1"
 
 # D7 — enumerated required field names (the pinned contract).
 _RUN_METADATA_FIELDS = (
@@ -102,6 +102,12 @@ _AGGREGATE_FIELDS = (
     # file-level ref skips the gate read-back, so it is tracked apart from spanned).
     "fc_citation_recovered_spanned_count",
     "fc_citation_recovered_filelevel_count",
+    # spec 0014 — additive: Deep-degrade visibility, the second typed-degrade floor.
+    # Twins of scout_degrade_*; deep_degrade_rate is null-with-count on a zero
+    # denominator. degraded_dominated keys off the UNION of scout+deep per-case
+    # degrades (counted once), while these stay separate for attribution.
+    "deep_degrade_count",
+    "deep_degrade_rate",
 )
 
 # Schema-stable defaults for the additive fields, injected by build_report when a
@@ -135,6 +141,10 @@ _AGGREGATE_DEFAULTS = {
     # spec 0012 — additive recovered counts (default 0 ⇒ legacy 0011 block validates).
     "fc_citation_recovered_spanned_count": 0,
     "fc_citation_recovered_filelevel_count": 0,
+    # spec 0014 — Deep-degrade twins; "not computed" default = count 0, rate null
+    # (so a legacy 0012 block still validates after the bump).
+    "deep_degrade_count": 0,
+    "deep_degrade_rate": None,
 }
 
 

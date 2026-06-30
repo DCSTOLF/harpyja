@@ -773,7 +773,7 @@ def test_locate_non_loopback_raises_airgap(tmp_path):
 
 # --- Wave 4: Deep (Tier 2) routing — supersedes the Wave-3 provisional guard ---
 
-from harpyja.deep.errors import DeepUnavailable  # noqa: E402
+from harpyja.deep.errors import PARSE_ERROR, DeepUnavailable  # noqa: E402
 
 
 class _BoomDeep:
@@ -867,7 +867,8 @@ def test_locate_deep_double_degrade_carries_both_notes(tmp_path):
 def test_locate_deep_distinct_cause_notes(tmp_path):
     _write(tmp_path, "a.py", "needle\n")
     notes = set()
-    for cause in ("sandbox-absent", "rlm-down", "backend-error"):
+    # spec 0014: parse-error is a sibling cause routed identically to the others.
+    for cause in ("sandbox-absent", "rlm-down", "backend-error", PARSE_ERROR):
         result = locate(
             _req(tmp_path, mode="deep"),
             Settings(),
@@ -880,7 +881,25 @@ def test_locate_deep_distinct_cause_notes(tmp_path):
         "deep-degraded:sandbox-absent",
         "deep-degraded:rlm-down",
         "deep-degraded:backend-error",
+        "deep-degraded:parse-error",
     }
+
+
+def test_locate_deep_parse_error_degrades_to_scout(tmp_path):
+    # spec 0014 (AC1/AC5): a parse-error Deep degrade floors to Scout best-effort
+    # — tiers_run reflects the floor REACHED ([0,1]), not a Tier-2 result, and the
+    # degrade stays visible via the stable note.
+    _write(tmp_path, "a.py", "needle\n")
+    result = locate(
+        _req(tmp_path, mode="deep"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=_FakeScout([CodeSpan(path="a.py", start_line=1, end_line=1)]),
+        deep_engine=_UnavailableDeep(PARSE_ERROR),
+    )
+    assert result.tiers_run == [0, 1]  # floor reached, NOT [0, 2]
+    assert result.notes.startswith("deep-degraded:parse-error")
+    assert all(c.source_tier == 1 for c in result.citations)
 
 
 def test_locate_deep_weak_or_zero_citations_stay_tier2(tmp_path):

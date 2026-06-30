@@ -2,6 +2,77 @@
 
 Append-only. Newest first.
 
+## 2026-06-30 — Deep AdapterParseError → typed parse-error degrade shipped — the second typed-degrade floor, with first-class visibility (the rule promoted to a standing convention)
+
+**Spec:** specs/0014-adapterparseerror/
+**Decision:** Close the known Deep crash path the spec-0012 AC5 run surfaced (a malformed
+dspy/model response raised `AdapterParseError` out of the RLM driver and aborted the whole
+run, forcing AC5 to `mode=fast`) — the **same defect class** as the original Scout
+backend-error bug (0005/0007): a third-party parse failure that should map to a typed
+tier-floor but instead crashes. Harden it **before** the full 12-repo OQ2 sweep, where an
+unhandled exception at hour three loses the entire long run. Five durable choices pinned.
+(1) **A named, narrow-caught seam earns its OWN cause — a sibling, not a replacement.**
+`harpyja/deep/errors.py` adds `PARSE_ERROR = "parse-error"` next to `BACKEND_ERROR`:
+`AdapterParseError` is a *recognized, pinned, typed* seam, the opposite of the
+`backend-error` catch-all-for-the-unforeseen, so an operator can tell "the dspy adapter
+could not parse the model output" apart from "something unforeseen blew up." Truly-unexpected
+Deep exceptions still fold to `backend-error` (unchanged); the narrow catch is exactly what
+keeps the two distinct (AC4). (2) **Pinned-against-source, dspy-absent-safe narrow catch at
+the one seam.** `rlm.py::_adapter_parse_error_types()` lazily resolves
+`dspy.utils.exceptions.AdapterParseError` — the single class all four adapters raise (and
+into which `JSONAdapter` wraps a raw `json.JSONDecodeError`), per the dspy 3.2.1 source read,
+so catching it alone is neither over-narrow nor over-broad — and returns the empty tuple when
+dspy is absent (`except ()` catches nothing, preserving the module's no-top-level-`import
+dspy` rule). It wraps **only** the `rlm(query=...)` forward call →
+`raise DeepUnavailable(PARSE_ERROR) from err`; `_assert_local` (AirGapError floor) and
+`_rlm_factory` (config faults) stay outside the try, and `parse_citations` never raises.
+(3) **Typed-failure-only boundary preserved (the 0006 invariant both reviewers called this
+tier's most important property).** A malformed response degrades; a *well-formed but
+weak/empty-citation* response stays an honest Tier-2 result — collapsing the two into one
+degrade would silently convert real escalations into floors, which is precisely why Deep
+earns a typed floor rather than a blanket `try/except`. Regression-guarded on both sides
+(AC1 malformed degrades; AC3 weak-but-real does not). (4) **No orchestrator change — proven,
+not assumed.** `_locate_deep`/`_run_deep` already build `deep-degraded:{cause}` notes
+generically, so a routing regression lock (`test_locate_deep_parse_error_degrades_to_scout`)
+proves no production routing change is needed and pins AC5: `tiers_run` reflects the floor
+REACHED (`[0,1]`), NOT a Tier-2 result; the attempt-and-degrade stays visible via the stable
+`deep-degraded:parse-error` note + the first-class `deep_degrade_rate`, never via `tiers_run`,
+so a floored run cannot read as "Deep never ran." (5) **Degrade made visible, not just safe —
+the third time a graceful floor could hide a defect.** Report `SCHEMA_VERSION 0012/1 → 0013/1`
+adds additive last-with-default twins `deep_degrade_count` / `deep_degrade_rate`
+(null-with-zero-count on a zero denominator, never a false `0.0`) in the one
+`_AGGREGATE_DEFAULTS` source, so both old- and new-shape blocks pass the single loud
+validator. `runner.py` adds `_is_deep_degraded` (sharing one `_has_degrade_note` predicate
+with `_is_scout_degraded`), and `degraded_dominated` now keys off the **UNION** of scout+deep
+per-case degrades — a case counted **once** even when both tiers floor (a sum would
+double-count) — while the per-tier rates stay separate for attribution (AC11). The single
+producer `aggregate_outcomes` means the swebench sibling driver populates the fields with NO
+`swebench_eval.py` change, proven by a sibling lock test (the recurring missed-consumer lesson).
+**Why:** This is the **second** typed-degrade floor, so the visibility rule is promoted from a
+per-spec fix to a **standing project convention** — every typed-degrade floor surfaces its
+rate in aggregate or it goes dark exactly the way Scout's `format_citations` crash did.
+Baking it only into this report schema would leave the *next* floor free to go dark, so the
+convention is itself a close deliverable (AC12, P13).
+**Consequence — the sweep is crash-unblocked; the rule is now a convention, not a one-off.**
+Shipped TDD-complete: **699 unit pass**, ruff clean; the AC8 integration
+`test_deep_auto_parse_error_degrades_not_crash` (deterministic injected fault, skip-not-fail)
+drives the real `RlmBackend` → `DeepEngine` → `locate(mode=auto)` to completion with the
+degrade recorded, so the spec-0012 AC5 `mode=fast` workaround can revert to `mode=auto`. One
+new stable cause id joins the taxonomy (`deep-degraded:parse-error`); report schema is now
+`0013/1`. **Deviation:** a pre-existing `test_report_schema_version_is_0012` exact pin was
+converted to a `bumped_past_0012` ratchet (the codebase's established pattern), with the new
+exact pin `test_report_schema_version_is_0013`. **Blast radius by category:** cause taxonomy
+(`deep/errors.py`) → RLM seam (`deep/rlm.py`) → orchestrator routing (unchanged, lock only) →
+report schema (`eval/report.py`) → runner aggregation (`eval/runner.py`) → swebench sibling
+(unchanged, lock only). Open follow-ups carried forward: **`ContextWindowExceededError`** —
+the only sibling dspy exception, a *distinct* failure (prompt exceeds the context window) that
+still escapes the RLM and would crash a run, a candidate for its own future
+`deep-degraded:context-window` cause (folding it into `parse-error` would break the
+narrow-catch invariant); the **full 12-repo OQ2 sweep** this now unblocks (crash-free) but
+does not run; the **gate false-escalation of a correct Scout answer** (requests-1766); the
+**Q8 `scout_model` default flip** (deferred, variance-gated); and, still open from Wave 2,
+**Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-06-30 — FastContext dependency source swapped to the DCSTOLF fork (identical rev, no behavior change)
 
 **Spec:** specs/0013-fastcontext/

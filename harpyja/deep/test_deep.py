@@ -11,6 +11,7 @@ from harpyja.deep.backend import DeepBackend
 from harpyja.deep.budget import DeepBudget, DeepBudgetExceeded
 from harpyja.deep.errors import (
     BACKEND_ERROR,
+    PARSE_ERROR,
     RLM_DOWN,
     SANDBOX_ABSENT,
     DeepUnavailable,
@@ -39,6 +40,17 @@ def test_deep_unavailable_preserves_cause():
             raise DeepUnavailable(BACKEND_ERROR) from inner
     except DeepUnavailable as err:
         assert isinstance(err.__cause__, OSError)
+
+
+# --- spec 0014 (P1): parse-error is a distinct, stable, sibling cause ---
+
+
+def test_deep_unavailable_parse_error_cause_is_stable():
+    # A named, narrow-caught seam earns its OWN cause; it is a sibling of
+    # backend-error, never a replacement for it.
+    assert PARSE_ERROR == "parse-error"
+    assert DeepUnavailable(PARSE_ERROR).cause == "parse-error"
+    assert len({SANDBOX_ABSENT, RLM_DOWN, BACKEND_ERROR, PARSE_ERROR}) == 4
 
 
 # --- task 07: DeepBackend Protocol ---
@@ -328,3 +340,95 @@ def test_rlm_backend_fresh_instance_per_request():
     backend.run("a", [], {})
     backend.run("b", [], {})
     assert len(instances) == 2  # not thread-safe → fresh RLM per request
+
+
+# --- spec 0014 (P3): AdapterParseError → DeepUnavailable(parse-error) seam ---
+
+
+class _RaisingRlm:
+    """An rlm whose forward call raises — models a dspy adapter parse failure
+    (or, for the narrow-catch guard, an unrelated exception)."""
+
+    def __init__(self, settings, tools, exc):
+        self._exc = exc
+
+    def __call__(self, query):
+        raise self._exc
+
+
+def _adapter_parse_error():
+    # AdapterParseError.__init__ needs a real Signature + heavy args; bypass it.
+    from dspy.utils.exceptions import AdapterParseError
+
+    return AdapterParseError.__new__(AdapterParseError)
+
+
+def test_rlm_backend_adapter_parse_error_maps_to_deep_unavailable():
+    from harpyja.deep.rlm import RlmBackend
+
+    err = _adapter_parse_error()
+
+    def factory(settings, tools):
+        return _RaisingRlm(settings, tools, err)
+
+    backend = RlmBackend(Settings(), rlm_factory=factory, assert_local=lambda *a, **k: None)
+    with pytest.raises(DeepUnavailable) as excinfo:
+        backend.run("q", [], {})
+    # Raw AdapterParseError does NOT escape (no crash); it maps to the typed cause.
+    assert excinfo.value.cause == PARSE_ERROR
+
+
+def test_rlm_backend_parse_error_preserves_cause():
+    from harpyja.deep.rlm import RlmBackend
+
+    err = _adapter_parse_error()
+
+    def factory(settings, tools):
+        return _RaisingRlm(settings, tools, err)
+
+    backend = RlmBackend(Settings(), rlm_factory=factory, assert_local=lambda *a, **k: None)
+    try:
+        backend.run("q", [], {})
+    except DeepUnavailable as de:
+        assert de.__cause__ is err  # raise ... from err preserves the foreign cause
+
+
+def test_rlm_backend_unrelated_exception_not_swallowed():
+    from harpyja.deep.rlm import RlmBackend
+
+    def factory(settings, tools):
+        return _RaisingRlm(settings, tools, RuntimeError("bad config"))
+
+    backend = RlmBackend(Settings(), rlm_factory=factory, assert_local=lambda *a, **k: None)
+    # Narrow catch: an unrelated exception is NOT laundered into parse-error.
+    with pytest.raises(RuntimeError):
+        backend.run("q", [], {})
+
+
+def test_rlm_backend_weak_answer_stays_result():
+    from harpyja.deep.rlm import RlmBackend
+
+    def factory(settings, tools):
+        return _FakeRlm(settings, tools, answer="no citations here")  # well-formed, weak
+
+    backend = RlmBackend(Settings(), rlm_factory=factory, assert_local=lambda *a, **k: None)
+    out = backend.run("q", [], {})
+    # A successful run with weak/empty citations is an honest Tier-2 result, NOT a degrade.
+    assert out == []
+
+
+def test_rlm_backend_module_has_no_toplevel_dspy_import():
+    import ast
+    import pathlib
+
+    import harpyja.deep.rlm as rlm_mod
+
+    src = pathlib.Path(rlm_mod.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    # Only MODULE-LEVEL imports matter: a lazy `from dspy...` inside a function
+    # body is the sanctioned pattern (and is what the seam uses).
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            assert all(not n.name.startswith("dspy") for n in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            assert not (node.module or "").startswith("dspy")

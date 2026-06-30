@@ -61,8 +61,21 @@ class CaseRun:
     scout_tally: object | None = None
 
 
+def _has_degrade_note(notes: str | None, prefix: str) -> bool:
+    # One membership check so the per-tier degrade predicates cannot drift on how a
+    # `<tier>-degraded:<cause>` note is detected (spec 0014).
+    return bool(notes) and prefix in notes
+
+
 def _is_scout_degraded(notes: str | None) -> bool:
-    return bool(notes) and "scout-degraded" in notes
+    return _has_degrade_note(notes, "scout-degraded")
+
+
+def _is_deep_degraded(notes: str | None) -> bool:
+    # Spec 0014: the Deep typed-degrade rides the same `result.notes` channel as
+    # Scout (`deep-degraded:<cause>`), so it is observed the same way — no extra
+    # side-channel plumbing.
+    return _has_degrade_note(notes, "deep-degraded")
 
 
 # Spec 0011 — stable reliability-note identifiers (composable; machine-readable).
@@ -236,14 +249,30 @@ def aggregate_outcomes(
         key = str(r.terminal_tier)
         per_tier_latency[key] = per_tier_latency.get(key, 0.0) + r.latency_ms
 
-    # Spec 0011 — scout-degrade visibility. degrade_rate is null-with-count on a
-    # zero denominator (never a false 0.0); degraded_dominated flags a run whose
-    # majority degraded (> threshold) so downstream metrics are unreliable.
+    # Spec 0011/0014 — degrade visibility, per tier. Each rate is null-with-count on
+    # a zero denominator (never a false 0.0). degraded_dominated flags a run whose
+    # majority degraded (> threshold) so downstream metrics are unreliable; spec 0014
+    # makes it key off the UNION of scout+deep per-case degrades (a case counts ONCE
+    # even when both tiers floor — never a double-count), while the per-tier counts
+    # stay separate for attribution.
     attempted = len(runs)
-    degrade_count = sum(1 for r in runs if _is_scout_degraded(r.event.get("notes")))
+    per_case = [
+        (
+            _is_scout_degraded(r.event.get("notes")),
+            _is_deep_degraded(r.event.get("notes")),
+        )
+        for r in runs
+    ]
+    degrade_count = sum(1 for scout_d, _ in per_case if scout_d)
     degrade_rate = (degrade_count / attempted) if attempted else None
+    deep_degrade_count = sum(1 for _, deep_d in per_case if deep_d)
+    deep_degrade_rate = (deep_degrade_count / attempted) if attempted else None
+    # A case counts ONCE for dominance even when both tiers floor (union, not sum).
+    combined_degrade_count = sum(1 for scout_d, deep_d in per_case if scout_d or deep_d)
+    combined_degrade_rate = (combined_degrade_count / attempted) if attempted else None
     degraded_dominated = (
-        degrade_rate is not None and degrade_rate > eval_config.degraded_dominated_threshold
+        combined_degrade_rate is not None
+        and combined_degrade_rate > eval_config.degraded_dominated_threshold
     )
     spanned = sum(getattr(r.scout_tally, "spanned", 0) for r in runs if r.scout_tally)
     filelevel = sum(getattr(r.scout_tally, "filelevel", 0) for r in runs if r.scout_tally)
@@ -271,6 +300,8 @@ def aggregate_outcomes(
         "per_tier_model_calls": (dict(model_calls) if model_calls is not None else None),
         "scout_degrade_count": degrade_count,
         "scout_degrade_rate": degrade_rate,
+        "deep_degrade_count": deep_degrade_count,
+        "deep_degrade_rate": deep_degrade_rate,
         "degraded_dominated": degraded_dominated,
         "fc_citation_spanned_count": spanned,
         "fc_citation_filelevel_count": filelevel,

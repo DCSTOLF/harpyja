@@ -116,7 +116,9 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    endpoint because the RLM owns its own LM, no top-level import) + `wiring.build_deep_engine`
    (the `deep_factory`). Deep is **not cached** (model-backed/non-deterministic, no
    engine-identity slot, like Scout). Degradable failures carry a stable
-   `DeepUnavailable.cause` (`sandbox-absent`/`rlm-down`/`backend-error`); a budget
+   `DeepUnavailable.cause` (`sandbox-absent`/`rlm-down`/`backend-error`/`parse-error` —
+   the last a named, narrow-caught dspy `AdapterParseError` at the `rlm(query=...)` seam,
+   a sibling of `backend-error` not a replacement, spec 0014); a budget
    truncation is a non-degrade `deep-truncated:<bound>` note; `RipgrepMissingError`
    (seed) / `AirGapError` propagate as the floor.
 7. `harpyja/gateway/` — Model Gateway over the local OpenAI-compatible endpoint. Only
@@ -176,7 +178,9 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `swebench_eval.py`. **As of spec 0012** the schema is `0012/1` (two additive
    last-with-default fields `fc_citation_recovered_{spanned,filelevel}_count` in the one
    `_AGGREGATE_DEFAULTS` source; legacy `0011/1` blocks still validate), summed in **both**
-   `runner.py::aggregate_outcomes` and the `swebench_eval.py` per-case driver.
+   `runner.py::aggregate_outcomes` and the `swebench_eval.py` per-case driver. **As of spec
+   0014** the schema is `0013/1` (additive `deep_degrade_{count,rate}` twins; `degraded_dominated`
+   now keys off the scout+deep per-case **union**, counted once per case).
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from harpyja.config.settings import Settings
+from harpyja.deep.errors import PARSE_ERROR, DeepUnavailable
 from harpyja.gateway.gateway import assert_local as _assert_local
 from harpyja.server.types import CodeSpan
 
@@ -30,6 +31,24 @@ AssertLocal = Callable[..., None]
 
 # Lenient `path:line` / `path:start-end` extraction from the model's free text.
 _CITATION = re.compile(r"([\w./\-]+\.[A-Za-z0-9_]+):(\d+)(?:-(\d+))?")
+
+
+def _adapter_parse_error_types() -> tuple[type, ...]:
+    """The dspy adapter parse-failure class, pinned against source (spec 0014).
+
+    `dspy.utils.exceptions.AdapterParseError` is the single class every dspy
+    adapter raises when it cannot parse the LM response into the signature's
+    output fields (`JSONAdapter` even wraps a raw `json.JSONDecodeError` into it),
+    so catching it alone is neither over-narrow nor over-broad. Resolved lazily
+    so the module keeps its no-top-level-`import dspy` rule: when dspy is absent
+    this returns the empty tuple, and `except ()` is valid Python that catches
+    nothing — the catch never widens into a bare `except`.
+    """
+    try:
+        from dspy.utils.exceptions import AdapterParseError
+    except Exception:
+        return ()
+    return (AdapterParseError,)
 
 
 def parse_citations(text: str) -> list[CodeSpan]:
@@ -91,7 +110,15 @@ class RlmBackend:
         self._assert_local(self._settings.lm_api_base, allow_remote=self._settings.allow_remote)
 
         rlm = self._rlm_factory(self._settings, tools)  # fresh instance per request
-        prediction = rlm(query=_compose_prompt(query, seed))
+        # Narrow seam (spec 0014): a dspy adapter parse failure is a typed infra
+        # failure, not a crash — map it to the existing DeepUnavailable degrade
+        # path so the orchestrator falls back to Scout best-effort. Wrap ONLY the
+        # forward call: `_assert_local` (AirGapError floor) and `_rlm_factory`
+        # (config faults) must propagate, and `parse_citations` never raises.
+        try:
+            prediction = rlm(query=_compose_prompt(query, seed))
+        except _adapter_parse_error_types() as err:
+            raise DeepUnavailable(PARSE_ERROR) from err
         return parse_citations(getattr(prediction, "answer", "") or "")
 
 

@@ -19,6 +19,11 @@ from __future__ import annotations
 SANDBOX_ABSENT = "sandbox-absent"
 RLM_DOWN = "rlm-down"
 BACKEND_ERROR = "backend-error"
+# A *named, narrow-caught* parse failure at the dspy adapter seam earns its own
+# cause (spec 0014): we can name and pin this exception class against source, so
+# it is distinct from the BACKEND_ERROR catch-all, which still absorbs every
+# *unforeseen* backend exception. Sibling, not a replacement.
+PARSE_ERROR = "parse-error"
 
 
 class DeepUnavailable(RuntimeError):

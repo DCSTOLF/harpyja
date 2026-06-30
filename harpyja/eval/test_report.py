@@ -199,6 +199,37 @@ def test_report_multi_repo_shape_validates():
     assert rep["cases"][0]["production_gate_ran"] is True
 
 
+# --- spec 0014: Deep-degrade visibility — schema 0012/1 → 0013/1 (P6) ---------
+
+
+def test_report_schema_version_is_0013():
+    assert SCHEMA_VERSION == "0013/1"
+
+
+def test_deep_degrade_fields_present_with_defaults():
+    # A legacy aggregate (no deep fields) gets the "not computed" defaults injected,
+    # mirroring the scout twins: count 0, rate null — never an omitted key, never 0.0.
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    validate_report(rep)  # must not raise — deep fields are in the pinned schema
+    assert rep["aggregate"]["deep_degrade_count"] == 0
+    assert rep["aggregate"]["deep_degrade_rate"] is None
+
+
+def test_0012_and_0013_aggregate_shapes_both_validate():
+    # Old-shape block omitting the deep fields AND a fully-populated new-shape block
+    # both pass the SINGLE loud validator (centralized _AGGREGATE_DEFAULTS).
+    legacy = build_report(_run_metadata(), [_case()], _aggregate())
+    validate_report(legacy)
+    populated = build_report(
+        _run_metadata(),
+        [_case()],
+        _aggregate(deep_degrade_count=2, deep_degrade_rate=0.5),
+    )
+    validate_report(populated)
+    assert populated["aggregate"]["deep_degrade_count"] == 2
+    assert populated["aggregate"]["deep_degrade_rate"] == 0.5
+
+
 def test_validate_report_rejects_missing_new_metadata_field():
     rep = build_report(_run_metadata(**_NEW_RUN_METADATA), [_case()], _aggregate())
     del rep["run_metadata"]["protocol"]
@@ -231,8 +262,8 @@ def test_validate_report_rejects_aggregate_missing_agreement_rate():
 
 
 def test_report_schema_version_bumped_past_0011():
-    # spec 0011 set 0011/1; spec 0012 bumps additively past it (asserted == 0012/1
-    # in test_report_schema_version_is_0012).
+    # spec 0011 set 0011/1; later specs bump additively past it (current exact pin
+    # is asserted in test_report_schema_version_is_0013).
     assert SCHEMA_VERSION != "0011/1"
 
 
@@ -279,9 +310,10 @@ def test_pre_0011_and_0011_shapes_both_validate():
 # --- Spec 0012 (path-prefix): recovered_* shape-split counters ---
 
 
-def test_report_schema_version_is_0012():
-    # AC4: additive bump for the recovered_* fields.
-    assert SCHEMA_VERSION == "0012/1"
+def test_report_schema_version_bumped_past_0012():
+    # spec 0012 set 0012/1; spec 0014 bumps additively past it (asserted == 0013/1
+    # in test_report_schema_version_is_0013).
+    assert SCHEMA_VERSION != "0012/1"
 
 
 def test_recovered_fields_present_with_defaults():

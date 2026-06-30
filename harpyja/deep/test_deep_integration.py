@@ -184,3 +184,80 @@ def test_deep_end_to_end_live(tmp_path):
     # `source_tier=2` is stamped at the orchestrator boundary (covered by AC1).
     assert isinstance(citations, list)
     assert all(isinstance(c, CodeSpan) for c in citations)
+
+
+# --- spec 0014 (P11): a deterministic AdapterParseError fault degrades, never crashes ---
+
+
+@pytest.mark.integration
+def test_deep_auto_parse_error_degrades_not_crash(tmp_path):
+    """AC8: a run whose Deep driver raises the pinned `AdapterParseError` via a
+    DETERMINISTIC injected fault (not a nondeterministic model crash) completes in
+    `mode=auto` — no crash — with the Deep degrade recorded. Drives the REAL
+    `RlmBackend` → real `DeepEngine` → real orchestrator `locate`, reproducing the
+    spec-0012 AC5 crash and proving the `mode=fast` workaround can revert to
+    `mode=auto`. (A real-weights variant would point the gateway at the local
+    Ollama models `hf.co/dstolf/FastContext-1.0-4B-{SFT,RL}-Q8_0-GGUF:latest`;
+    the fault here is injected so the assertion is deterministic.)"""
+    try:
+        from dspy.utils.exceptions import AdapterParseError
+    except Exception:  # pragma: no cover - skip-not-fail when dspy is absent
+        pytest.skip(_NEEDS_STACK)
+
+    from harpyja.deep.engine import DeepEngine
+    from harpyja.deep.rlm import RlmBackend
+    from harpyja.orchestrator.gate import GateOutcome
+    from harpyja.orchestrator.locate import locate
+    from harpyja.server.types import CodeSpan, LocateRequest
+
+    (tmp_path / "a.py").write_text("needle here\n", encoding="utf-8")
+
+    class _RaisingRlm:
+        def __call__(self, query):
+            # A real AdapterParseError instance (constructor bypassed — it needs a
+            # live Signature), raised at the exact `rlm(query=...)` seam.
+            raise AdapterParseError.__new__(AdapterParseError)
+
+    backend = RlmBackend(
+        Settings(),
+        rlm_factory=lambda settings, tools: _RaisingRlm(),
+        assert_local=lambda *a, **k: None,
+    )
+    deep_engine = DeepEngine(
+        backend,
+        lambda _q: [],  # no Tier-0 seed needed for the fault path
+        DeepRunner(Settings()),
+        Settings(),
+        str(tmp_path),
+        make_tools=lambda budget: {},
+    )
+
+    class _Tier0:
+        def search(self, pattern, scope=None):
+            return []
+
+    class _Scout:
+        def search(self, query, scope=None):
+            return [CodeSpan(path="a.py", start_line=1, end_line=1)]
+
+    class _FailingGate:
+        # Tier-1 fails verification → auto escalates to Deep, where the fault fires.
+        def verify(self, query, citations, *, repo_path, settings):
+            return GateOutcome(
+                passed=False, score=0.0, scored_count=len(citations),
+                dropped_count=0, failed=False,
+            )
+
+    req = LocateRequest(
+        query="needle", repo_path=str(tmp_path), mode="auto",
+        max_results=8, language_hint=None,
+    )
+    # The run must COMPLETE (no AdapterParseError escapes) ...
+    result = locate(
+        req, Settings(),
+        engine=_Tier0(), scout_engine=_Scout(),
+        deep_engine=deep_engine, gate=_FailingGate(),
+    )
+    # ... having floored below Tier-2 with the typed parse-error degrade recorded.
+    assert 2 not in result.tiers_run
+    assert "deep-degraded:parse-error" in (result.notes or "")
