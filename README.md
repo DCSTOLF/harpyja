@@ -1,5 +1,12 @@
 # Harpyja
 
+> ## ⚠️ Experimental — not production-ready
+>
+> **This project is entirely experimental.** It is a research/work-in-progress prototype: APIs,
+> schemas, defaults, and behavior change without notice; the documented hardware footprint is **not
+> validated** (see the caveat below); and real-data evaluation is ongoing and `indicative_only`. Do not
+> depend on it for anything you can't afford to have break. Use at your own risk.
+
 **A precision code-retrieval MCP server for coding agents working in large, legacy, and air-gapped codebases.**
 
 Harpyja is a [Model Context Protocol](https://modelcontextprotocol.io) server with one job: given a
