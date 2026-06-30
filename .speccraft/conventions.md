@@ -29,6 +29,13 @@
   miss recurs once per stage left un-grepped (e.g. a primary metric oracle guarded but
   its sibling secondary oracle missed). (See spec 0011's `start_line`/`end_line`
   widening across `scout/`, `orchestrator/`, `eval/`.)
+- When an already-churned return tuple would need to grow past ~4 elements but the extra
+  payload is consumed by only **one** caller, prefer a **non-breaking out-param** (an
+  optional `*_out: list[...] | None = None` the caller passes to collect the extra) over
+  re-widening the tuple again and re-touching every unpacking site. This is a bounded,
+  **recorded** smell — not a default — justified only by avoiding a second churn of
+  callers updated in the same change. (See `harpyja/scout/normalize.py`
+  `normalize_spans_with_tally` `recovered_paths_out`, spec 0012.)
 - A routing/decision matrix is the **single source of truth**, *driven by* the routing code rather than duplicated by it. When dispatch depends on a small fixed product of dimensions, encode the full mapping in one table (e.g. `(mode × classification × index_ready) → planned ladder`) that both the executor and the tests read; the executor derives its branches **from** the table (a refactor that catches the executor re-deriving a routing rule is a real bug, not a style nit), and every row is asserted. Documented escalation/branch rules are *derived from* the table, never a second authority that can silently drift. (See `harpyja/orchestrator/matrix.py` `plan_ladder`, consulted by `_locate_auto`; AC3.)
 
 ## Config & immutable state
@@ -62,6 +69,24 @@
   backend's wire format (parse the raw text in `scout/`, never upstream and never in the
   orchestrator). (See `harpyja/scout/client.py` seam (a), `parse_final_answer`,
   spec 0011 AC1/AC8/AC20.)
+- A **recovery/repair of a malformed-but-recoverable input keeps only an existing,
+  unique, anchored target — never a guessed rewrite — and composes with, never
+  bypasses, the prior validation it sits in front of.** When a model fabricates a
+  leading root onto an otherwise-real path, recover by the **longest unique** `≥2`-segment
+  suffix that matches the indexed manifest set (segment-aligned: `p == tail` or `p` ends
+  with `"/" + tail`), guarded by (a) a specificity floor (`MIN_TAIL_SEGMENTS=2`, never a
+  bare basename), (b) **exactly-one** match at the longest length — ambiguous (>1) →
+  honest **drop**, never a silent pick and never a fall-back to a shorter, less specific
+  tail — and (c) a **manifest-keyed leading-segment anchor** (the matched *tail's head*
+  must be a known top-level manifest entry, rejecting a fabricated mid-tree suffix). The
+  recovered target re-enters the **same** downstream gates as a non-recovered one
+  (repo-confine + `is_file` + clamp) and inherits the same honesty floor
+  (`gate-skipped:no-line-range`), so a recovered keep can never read more confidently —
+  load-bearing because a wrong-but-existing un-gated keep would be strictly worse than
+  the honest drop it replaces. An **empty/absent** match set ⇒ **no recovery** (graceful
+  degrade to the prior drop); recovery only ever *adds* keeps. (See
+  `harpyja/scout/normalize.py` `_recover_suffix` / `MIN_TAIL_SEGMENTS`, spec 0012
+  AC1/AC2/AC3.)
 - A best-effort verification/scoring step **never raises and never silently passes**: it maps **any** internal failure (a judge call erroring, an un-readable input) to a typed *could-not-vouch* outcome (`GateOutcome.failed=True`, `passed=False`) and routes it exactly like a negative verdict — escalate where a further tier remains (retaining a stable diagnostic flag, e.g. `gate-scoring-failed`), else return the best-effort current-tier result tagged with that same flag. A could-not-vouch is never a hard block and never an unflagged pass. Relatedly, **derived confidence keys on the terminal tier + flags, never path tokens alone**: a result that shares its `tiers_run` shape with a higher-confidence path (e.g. an honest-empty `[0,1]` vs a verified gated-pass `[0,1]`) is given a distinguishing marker (`gate-skipped:scout-empty`) and its own confidence row, so "nothing found" can never read as high confidence (no-false-capability). (See `harpyja/orchestrator/gate.py`, the `gate-scoring-failed` / `gate-low-confidence` / `gate-skipped:scout-empty` flags, AC8/AC9.)
 - When wrapping a foreign exception, preserve the cause (`raise ... from err`).
 - No-silent-coverage lockstep: a capability's routing, its identity/cache slot, and

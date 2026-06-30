@@ -23,7 +23,7 @@ from pathlib import Path
 
 # Bumped for spec 0011 (additive scout-degrade-visibility fields; older shapes
 # still validate because build_report default-populates the new fields).
-SCHEMA_VERSION = "0011/1"
+SCHEMA_VERSION = "0012/1"
 
 # D7 — enumerated required field names (the pinned contract).
 _RUN_METADATA_FIELDS = (
@@ -98,6 +98,10 @@ _AGGREGATE_FIELDS = (
     "fc_citation_spanned_count",
     "fc_citation_filelevel_count",
     "fc_citation_dropped_count",
+    # spec 0012 — additive: path-suffix recovery counts, split by shape (a recovered
+    # file-level ref skips the gate read-back, so it is tracked apart from spanned).
+    "fc_citation_recovered_spanned_count",
+    "fc_citation_recovered_filelevel_count",
 )
 
 # Schema-stable defaults for the additive fields, injected by build_report when a
@@ -128,6 +132,9 @@ _AGGREGATE_DEFAULTS = {
     "fc_citation_spanned_count": 0,
     "fc_citation_filelevel_count": 0,
     "fc_citation_dropped_count": 0,
+    # spec 0012 — additive recovered counts (default 0 ⇒ legacy 0011 block validates).
+    "fc_citation_recovered_spanned_count": 0,
+    "fc_citation_recovered_filelevel_count": 0,
 }
 
 

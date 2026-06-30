@@ -1,0 +1,22 @@
+{
+  "baseline_ref": "specs/0012-path-prefix/baseline_q8rl_n12.json",
+  "delta_vs_baseline": {
+    "fc_dropped_count": -10,
+    "fc_filelevel_count": 0,
+    "fc_spanned_count": 1,
+    "recovered_filelevel_count": 0,
+    "recovered_spanned_count": 10,
+    "scout_empty_count": -3
+  },
+  "fc_dropped_count": 0,
+  "fc_filelevel_count": 0,
+  "fc_spanned_count": 19,
+  "gate_ran_count": 0,
+  "indicative_only": true,
+  "mode": "fast",
+  "note": "mode=fast (Scout+recovery, no Deep): recovery is Scout-side so scout_empty/fc_*/recovered_* are comparable to the auto baseline; gate_ran/escalation are auto-only. Deep skipped because on this host it OOMs co-loaded and crashes via dspy AdapterParseError (out-of-scope Deep lead). recovered_filelevel_paths empty because all 10 recoveries were SPANNED (model emitted out-of-repo paths WITH line numbers); no un-gated file-level recoveries to inspect.",
+  "recovered_filelevel_count": 0,
+  "recovered_filelevel_paths": [],
+  "recovered_spanned_count": 10,
+  "scout_empty_count": 4
+}

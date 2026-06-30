@@ -85,6 +85,21 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    reject. The per-run text-ref shape distribution rides a side-channel —
    `ScoutEngine.last_tally` (`ScoutTally{spanned, filelevel, dropped}`) — read only by the
    eval harness; the orchestrator's `list[CodeSpan]` seam is unchanged.
+   **As of spec 0012** Scout does **path-suffix recovery** before the 0011 drop: when a
+   cited path does not resolve in-repo, `normalize.py::_recover_suffix` maps it to a real
+   in-repo file by its longest **unique** `≥ MIN_TAIL_SEGMENTS (=2)`-segment suffix
+   matched (segment-aligned) against the repo's indexed **manifest file set** — guarded by
+   exactly-one-match (ambiguous → drop), the 2-segment specificity floor, and a
+   manifest-keyed leading-segment anchor (the matched tail's head must be a top-level
+   manifest entry). A recovered path **re-enters** the same repo-confine + `is_file`
+   (+ clamp) validation (recovery composes with, never bypasses, 0011's checks) and a
+   recovered file-level keep inherits the 0011 `gate-skipped:no-line-range` floor (never
+   high-confidence). Manifest absent/empty ⇒ no recovery (graceful degrade to the drop).
+   `normalize_spans_with_tally` now returns a **4-tuple**
+   `(spans, dropped, recovered_spanned, recovered_filelevel)` + a non-breaking
+   `recovered_paths_out` out-param. `build_scout_engine` loads the set via
+   `read_manifest(art_dir)` and threads it as `ScoutEngine(file_set=…)`; `ScoutTally`
+   gained `recovered_spanned` / `recovered_filelevel` / `recovered_filelevel_paths`.
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -158,7 +173,10 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    oracle now classifies a file-level citation as a **path-only** hit via `span_hit_kind`
    (`"line"`/`"file"`/`None`), guarded **before** the line arithmetic in both the primary
    and the secondary oracle; `compose_reliability_notes` is shared by `runner.py` +
-   `swebench_eval.py`.
+   `swebench_eval.py`. **As of spec 0012** the schema is `0012/1` (two additive
+   last-with-default fields `fc_citation_recovered_{spanned,filelevel}_count` in the one
+   `_AGGREGATE_DEFAULTS` source; legacy `0011/1` blocks still validate), summed in **both**
+   `runner.py::aggregate_outcomes` and the `swebench_eval.py` per-case driver.
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

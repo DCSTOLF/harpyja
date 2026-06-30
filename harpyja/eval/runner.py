@@ -248,6 +248,11 @@ def aggregate_outcomes(
     spanned = sum(getattr(r.scout_tally, "spanned", 0) for r in runs if r.scout_tally)
     filelevel = sum(getattr(r.scout_tally, "filelevel", 0) for r in runs if r.scout_tally)
     dropped = sum(getattr(r.scout_tally, "dropped", 0) for r in runs if r.scout_tally)
+    # Spec 0012 — path-suffix recovery, split by shape (file-level skips read-back).
+    rec_spanned = sum(getattr(r.scout_tally, "recovered_spanned", 0) for r in runs if r.scout_tally)
+    rec_filelevel = sum(
+        getattr(r.scout_tally, "recovered_filelevel", 0) for r in runs if r.scout_tally
+    )
 
     return {
         "span_hit_rate_primary": M.span_hit_rate_primary(outcomes),
@@ -270,6 +275,8 @@ def aggregate_outcomes(
         "fc_citation_spanned_count": spanned,
         "fc_citation_filelevel_count": filelevel,
         "fc_citation_dropped_count": dropped,
+        "fc_citation_recovered_spanned_count": rec_spanned,
+        "fc_citation_recovered_filelevel_count": rec_filelevel,
     }
 
 

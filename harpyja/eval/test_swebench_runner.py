@@ -9,6 +9,7 @@ seam (D-route), and records the production-classifier agreement. No live model.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 from harpyja.config.settings import Settings
 from harpyja.eval.config import EvalConfig
@@ -17,7 +18,21 @@ from harpyja.eval.report import validate_report
 from harpyja.eval.runner import LocateStack
 from harpyja.eval.swebench_eval import PROTOCOL, run_swebench
 from harpyja.orchestrator.gate import GateOutcome
+from harpyja.scout.engine import ScoutTally
 from harpyja.server.types import CodeSpan
+
+
+class _TallyScout:
+    """A scout that returns preset spans and exposes a fixed `last_tally`."""
+
+    def __init__(self, spans, tally):
+        self._spans = list(spans)
+        self._tally = tally
+        self.last_tally = None
+
+    def search(self, query, scope=None):
+        self.last_tally = self._tally
+        return list(self._spans)
 
 _ART = None  # tmp artifact dir so locate's manifest read returns [] (set per test)
 
@@ -127,6 +142,26 @@ def test_driver_pools_two_distinct_repo_cases_into_schema(tmp_path):
     assert factory.repos == ["/repoA", "/repoB"]  # each case used its own repo
     assert len(report["cases"]) == 2
     validate_report(report)
+
+
+def test_run_swebench_carries_recovered_counts(tmp_path):
+    # Spec 0012 AC4: the per-case swebench driver pools recovered_* through the same
+    # aggregate_outcomes, so the driver's report carries them — not only the
+    # single-repo runner.
+    _setart(tmp_path)
+    scout = _TallyScout(
+        [_span("net.py", 12, 18)],
+        ScoutTally(spanned=1, recovered_spanned=1, recovered_filelevel=2),
+    )
+    stack = replace(_stack(scout_spans=[("net.py", 12, 18)], gate_passed=True), scout_engine=scout)
+    cases = [EvalCase("p1", "q", "/r", (ExpectedSpan("net.py", 10, 20),), "point")]
+    report = run_swebench(
+        cases, _settings(), _cfg(), stack_factory=_Factory({"/r": stack}),
+        production_classifier=lambda q: "point",
+    )
+    agg = report["aggregate"]
+    assert agg["fc_citation_recovered_spanned_count"] == 1
+    assert agg["fc_citation_recovered_filelevel_count"] == 2
 
 
 def test_driver_writes_outside_every_case_repo(tmp_path):

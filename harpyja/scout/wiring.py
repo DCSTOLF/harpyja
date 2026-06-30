@@ -20,6 +20,7 @@ from harpyja.config.settings import Settings
 from harpyja.gateway.gateway import ModelGateway
 from harpyja.index.artifacts import resolve_artifact_dir
 from harpyja.index.indexer import index_repo
+from harpyja.index.manifest import read_manifest
 from harpyja.scout.client import AgentFactory, CliRunner, DefaultFastContextClient
 from harpyja.scout.engine import ScoutEngine
 from harpyja.scout.fastcontext import FastContextBackend
@@ -40,6 +41,9 @@ def build_scout_engine(
     art_dir = resolve_artifact_dir(repo_path, settings)
     index_repo(repo_path, settings, artifact_dir=art_dir)  # ensure the index exists
     records = load_symbols_or_none(art_dir, engine_identity()) or []
+    # Spec 0012: the repo-relative manifest file set, for Scout path-suffix recovery.
+    # Manifest absent/empty ⇒ empty set ⇒ recovery is skipped (graceful degrade).
+    file_set = frozenset(e.path for e in read_manifest(art_dir))
 
     ripgrep = RipgrepEngine(settings)
     symbols = SymbolEngine(records, settings)
@@ -64,4 +68,4 @@ def build_scout_engine(
         glob=None,
         grep=None,
     )
-    return ScoutEngine(backend, seed_fn, settings, repo_path)
+    return ScoutEngine(backend, seed_fn, settings, repo_path, file_set=file_set)

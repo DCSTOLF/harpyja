@@ -301,6 +301,24 @@ def test_runner_aggregates_fc_citation_shape_counts(tmp_path):
     assert agg["fc_citation_dropped_count"] == 3
 
 
+def test_runner_aggregates_recovered_counts(tmp_path):
+    # Spec 0012 AC4: the per-case ScoutTally recovered_* counts are summed into the
+    # report's fc_citation_recovered_* aggregate fields.
+    art = tmp_path / "art"
+    art.mkdir()
+    scout = _TallyScout(
+        [_span("a.py", 1, 2)],
+        ScoutTally(spanned=1, recovered_spanned=2, recovered_filelevel=3),
+    )
+    stack = _degrade_stack(scout, art)
+    rep = run_dataset(
+        [_point()], Settings(), EvalConfig(), repo_path=str(tmp_path / "repo"), stack=stack
+    )
+    agg = rep["aggregate"]
+    assert agg["fc_citation_recovered_spanned_count"] == 2
+    assert agg["fc_citation_recovered_filelevel_count"] == 3
+
+
 def test_runner_serializes_file_level_citation_lines_as_null(tmp_path):
     # AC19: a file-level cited span serializes start/end as JSON null and the
     # assembled report passes the one loud validator.

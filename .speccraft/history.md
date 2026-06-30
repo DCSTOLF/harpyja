@@ -2,6 +2,92 @@
 
 Append-only. Newest first.
 
+## 2026-06-29 — Scout path-suffix recovery shipped — rescue an out-of-repo hallucinated citation by its unique, manifest-keyed in-repo suffix, composing with (never bypassing) the 0011 drop + honesty floor
+
+**Spec:** specs/0012-path-prefix/
+**Decision:** Close the remaining `scout-empty` tail the spec-0010/0011 Q8
+re-measurement exposed — **7/12** cases died not because the model found nothing but
+because it emitted **out-of-repo absolute paths** fabricated from the repo slug (e.g.
+`/pallets/flask/src/flask/blueprints.py`), which spec 0011 correctly **drops** as
+out-of-repo (10 dropped in the N=12 auto run) — with a **deterministic,
+model-independent** recovery: map such a citation to a real in-repo file by its longest
+**unique, specific** path suffix against the repo's own indexed manifest set, only ever
+keeping a path that actually exists. The **`scout_model` default was NOT flipped** (a
+separate, deferred follow-up). Four durable choices were pinned. (1) **Recover only to an
+existing, unique, manifest-keyed path — never a guess.** `normalize.py::_recover_suffix`
+tries `k` from the cited path's full length down to `MIN_TAIL_SEGMENTS=2`, matching the
+last `k` segments segment-aligned against the manifest `file_set` (`p == tail` or `p`
+ends with `"/" + tail`); it keeps a recovery **only** on **exactly one** match at the
+longest such `k`. Three guards against wrong-but-existing: ambiguous (>1 match) → **drop**
+(never a silent pick, never a fall-back to a shorter, less specific tail); the
+`MIN_TAIL_SEGMENTS=2` specificity floor (a bare basename like `__init__.py` is never
+recovered); and a **manifest-keyed leading-segment guard** — the matched *tail's head*
+must be a known top-level manifest entry, so a fabricated mid-tree suffix is rejected
+(`src/flask/blueprints.py` kept, `flask/blueprints.py` whose head `flask` is not
+top-level dropped). The worked counter-case proves the floor pays its way: a cite of
+`/pallets/flask/src/__init__.py` has suffix `src/__init__.py`, which does **not** exist
+in flask (the real file is `src/flask/__init__.py`), so recovery correctly **fails**.
+(2) **Recovery composes with, never bypasses, 0011's validation.** A recovered path
+re-enters the same repo-confine + `is_file` (+ line-range clamp for spanned) gates
+before it is kept; the match-set is **manifest-relative** so match and re-validation
+cannot disagree on gitignored/derived files; and `file_set` **absent/empty ⇒ no
+recovery** — every out-of-repo ref falls back to the spec-0011 drop, so recovery only
+ever *adds* keeps and never changes the no-file-set behavior (graceful degrade when the
+index is not ready). (3) **The honesty floor is load-bearing and inherited, not
+re-asserted.** A recovered **file-level** citation stays `is_file_level` (`None` lines,
+no fabricated range), so it inherits spec 0011's `gate-skipped:no-line-range` floor and
+**never** reads as a verified / high-confidence pass — a recovered keep reads no more
+confidently than a non-recovered one. This guard matters precisely because a file-level
+citation skips read-back: a wrong-but-existing file-level recovery would propagate
+**un-verified**, strictly worse than the honest drop it replaces. Proven end-to-end in
+`orchestrator/test_locate.py` (gate path) + `scout/test_scout_normalize.py` (no
+fabricated range). (4) **The producer→sink blast radius was closed by category in one
+change**, per the spec-0011 grep-the-category discipline: `normalize_spans_with_tally`
+return widened **2-tuple → 4-tuple** `(spans, dropped, recovered_spanned,
+recovered_filelevel)` plus a non-breaking `recovered_paths_out` out-param carrying the
+recovered **file-level** paths (chosen deliberately over a 5-tuple to avoid re-churning
+the just-updated 4-tuple callers — a mild, recorded out-param smell); `ScoutTally` gained
+`recovered_spanned` / `recovered_filelevel` / `recovered_filelevel_paths` on the
+unchanged `last_tally` side-channel; `ScoutEngine(file_set=…)` threads the set;
+`build_scout_engine` loads it via `read_manifest(art_dir)`; report `SCHEMA_VERSION 0011/1
+→ 0012/1` with two additive last-with-default fields
+`fc_citation_recovered_{spanned,filelevel}_count` in the one `_AGGREGATE_DEFAULTS`
+source (both shapes validate); and **BOTH** `eval/runner.py` **and** `eval/swebench_eval.py`
+aggregate the counts (the sibling-driver enumeration a reviewer flagged — a count tracked
+in the single-repo runner but not the per-case driver is the same blast-radius miss class).
+**Why:** Spec 0011 made Scout robust enough to *answer* on real queries, but a Q8 model
+that knows the file yet prefixes a hallucinated root still degraded to Tier-0 under the
+honest 0011 drop. The fix is deliberately deterministic and model-independent: it does
+not change which Scout model ships, it makes whichever model ships pay off by salvaging a
+citation whose only defect is a fabricated prefix — but **only** when the salvage resolves
+to a real, unique, anchored file, because a plausible-but-wrong un-gated file-level keep
+would be worse than the drop. The recovery and the future model swap are decoupled on
+purpose: the swap is a variance-gated default flip this spec explicitly defers.
+**Consequence — the `scout-empty` tail shrinks on real data; the model flip is still a
+follow-up.** Shipped TDD-complete: **678 unit pass** (+22 over the 0011 baseline of 656),
+ruff clean; **integration 5 passed / 1 skipped** (the AC5 operator test, env-gated, runs
+`auto`). **AC5 LIVE** (committed `run_q8rl_recovery_n12.json`, `mode=fast`, Q8
+fastcontext-4b-rl, recovery ON vs the committed `baseline_q8rl_n12.json`): **scout_empty
+7 → 4 (3 of 7 dead cases RESCUED)**, **dropped 10 → 0**, **recovered_spanned = 10**,
+**recovered_filelevel = 0** — every recovery was **SPANNED** (the model emitted the
+out-of-repo paths *with* line numbers), so `recovered_filelevel_paths` is honestly empty
+and the riskiest un-gated file-level recovery category did not occur in this run; `N=12 <
+n_floor` ⇒ self-flagged `indicative_only`, an honest recorded delta with no
+strict-inequality gate (no production default flipped). **Deviation:** the AC5 run was
+`mode=fast` not `auto` — on the dev host (16 GB) `auto` OOMs (jetsam) co-loading the 5 GB
+Q8 Scout + Deep + Deno/Pyodide **and** Deep crashes via a dspy `AdapterParseError` on the
+qwen model's malformed JSON (sphinx-9698); recovery is Scout-side so `fast` measures it in
+full and only the auto-only gate/escalation counts are excluded from the delta (the
+committed integration test still runs `auto`). Open follow-ups carried forward: the **Q8
+`scout_model` default flip** (deferred; rl favored 5/12 vs 2/12 gate-fire though sft edges
+accuracy 0.25 vs 0.167 — must apply the variance-gated recommend→flip discipline + a
+missing-model degrade story, typed `scout-degraded` → Tier-0 floor); the **gate
+false-escalation of a correct Scout answer** (requests-1766 — a gate-quality lead); the
+**Deep `AdapterParseError` robustness gap** (Deep should map a malformed dspy/model
+response to a typed `DeepUnavailable` degrade, not crash); two **upstream FastContext bug
+reports** drafted this session; and, still open from Wave 2, **Wave-2.1 substring/fuzzy
+matching**.
+
 ## 2026-06-28 — Scout citation-shape robustness (seam (a), `citation=False`) + harness degrade visibility shipped — line-less `CodeSpan`, the corrected fix locus, safe + observable degradation
 
 **Spec:** specs/0011-citation-shape/

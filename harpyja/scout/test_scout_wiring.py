@@ -31,3 +31,31 @@ def test_build_scout_engine_wires_default_client(tmp_path):
     seeded = engine._seed_fn("handler")
     assert isinstance(seeded, list)
     assert any(s.path.endswith("auth.py") for s in seeded)
+
+
+# --- Spec 0012: wiring loads the manifest file set for suffix recovery ---
+
+
+def test_build_scout_engine_threads_manifest_file_set(tmp_path):
+    # AC4: build reads the manifest the indexer wrote and hands the repo-relative
+    # file set to the engine for path-suffix recovery.
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    from harpyja.scout.wiring import build_scout_engine
+
+    engine = build_scout_engine(
+        Settings(), str(tmp_path), agent_factory=lambda **kw: None
+    )
+    assert engine._file_set is not None and len(engine._file_set) >= 1
+    assert "auth.py" in engine._file_set
+
+
+def test_build_scout_engine_empty_file_set_when_manifest_absent(tmp_path, monkeypatch):
+    # AC2/AC4 degrade: no manifest entries -> empty file set -> no recovery.
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    import harpyja.scout.wiring as wiring
+
+    monkeypatch.setattr(wiring, "read_manifest", lambda _art: [])
+    engine = wiring.build_scout_engine(
+        Settings(), str(tmp_path), agent_factory=lambda **kw: None
+    )
+    assert engine._file_set == frozenset()

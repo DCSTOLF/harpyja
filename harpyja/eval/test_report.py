@@ -230,9 +230,10 @@ def test_validate_report_rejects_aggregate_missing_agreement_rate():
 # --- Spec 0011 (citation-shape): degrade-visibility fields + null cited lines ---
 
 
-def test_report_schema_version_is_0011():
-    # AC16: additive bump for the degrade-visibility fields.
-    assert SCHEMA_VERSION == "0011/1"
+def test_report_schema_version_bumped_past_0011():
+    # spec 0011 set 0011/1; spec 0012 bumps additively past it (asserted == 0012/1
+    # in test_report_schema_version_is_0012).
+    assert SCHEMA_VERSION != "0011/1"
 
 
 def test_new_degrade_fields_present_with_defaults():
@@ -273,6 +274,44 @@ def test_pre_0011_and_0011_shapes_both_validate():
     )
     validate_report(minimal)
     validate_report(full)
+
+
+# --- Spec 0012 (path-prefix): recovered_* shape-split counters ---
+
+
+def test_report_schema_version_is_0012():
+    # AC4: additive bump for the recovered_* fields.
+    assert SCHEMA_VERSION == "0012/1"
+
+
+def test_recovered_fields_present_with_defaults():
+    # AC4: the two recovered counts appear via the centralized defaults even when a
+    # block omits them, and the report validates.
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    agg = rep["aggregate"]
+    for f in ("fc_citation_recovered_spanned_count", "fc_citation_recovered_filelevel_count"):
+        assert f in agg and agg[f] == 0, f
+    validate_report(rep)  # no raise
+
+
+def test_0011_and_0012_aggregate_shapes_both_validate():
+    # AC4: a legacy 0011-shaped aggregate (recovered fields absent → defaulted) AND a
+    # fully populated 0012 block both pass the one loud validator.
+    legacy = build_report(_run_metadata(), [_case()], _aggregate())
+    full = build_report(
+        _run_metadata(degraded_dominated_threshold=0.5),
+        [_case()],
+        _aggregate(
+            fc_citation_spanned_count=4,
+            fc_citation_filelevel_count=2,
+            fc_citation_dropped_count=1,
+            fc_citation_recovered_spanned_count=2,
+            fc_citation_recovered_filelevel_count=3,
+        ),
+    )
+    validate_report(legacy)
+    validate_report(full)
+    assert full["aggregate"]["fc_citation_recovered_filelevel_count"] == 3
 
 
 def test_validate_report_tolerates_null_cited_lines():

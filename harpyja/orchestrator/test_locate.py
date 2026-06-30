@@ -988,6 +988,40 @@ def test_locate_auto_not_verifiable_carries_marker_without_deep(tmp_path):
     assert result.citations and result.citations[0].is_file_level
 
 
+def test_locate_auto_recovered_filelevel_inherits_no_line_range_floor(tmp_path):
+    # Spec 0012 AC3(f): a recovered file-level Scout citation — the model emitted an
+    # out-of-repo path that suffix-recovery rewrote to a real in-repo file, with NO
+    # line range — inherits the spec-0011 no-line-range floor: gate read-back is
+    # skipped and the result is NEVER high confidence. Recovery cannot smuggle in a
+    # verified/high-confidence pass. Driven through a real ScoutEngine so the
+    # recovery actually fires (not a hand-built file-level span).
+    from harpyja.scout.engine import ScoutEngine
+
+    _write(tmp_path, "src/flask/blueprints.py", "needle here\n")
+
+    class _Backend:
+        def run(self, query, hints):
+            return [CodeSpan("/pallets/flask/src/flask/blueprints.py", None, None)]
+
+    scout = ScoutEngine(
+        _Backend(), lambda q: [], Settings(), str(tmp_path),
+        file_set=frozenset({"src/flask/blueprints.py"}),
+    )
+    result = locate(
+        _req(tmp_path, query="needle"),
+        Settings(),
+        engine=FakeEngine([]),
+        scout_engine=scout,
+        deep_engine=None,
+        gate=_gate(0.9),  # would pass a lined span; a recovered file-level one is skipped
+    )
+    assert scout.last_tally.recovered_filelevel == 1  # recovery actually fired
+    assert result.citations and result.citations[0].path == "src/flask/blueprints.py"
+    assert result.citations[0].is_file_level
+    assert GATE_SKIPPED_NO_LINE_RANGE in (result.notes or "")
+    assert result.confidence != "high"
+
+
 def test_no_line_range_marker_distinct_from_other_gate_flags():
     # AC13: the marker is a distinct stable id — it never collapses into the
     # low-confidence / scoring-failed / scout-empty flags.

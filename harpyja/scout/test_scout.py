@@ -155,3 +155,43 @@ def test_scout_engine_exposes_fc_citation_tally(tmp_path):
     assert all(isinstance(c, CodeSpan) for c in out)  # seam unchanged
     tally = engine.last_tally
     assert (tally.spanned, tally.filelevel, tally.dropped) == (1, 2, 1)
+
+
+# --- Spec 0012: suffix recovery threaded through the engine + tally ---
+
+
+def _flask_repo(tmp_path):
+    (tmp_path / "src" / "flask").mkdir(parents=True)
+    (tmp_path / "src" / "flask" / "blueprints.py").write_text(
+        "\n".join(f"line {i}" for i in range(1, 30)) + "\n", encoding="utf-8"
+    )
+    return tmp_path, frozenset({"src/flask/blueprints.py"})
+
+
+def test_scout_tally_carries_recovered_counts(tmp_path):
+    # AC4: an out-of-repo cite whose suffix recovers is kept and counted in the
+    # recovered_* tally split by shape (file-level here).
+    repo, fs = _flask_repo(tmp_path)
+    backend = _RecordingBackend(
+        [CodeSpan("/pallets/flask/src/flask/blueprints.py", None, None)]
+    )
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(repo), file_set=fs)
+    out = engine.search("q")
+    assert [c.path for c in out] == ["src/flask/blueprints.py"]
+    t = engine.last_tally
+    assert (t.recovered_filelevel, t.recovered_spanned, t.dropped) == (1, 0, 0)
+    # AC5 support: the engine tally also carries the recovered file-level PATHS.
+    assert t.recovered_filelevel_paths == ("src/flask/blueprints.py",)
+
+
+def test_scout_engine_no_file_set_means_no_recovery(tmp_path):
+    # AC2 degrade at the engine seam: no file set -> no recovery -> spec-0011 drop.
+    repo, _fs = _flask_repo(tmp_path)
+    backend = _RecordingBackend(
+        [CodeSpan("/pallets/flask/src/flask/blueprints.py", None, None)]
+    )
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(repo))  # no file_set
+    out = engine.search("q")
+    assert out == []
+    t = engine.last_tally
+    assert (t.recovered_filelevel, t.recovered_spanned, t.dropped) == (0, 0, 1)
