@@ -24,7 +24,7 @@ agent ──"where is the retry/backoff logic for the payment gateway?"──▶
                           Tier 0  deterministic (AST + ripgrep)
                           Tier 1  Scout      (fast trained explorer)
                           Tier 2  Deep        (recursive LM, on escalation)
-                                       │
+                                                                          │
 agent ◀──  src/billing/gateway.py:212-241  ◀──────────────────────────────┘
            tests/test_gateway.py:88-103
 ```
@@ -55,7 +55,7 @@ brutally specialized subsystem that does one thing extremely well.
   > *recommended* `FastContext-1.0-4B-RL-Q4_K_M` community model is **non-functional on real
   > repositories** — it emits a `<final_answer>` on the toy fixture but **never converges on real
   > codebases** (empty output: the classic "passes tests, fails in production"). The only Scout config
-  > validated on real repos is the **Q8 official conversion** (~2× the memory of Q4, ~5 GB resident),
+  > validated on real repos is the **Q8 conversion** (~2× the memory of Q4, ~5 GB resident),
   > which **OOMs `mode=auto` on a 16 GB machine** (co-loading Scout + the Deep model + the Deno/Pyodide
   > sandbox). **The documented hardware floor needs re-characterizing for the Q8 working config**; until
   > then treat "8 GB / 4B" as the *aspirational* target, not a validated minimum.
