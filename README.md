@@ -44,6 +44,15 @@ brutally specialized subsystem that does one thing extremely well.
   no external calls. Suitable for fully air-gapped environments and proprietary code that must stay proprietary.
 - **It fits a modest box.** The default profile targets an 8 GB local GPU using a 4B-class quantized model.
 
+  > ⚠️ **The 8 GB / Q4 footprint is not currently validated (2026-06, specs 0010–0012).** The
+  > *recommended* `FastContext-1.0-4B-RL-Q4_K_M` community model is **non-functional on real
+  > repositories** — it emits a `<final_answer>` on the toy fixture but **never converges on real
+  > codebases** (empty output: the classic "passes tests, fails in production"). The only Scout config
+  > validated on real repos is the **Q8 official conversion** (~2× the memory of Q4, ~5 GB resident),
+  > which **OOMs `mode=auto` on a 16 GB machine** (co-loading Scout + the Deep model + the Deno/Pyodide
+  > sandbox). **The documented hardware floor needs re-characterizing for the Q8 working config**; until
+  > then treat "8 GB / 4B" as the *aspirational* target, not a validated minimum.
+
 ## How it works
 
 Harpyja is a three-tier locator with cost-based escalation:
@@ -86,7 +95,9 @@ goes blind on an unknown file type.
 - [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`) on `PATH`
 - [Deno](https://deno.land) (the `dspy.RLM` sandbox runs on Deno/Pyodide WASM — installed once, runs locally)
 - A local OpenAI-compatible model endpoint: **llama.cpp** (`llama-server`) **or Ollama**
-- Optional: a CUDA/Metal GPU (8 GB is enough for the default 4B profile; CPU works, slower)
+- Optional: a CUDA/Metal GPU (the default profile *targets* 8 GB; see the validation caveat above —
+  the real-repo-working Q8 Scout config is ~5 GB resident and `mode=auto` co-loads the Deep model + WASM
+  sandbox on top, so 8 GB is not a validated minimum yet)
 
 ## Install
 

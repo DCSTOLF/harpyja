@@ -12,7 +12,8 @@ sequencing, see [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md).
    recursive model only when the query genuinely needs it.
 3. **Offline and air-gapped by construction.** No network egress at runtime. Model, search, and parsing are
    all local. Proprietary code never leaves the box.
-4. **Small footprint.** Default profile runs a 4B-class quantized model on an 8 GB GPU (CPU fallback).
+4. **Small footprint** *(target, not currently validated — see Footprint below)*. Default profile runs a
+   4B-class quantized model on an 8 GB GPU (CPU fallback).
 5. **Agent-agnostic.** Pure MCP. Claude Code and Codex are first-class; anything that speaks MCP works.
 6. **Graceful degradation.** Every layer has a fallback. No parser → ripgrep. No model → deterministic tier.
    Escalation failure → return best-effort tier-1 result with a confidence flag.
@@ -158,6 +159,18 @@ offline. A startup check can assert no non-loopback endpoints are configured.
 **Footprint.** One 4B-class quantized model serves both Scout and the RLM driver; the optional sub/judge
 model can be the same model or a smaller one. Tier 0 carries most point-lookup load with zero model cost,
 keeping the GPU free for genuinely hard queries.
+
+> ⚠️ **Not currently validated on real repositories (2026-06, specs 0010–0012; no-false-capability flag).**
+> The footprint story above has rested since spec 0003 on the *recommended* `FastContext-1.0-4B-RL-Q4_K_M`
+> community Scout model. Real-data measurement (spec 0010/0011) proved that model **never converges to a
+> `<final_answer>` on real codebases** — it works only on the toy fixture (the "passes tests, fails in
+> production" shape that has bitten this project twice). The Scout config that *does* work on real repos is
+> the **Q8 official conversion**, which is **≈2× the memory of Q4** (~5 GB resident vs ~2.5 GB) and was
+> observed to **OOM `mode=auto` on a 16 GB machine** (jetsam, co-loading the Q8 Scout + the Deep model +
+> the Deno/Pyodide sandbox). **Action item:** re-characterize the hardware floor for the Q8 working
+> config (and decide whether an 8 GB target is still achievable, e.g. Scout-only fast mode, a smaller Deep
+> model, or sequential model loading) before "8 GB / 4B" is re-asserted as a validated minimum. The 4B
+> *model class* is unchanged; it is the **quantization/memory** that broke the documented floor.
 
 **Failure posture.** Model down → Harpyja still answers from Tier 0 (deterministic) with a flag. Parser
 missing → ripgrep. RLM sandbox unavailable → return Tier-1 best-effort. Harpyja prefers a degraded honest

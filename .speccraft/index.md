@@ -9,7 +9,7 @@ A read-only, offline MCP server that turns a natural-language query into exact `
 - Tree-sitter (symbol layer: Go, Rust, Python, JS/TS, C#, Java, C/C++) + ripgrep fallback
 - Microsoft FastContext (Tier 1 "Scout", pinned dependency)
 - DSPy `dspy.RLM` over Deno/Pyodide WASM sandbox (Tier 2 "Deep")
-- Local OpenAI-compatible model endpoint: llama.cpp (`llama-server`) or Ollama (4B-class quantized, 8 GB GPU profile)
+- Local OpenAI-compatible model endpoint: llama.cpp (`llama-server`) or Ollama (4B-class quantized, 8 GB GPU profile — ⚠️ **8 GB / Q4 floor NOT validated**: the recommended Q4_K_M Scout model is non-functional on real repos; the working config is Q8 (~2× memory, OOMs auto on 16 GB) — re-characterize the floor, see ARCHITECTURE.md "Footprint")
 - `uv` for env/deps
 
 ## Architecture in one paragraph
