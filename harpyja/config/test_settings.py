@@ -277,3 +277,43 @@ def test_verify_method_rejected_on_per_request_override(tmp_path, monkeypatch):
     base = load_settings(config_path=None, repo_path=tmp_path)
     with pytest.raises(UnsupportedVerifyMethod):
         resolve_settings(base, {"verify_method": "model_judge"})
+
+
+# --- Spec 0017 (B3): gateway HTTP timeout (AC1 / D1 / D2) ---
+
+
+def test_settings_has_http_timeout_default():
+    # AC1 / D1: a finite, positive float default — never None. The bound must exist
+    # out of the box so the gateway's urlopen can never hang forever.
+    import dataclasses
+    import math
+
+    s = Settings()
+    assert s.lm_http_timeout_s == 120.0
+    assert isinstance(s.lm_http_timeout_s, float)
+    assert s.lm_http_timeout_s > 0
+    assert math.isfinite(s.lm_http_timeout_s)
+    # Field-default introspection: the declared default is not None.
+    default_values = {
+        f.name: (f.default_factory() if f.default is dataclasses.MISSING else f.default)
+        for f in dataclasses.fields(Settings)
+    }
+    assert default_values["lm_http_timeout_s"] is not None
+
+
+def test_http_timeout_coerces_float_from_toml(tmp_path, monkeypatch):
+    monkeypatch.delenv("HARPYJA_LM_HTTP_TIMEOUT_S", raising=False)
+    toml = _write_toml(tmp_path / "harpyja.toml", "lm_http_timeout_s = 5.0\n")
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.lm_http_timeout_s == 5.0
+    assert isinstance(s.lm_http_timeout_s, float)
+
+
+def test_http_timeout_coerces_float_from_env_beats_toml(tmp_path, monkeypatch):
+    # AC1 / D2: env > toml; no per-request layer is exercised here, and the loaded
+    # base is a fresh frozen instance (never mutated in place).
+    toml = _write_toml(tmp_path / "harpyja.toml", "lm_http_timeout_s = 10.0\n")
+    monkeypatch.setenv("HARPYJA_LM_HTTP_TIMEOUT_S", "2.5")
+    s = load_settings(config_path=toml, repo_path=tmp_path)
+    assert s.lm_http_timeout_s == 2.5
+    assert isinstance(s.lm_http_timeout_s, float)

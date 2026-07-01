@@ -26,9 +26,11 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import socket
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.error import URLError
 
 from harpyja.config.settings import Settings
 from harpyja.gateway.gateway import ModelGateway
@@ -138,9 +140,15 @@ class VerificationGate:
             for citation in lined:
                 cited_text = _read_cited_lines(repo_path, citation)
                 scores.append(judge(query, cited_text))
-        except Exception:
-            # The gate cannot vouch — never raise, never silently pass.
-            logger.warning("verification gate scoring failed", exc_info=True)
+        except Exception as err:
+            # The gate cannot vouch — never raise, never silently pass. Spec 0017
+            # (B3 / D4): name a timeout distinctly so a stalled-model degrade is
+            # separable from other judge failures in operator diagnostics (the 0014
+            # typed-degrade visibility convention). No schema change — log only.
+            if isinstance(err, (TimeoutError, socket.timeout, URLError)):
+                logger.warning("verification gate judge timed out: %r", err, exc_info=True)
+            else:
+                logger.warning("verification gate scoring failed", exc_info=True)
             return GateOutcome(
                 passed=False,
                 score=0.0,

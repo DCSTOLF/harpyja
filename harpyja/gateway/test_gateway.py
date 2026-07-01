@@ -119,3 +119,179 @@ def test_gateway_complete_rejects_resolved_non_loopback():
             transport=transport,
             resolver=resolver,
         )
+
+
+# --- Spec 0017 (B3): gateway HTTP timeout (AC2, AC3, AC7) ---
+
+import json  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+
+from harpyja.gateway import gateway as _gateway_mod  # noqa: E402
+
+
+class _FakeResp:
+    """Minimal context-manager stand-in for a urlopen response."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self._body
+
+
+def test_modelgateway_timeout_s_dataclass_default_is_finite():
+    # AC2: a bare ModelGateway (no timeout arg, no Settings) is still hang-bounded —
+    # the dataclass field default is a finite positive float, never None.
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    assert gw.timeout_s is not None
+    assert isinstance(gw.timeout_s, float)
+    assert gw.timeout_s > 0
+    import math
+
+    assert math.isfinite(gw.timeout_s)
+
+
+def test_default_transport_passes_timeout_to_urlopen(monkeypatch):
+    # AC3 (load-bearing): the configured timeout is really threaded to the blocking
+    # socket op, not dropped. Monkeypatch urlopen to capture the kwarg.
+    captured = {}
+
+    def _fake_urlopen(req, timeout=None):
+        captured["timeout"] = timeout
+        body = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()
+        return _FakeResp(body)
+
+    monkeypatch.setattr(_gateway_mod, "urlopen", _fake_urlopen)
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1", timeout_s=3.5)
+    out = gw.complete([{"role": "user", "content": "hi"}])  # default transport
+    assert out == "ok"
+    assert captured["timeout"] is not None
+    assert captured["timeout"] > 0
+    assert captured["timeout"] == 3.5
+
+
+def test_gateway_complete_raises_on_silent_server_within_bound():
+    # AC7 (load-bearing): a real loopback endpoint that accepts then withholds all
+    # bytes must make complete() RAISE within a small bound, not hang forever.
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    accepted = []
+
+    def _accept_and_stall():
+        try:
+            conn, _ = listener.accept()
+            accepted.append(conn)  # hold it open, send nothing
+        except OSError:
+            pass
+
+    t = threading.Thread(target=_accept_and_stall, daemon=True)
+    t.start()
+    try:
+        gw = ModelGateway(api_base=f"http://127.0.0.1:{port}/v1", timeout_s=0.25)
+        start = time.monotonic()
+        with pytest.raises((TimeoutError, socket.timeout, OSError)):
+            gw.complete([{"role": "user", "content": "hi"}])
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0  # bounded — a regression that drops timeout would hang
+    finally:
+        listener.close()
+        for conn in accepted:
+            conn.close()
+
+
+# --- Spec 0017 (B3): preservation locks (AC4, AC8, AC9) ---
+
+
+def test_gateway_complete_uses_injected_transport_unchanged():
+    # AC8 / D3: an explicit two-arg Transport (no **kwargs) is used VERBATIM — the
+    # timeout partial binds only when transport is None. Fails if the partial were
+    # bound unconditionally (a strict two-arg fake would then get an unexpected
+    # timeout_s kwarg and raise TypeError).
+    seen = []
+
+    def transport(url, payload):  # strictly two positional args
+        seen.append((url, payload))
+        return {"choices": [{"message": {"content": "verbatim"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1", timeout_s=3.0)
+    out = gw.complete([{"role": "user", "content": "hi"}], transport=transport)
+    assert out == "verbatim"
+    assert len(seen) == 1  # called with exactly (url, payload), no timeout leaked
+
+
+def test_gateway_complete_propagates_transport_timeout():
+    # AC4: a raised timeout PROPAGATES out of complete() — the gateway neither
+    # catches nor converts it, so a caller's degrade handler can see it. Distinct
+    # from AC3 (supplied); this proves "not swallowed". The fake makes the test
+    # itself non-hanging.
+    def transport(url, payload):
+        raise TimeoutError("simulated read timeout")
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    with pytest.raises(TimeoutError):
+        gw.complete([{"role": "user", "content": "hi"}], transport=transport)
+
+
+def test_gateway_complete_default_transport_never_called_for_remote(monkeypatch):
+    # AC9: the assert-local floor runs BEFORE egress even on the default-transport
+    # path — a non-loopback api_base raises AirGapError and the timeout-bearing
+    # urlopen is never invoked.
+    def _boom(*args, **kwargs):
+        raise AssertionError("urlopen called for a non-loopback endpoint")
+
+    monkeypatch.setattr(_gateway_mod, "urlopen", _boom)
+    gw = ModelGateway(api_base="http://8.8.8.8:11434/v1")  # no injected transport
+    with pytest.raises(AirGapError):
+        gw.complete([{"role": "user", "content": "hi"}])
+
+
+# --- Spec 0017 (B3): optional live happy-path smoke (AC11) ---
+
+
+@pytest.mark.integration
+def test_gateway_complete_live_ollama_under_timeout():
+    """AC11: against a reachable local Ollama, a real complete() returns well under
+    the configured timeout and never hangs. Skip-not-fail — this documents the happy
+    path only; it is NOT the stall proof (AC7 is) and must not be read as validating
+    the fix against a real stall."""
+    from urllib.parse import urlsplit
+
+    from harpyja.config.settings import Settings
+
+    settings = Settings()
+    parts = urlsplit(settings.lm_api_base)
+    host, port = parts.hostname or "127.0.0.1", parts.port or 11434
+    if not _socket_reachable(host, port, timeout=1.0):
+        pytest.skip(f"no local model endpoint reachable at {host}:{port}")
+
+    gw = ModelGateway(
+        api_base=settings.lm_api_base,
+        model=settings.scout_model,
+        timeout_s=settings.lm_http_timeout_s,
+    )
+    start = time.monotonic()
+    try:
+        out = gw.complete([{"role": "user", "content": "Reply with the word ok."}])
+    except Exception as err:  # a missing model / HTTP error is not a timeout regression
+        pytest.skip(f"endpoint reachable but complete() errored (not a stall): {err!r}")
+    elapsed = time.monotonic() - start
+    assert isinstance(out, str)
+    assert elapsed < settings.lm_http_timeout_s  # returned inside the bound, no hang
+
+
+def _socket_reachable(host, port, timeout=1.0):
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False

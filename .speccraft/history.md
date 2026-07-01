@@ -2,6 +2,68 @@
 
 Append-only. Newest first.
 
+## 2026-07-01 — Spec 0017 (gateway_http_timeout) shipped — the B3 fix from 0015: a finite `urlopen(timeout=)` makes the un-raisable raisable so the existing gate degrade can fire
+
+**Spec:** specs/0017-gateway-http-timeout/
+**Decision:** Close **B3** from spec 0015 (`live-run-findings.md`) — the Model Gateway's
+outbound HTTP call had **no timeout** (`_default_transport` did `urlopen(req)`, default
+`None` → block forever), so a stalled/torn-down local Ollama connection wedged the whole
+`mode=auto` run indefinitely (observed 2.5 h at 0% CPU with `caffeinate` on) — as a pure
+**reliability/plumbing** fix: no tier logic, no gate algorithm, no classifier, no citation
+format touched. Six durable points. (1) **A call that can hang forever can never degrade —
+so the fix is to make the un-raisable raisable, NOT to add a new degrade path.** The
+Verification Gate *already* wraps the judge call in `except Exception → GateOutcome(failed=True)`,
+but that safety net never fired because an un-timed-out `urlopen` raises **nothing**; it just
+hangs. A finite `urlopen(req, timeout=timeout_s)` converts the silent infinite wedge into a
+raised `TimeoutError`/`URLError` that the *existing* catch turns into a graceful degrade —
+the "always degrade gracefully" guardrail applied to the one place it structurally could not.
+(2) **The finite floor lives on the constructed object's own field default, not only on
+Settings.** `ModelGateway.timeout_s: float = 120.0` is finite at the **dataclass default
+itself** (AC2), so *any* `ModelGateway(...)` — the two wired sites AND a bare/test/unwired
+construction — is hang-bounded out of the box; a default living only on `Settings.lm_http_timeout_s`
+(AC1) would leave direct constructions falling back to unbounded `None`. (3) **Seam-preserving
+threading (D3).** The timeout rides the gateway and is bound onto the default transport via
+`functools.partial(_default_transport, timeout_s=self.timeout_s)` **only when `transport is None`**;
+the injectable `Transport` signature `(url, payload) -> dict` is untouched, so every existing
+injected fake keeps working. (4) **Timeout-degrade visibility (D4) extends the 0014 convention
+to the gate as a LOG signal, not a schema field.** The timeout still degrades through the gate's
+existing generic catch, but the path is branched to emit a **distinct timeout-naming WARNING**
+(`isinstance(err, (TimeoutError, socket.timeout, URLError))`) so "judge timed out" is separable
+from a parse/other failure in operator diagnostics — no `GateOutcome` schema change (a structured
+gate-degrade-cause taxonomy stays deferred as a gate-quality concern). (5) **Per-socket-op, not
+total-deadline honesty (no-false-capability).** `urlopen(timeout=)` bounds connect and each
+blocking read — exactly the observed pathology (accept-then-go-silent trips the read timeout) —
+and the spec claims only that; a dribble-slow endpoint could still outlast it, an acknowledged
+stdlib-transport limit, out of scope. The default `120.0 s` is deliberately **decoupled** from
+`deep_wall_clock_ms` (60 s) — they bound different things (D1), no per-request layer (D2). The
+air-gap floor is preserved: `assert_local` still runs **before** egress on the default-transport
+path (AC9). Both production sites construct with `timeout_s=settings.lm_http_timeout_s` —
+`orchestrator/wiring.py` (the observed B3 hang path) and `scout/wiring.py` (defense-in-depth on
+Scout's largely-vestigial Path-A gateway).
+**Why:** Spec 0015's OQ2 measurement never completed a single full sweep because this call could
+hang forever; the sibling B1 serving fix (0016) is not enough on its own. This is the narrow
+robustness prerequisite for re-attempting OQ2 — make a stalled endpoint fail fast and degrade
+visibly instead of wedging the run — without touching any tier or gate behavior. It makes no
+model faster or better; it makes a hung model *fail fast and visibly*.
+**Consequence — B3 closed; the 0015 blocker sequence is now B1(0016)+B3(0017) fixed, B2 and the
+OQ2 re-run still open.** Shipped TDD-complete: **+14 unit (725 total, was 711)**, ruff clean; +1
+integration. Load-bearing proof is **AC7** — a deterministic loopback server that accepts the
+connection then withholds all bytes, driven through `complete()` with a tiny `timeout_s`, raises
+in **<1 s** rather than hanging (the real socket-stall pathology bounded, not merely a fake that
+can raise) — plus AC5 (a raised timeout yields `GateOutcome(passed=False, failed=True)`, degrade
+not crash) and AC3 (the timeout is really threaded to the blocking op, proven by monkeypatching
+`urlopen`). AC11 optional live-Ollama happy-path smoke passed (6.15 s, skip-not-fail, explicitly
+**not** the stall proof). Docs made consistent in the same change (blast-radius convention):
+`settings.py` field comment + module-docstring toml example, the `_default_transport` docstring
+(now states the bound), ARCHITECTURE §2.8, and the README config-knob list. **Out of scope /
+follow-ups carried forward:** **B2** — the gate-as-judge false-escalation (the FastContext finder
+reused as a relevance judge rejecting correct citations — a separate gate-quality spec, orthogonal:
+B3 is *when the call hangs*, B2 is *how the reply is judged*); **re-attempting the OQ2 measurement**
+(a fresh spec now that B1+B3 land); a **total-request deadline / dribble-slow defense** (per-op
+`urlopen(timeout=)` is by design); **Deep's `dspy.RLM`/litellm timeout** (a separate outbound
+socket, dspy-managed); **retry/backoff on timeout** (this spec fails fast and degrades); and, still
+open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-07-01 — Spec 0016 (scout_model) shipped — the B1 serving/plumbing fix from 0015: two Settings defaults flipped to SERVED tags + a CLI override escape hatch
 
 **Spec:** specs/0016-scout-model/

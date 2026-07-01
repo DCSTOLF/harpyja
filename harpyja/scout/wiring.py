@@ -58,7 +58,11 @@ def build_scout_engine(
         agent_factory=agent_factory,
         cli_runner=cli_runner,
     )
-    gateway = ModelGateway(api_base=settings.lm_api_base, allow_remote=settings.allow_remote)
+    gateway = ModelGateway(
+        api_base=settings.lm_api_base,
+        allow_remote=settings.allow_remote,
+        timeout_s=settings.lm_http_timeout_s,  # spec 0017 (B3): defense-in-depth
+    )
     # The whitelist is vestigial for Path A (FastContext owns its tools); the seam
     # stays unchanged. read/glob/grep are unused by the real client.
     backend = FastContextBackend(

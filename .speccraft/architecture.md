@@ -125,6 +125,15 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    outbound caller. Live as of Wave 3: `ModelGateway.complete()` asserts the air-gap at
    name-resolution time (injected resolver + `ipaddress` loopback predicate) **before** an
    injected transport — no request leaves the process until loopback is proven.
+   As of spec 0017 (B3) the single outbound HTTP call is **time-bounded**: `_default_transport`
+   passes a finite `timeout=` to `urlopen` (a **per-socket-op** bound — connect + each read —
+   not a total deadline), carried by `ModelGateway.timeout_s` (finite dataclass default `120.0`,
+   fed by `Settings.lm_http_timeout_s`) and bound onto the default transport via
+   `functools.partial` **only when `transport is None`** (the injectable `Transport` signature
+   unchanged). A stalled/torn-down local endpoint now **raises instead of wedging the run
+   forever**, and the Verification Gate turns that raise into a graceful, timeout-named degrade
+   (`gate.py` branches `TimeoutError`/`socket.timeout`/`URLError` to a distinct WARNING, no
+   schema change). See history.md 2026-07-01 (spec 0017).
 8. `harpyja/config/` — settings load/merge, profiles.
 9. `harpyja/eval/` — **measurement harness, not a runtime tier** (a request never
    touches it). Live as of Wave 6a (spec 0009-6a): observes the real `mode=auto`

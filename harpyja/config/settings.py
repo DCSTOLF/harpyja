@@ -5,6 +5,7 @@ mirrors `Settings` field names at the top level, e.g.::
 
     lm_api_base = "http://localhost:11434/v1"
     lm_model = "hf.co/Qwen/Qwen3-8B-GGUF:latest"
+    lm_http_timeout_s = 120.0
     max_results = 8
 """
 
@@ -97,6 +98,14 @@ class Settings:
     verify_method: str = "scout_model"
     verify_threshold: float = 0.6
     verify_top_n: int = 3
+
+    # Spec 0017 (B3 fix / D1): the outbound Model Gateway HTTP timeout, in seconds.
+    # Finite (never None) so a stalled/torn-down local endpoint raises instead of
+    # wedging the run forever. This is a per-socket-op bound (urlopen(timeout=)),
+    # NOT a total-request deadline. Deliberately decoupled from `deep_wall_clock_ms`
+    # (they bound different things); no per-request layer (D2) — fixed at gateway
+    # construction from resolved Settings.
+    lm_http_timeout_s: float = 120.0
 
     def __post_init__(self) -> None:
         # Fires on every construction path — defaults, toml/env merge, and

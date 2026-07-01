@@ -185,7 +185,9 @@ Then, inside Claude Code or Codex, just ask naturally — the agent will call `h
 
 Settings load from `harpyja.toml` (project root) with environment-variable overrides
 (`HARPYJA_*`). See [`SPEC.md`](./SPEC.md#configuration) for the full table. Common knobs: model endpoints,
-escalation thresholds, per-tier token budgets, language toggles, and search bounds.
+escalation thresholds, per-tier token budgets, language toggles, search bounds, and the outbound model-call
+timeout (`lm_http_timeout_s`, default 120 s — bounds each Gateway HTTP call so a stalled local endpoint
+degrades instead of hanging).
 
 ## Project status
 

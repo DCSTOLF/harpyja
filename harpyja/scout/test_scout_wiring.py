@@ -59,3 +59,27 @@ def test_build_scout_engine_empty_file_set_when_manifest_absent(tmp_path, monkey
         Settings(), str(tmp_path), agent_factory=lambda **kw: None
     )
     assert engine._file_set == frozenset()
+
+
+# --- Spec 0017 (B3): the scout-site gateway carries the timeout (defense-in-depth) ---
+
+
+def test_build_scout_engine_threads_http_timeout(tmp_path, monkeypatch):
+    # AC10: the scout gateway is constructed with timeout_s from Settings. A
+    # constructor spy is robust to the (private, vestigial) backend tool shape; a
+    # non-default 7.5 proves real threading, not the 120.0 field default.
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    import harpyja.scout.wiring as wiring
+    from harpyja.gateway.gateway import ModelGateway as _RealGateway
+
+    captured: dict = {}
+
+    def _spy(**kwargs):
+        captured.update(kwargs)
+        return _RealGateway(**kwargs)
+
+    monkeypatch.setattr(wiring, "ModelGateway", _spy)
+    wiring.build_scout_engine(
+        Settings(lm_http_timeout_s=7.5), str(tmp_path), agent_factory=lambda **kw: None
+    )
+    assert captured.get("timeout_s") == 7.5

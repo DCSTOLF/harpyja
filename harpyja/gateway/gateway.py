@@ -17,6 +17,7 @@ makes no network call.
 
 from __future__ import annotations
 
+import functools
 import ipaddress
 import json
 import socket
@@ -94,15 +95,23 @@ def assert_local(
         raise AirGapError(f"host {host!r} does not resolve to loopback-only: {addresses}")
 
 
-def _default_transport(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _default_transport(
+    url: str, payload: dict[str, Any], *, timeout_s: float = 120.0
+) -> dict[str, Any]:
     """POST an OpenAI-compatible chat-completions request to a local endpoint.
 
     Only ever reached after :func:`assert_local` has passed, so ``url`` is
     loopback. Kept tiny and stdlib-only; tests inject a fake transport instead.
+
+    Spec 0017 (B3): ``timeout_s`` bounds the call so a stalled/torn-down endpoint
+    raises instead of blocking forever. It is a **per-socket-op** timeout
+    (``urlopen(timeout=)`` — connect and each blocking read), **not** a total
+    deadline. The default is finite (never ``None``) so a bare call can never hang;
+    :class:`ModelGateway` binds its configured ``timeout_s`` here at call time.
     """
     body = json.dumps(payload).encode("utf-8")
     req = Request(url, data=body, headers={"Content-Type": "application/json"})
-    with urlopen(req) as resp:  # noqa: S310 - loopback-only, air-gap asserted
+    with urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 - loopback-only, air-gap asserted
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -118,6 +127,10 @@ class ModelGateway:
     api_base: str
     model: str = "local"
     allow_remote: bool = False
+    # Spec 0017 (B3 / D3): the outbound HTTP timeout, bound onto the default
+    # transport. Finite by default (never None) so any direct construction — not
+    # just the wired sites — is hang-bounded out of the box.
+    timeout_s: float = 120.0
 
     def assert_local(self, resolver: Resolver | None = None) -> None:
         assert_local(self.api_base, allow_remote=self.allow_remote, resolver=resolver)
@@ -137,7 +150,9 @@ class ModelGateway:
         :class:`AirGapError` and nothing is ever sent.
         """
         self.assert_local(resolver=resolver)
-        send = transport or _default_transport
+        # D3: bind the configured timeout onto the default transport ONLY when no
+        # transport is injected — an explicit two-arg fake must stay untouched.
+        send = transport or functools.partial(_default_transport, timeout_s=self.timeout_s)
         url = urljoin(self.api_base.rstrip("/") + "/", "chat/completions")
         payload: dict[str, Any] = {"model": self.model, "messages": list(messages), **params}
         response = send(url, payload)

@@ -23,5 +23,6 @@ def build_verification_gate(settings: Settings, repo_path: str) -> VerificationG
         api_base=settings.lm_api_base,
         model=settings.scout_model,
         allow_remote=settings.allow_remote,
+        timeout_s=settings.lm_http_timeout_s,  # spec 0017 (B3): the observed hang path
     )
     return VerificationGate(gateway, judge=make_scout_model_judge(gateway, settings))

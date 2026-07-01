@@ -114,7 +114,10 @@ citation, which is worse than no citation because the agent will trust it.
 A single abstraction over the local OpenAI-compatible endpoint (llama.cpp's `llama-server` or Ollama). Holds
 the base URL, the **primary** model (Scout + RLM driver) and an optional smaller **sub** model (RLM
 sub-queries, verification judge). Centralizing this means every tier is endpoint-agnostic and the air-gap
-guarantee is enforced in one place.
+guarantee is enforced in one place. The single outbound HTTP call is **time-bounded** (`lm_http_timeout_s`,
+default 120 s — spec 0017 / B3): a stalled or torn-down local endpoint raises instead of wedging the run
+forever, and the Verification Gate turns that raise into a graceful, timeout-named degrade. It is a
+per-socket-op timeout (`urlopen(timeout=)`), not a total-request deadline.
 
 ### 2.9 Citation Formatter
 Normalizes heterogeneous tier outputs into one ranked, deduplicated citation list. Merges overlapping spans,

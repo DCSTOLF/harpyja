@@ -106,6 +106,57 @@ def test_gate_scoring_failed_when_judge_raises(tmp_path):
     assert outcome.passed is False
 
 
+# --- Spec 0017 (B3): gate degrades on judge timeout, visibly (AC5, AC6) ---
+
+
+def _timeout_judge(query: str, cited_text: str) -> float:
+    raise TimeoutError("simulated judge read timeout")
+
+
+def _runtime_judge(query: str, cited_text: str) -> float:
+    raise RuntimeError("judge backend exploded")
+
+
+def test_gate_degrades_on_judge_timeout(tmp_path):
+    # AC5 (load-bearing): a timed-out judge degrades gracefully — no raise, not a
+    # silent pass. This is exactly the path a finite gateway timeout now reaches.
+    repo = _repo_with_file(tmp_path)
+    gate = VerificationGate(ModelGateway(api_base=LOOPBACK, model="scout"), judge=_timeout_judge)
+    outcome = gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    assert outcome.failed is True
+    assert outcome.passed is False
+
+
+def _warning_messages(caplog) -> list[str]:
+    # The record MESSAGE only (never the exc_info traceback) — so a match proves the
+    # message itself names the cause, not merely that the exception class appears in
+    # a formatted traceback.
+    return [r.getMessage().lower() for r in caplog.records if r.levelno == logging.WARNING]
+
+
+def test_gate_logs_timeout_naming_warning_on_timeout(tmp_path, caplog):
+    # AC6 / D4: the timeout degrade is DISTINGUISHABLE — a WARNING whose MESSAGE
+    # names the timeout, so operators can separate "judge timed out" from others.
+    repo = _repo_with_file(tmp_path)
+    gate = VerificationGate(ModelGateway(api_base=LOOPBACK, model="scout"), judge=_timeout_judge)
+    with caplog.at_level(logging.WARNING):
+        gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    msgs = _warning_messages(caplog)
+    assert any("timed out" in m or "timeout" in m for m in msgs)
+
+
+def test_gate_timeout_log_distinct_from_parse_failure(tmp_path, caplog):
+    # AC6: a non-timeout failure logs the GENERIC "scoring failed" message and NOT
+    # the timeout-naming one — the two degrade causes are separable in diagnostics.
+    repo = _repo_with_file(tmp_path)
+    gate = VerificationGate(ModelGateway(api_base=LOOPBACK, model="scout"), judge=_runtime_judge)
+    with caplog.at_level(logging.WARNING):
+        gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    msgs = _warning_messages(caplog)
+    assert any("scoring failed" in m for m in msgs)
+    assert not any("timed out" in m or "timeout" in m for m in msgs)
+
+
 @pytest.mark.integration
 def test_gate_runs_under_network_deny_loopback_only(tmp_path, monkeypatch):
     """AC10 (integration): the assembled gate scores via the loopback Gateway and
