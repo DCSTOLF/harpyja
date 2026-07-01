@@ -279,3 +279,50 @@ def test_convert_live_hf_smoke(tmp_path):
     prov = json.loads((tmp_path / PROVENANCE_NAME).read_text(encoding="utf-8"))
     assert "SWE-bench_Verified" in prov["hf_dataset_id"]
     assert len(prov["raw_fixture_sha256"]) == 64
+
+
+# ---- Spec 0016 (AC7): the served-model default reaches Ollama's served set -----
+
+@pytest.mark.integration
+def test_scout_model_default_present_in_ollama_served_set():
+    """The out-of-box `scout_model` default (no CLI flags) names a tag Ollama serves.
+
+    Spec 0016 B1: the old default (`mitkox/...RL-Q4_K_M`) was served nowhere → 404 on
+    every Scout call. This is a POSITIVE membership check against `/api/tags`, so it
+    cannot pass trivially when the endpoint is down. Three-way, skip-not-fail:
+      - Ollama unreachable                → skip (never fail)
+      - reachable but the tag is absent   → skip with a diagnostic naming the tag
+      - the OLD unserved tag is the default → FAIL (asserted unconditionally below)
+    """
+    import json as _json
+    import urllib.request
+    from urllib.parse import urlsplit
+
+    from harpyja.config.settings import Settings
+
+    _OLD_UNSERVED = "hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest"
+    default_scout = Settings().scout_model  # no model flags → the resolved default
+
+    # Unconditional guard: a regression back to the unserved default fails even offline.
+    assert default_scout != _OLD_UNSERVED
+
+    parts = urlsplit(Settings().lm_api_base)
+    host = parts.hostname or "localhost"
+    port = parts.port or 11434
+    if not _socket_reachable(host, port):
+        pytest.skip(f"Ollama not reachable at {host}:{port}")
+
+    tags_url = f"{parts.scheme or 'http'}://{host}:{port}/api/tags"
+    try:
+        with urllib.request.urlopen(tags_url, timeout=3.0) as resp:  # noqa: S310 (localhost)
+            served = {m["name"] for m in _json.loads(resp.read()).get("models", [])}
+    except OSError as err:
+        pytest.skip(f"Ollama /api/tags query failed: {err}")
+
+    if default_scout not in served:
+        pytest.skip(
+            f"default scout_model {default_scout!r} not in Ollama served set "
+            f"({sorted(served)}) — pull it to validate AC7 live"
+        )
+    # Positive membership: the default IS served.
+    assert default_scout in served

@@ -388,6 +388,115 @@ def test_sweep_subcommand_parses():
     assert args.cmd == "sweep"
 
 
+# --- Spec 0016: --scout-model / --deep-model CLI overrides (AC3/AC4/AC5/AC8) ---
+
+def test_run_subcommand_accepts_scout_and_deep_model():
+    args = _build_parser().parse_args(
+        ["run", "--scout-model", "x", "--deep-model", "y"]
+    )
+    assert args.scout_model == "x"
+    assert args.deep_model == "y"  # distinct dest from --lm-model (D1)
+
+
+def test_sweep_subcommand_accepts_scout_and_deep_model():
+    args = _build_parser().parse_args(
+        ["sweep", "--scout-model", "x", "--deep-model", "y"]
+    )
+    assert args.scout_model == "x"
+    assert args.deep_model == "y"
+
+
+def test_settings_from_args_applies_scout_model():
+    from harpyja.config.settings import Settings
+    from harpyja.eval.swebench_eval import _settings_from_args
+
+    args = _build_parser().parse_args(["run", "--scout-model", "served-tag"])
+    assert _settings_from_args(args).scout_model == "served-tag"
+    # Omitting the flag yields the new (AC1) served default.
+    bare = _build_parser().parse_args(["run", "--fixtures", "x"])
+    assert _settings_from_args(bare).scout_model == Settings().scout_model
+
+
+def test_settings_from_args_deep_model_maps_to_lm_model():
+    from harpyja.eval.swebench_eval import _settings_from_args
+
+    # Canonical --deep-model writes lm_model.
+    d = _build_parser().parse_args(["run", "--deep-model", "y"])
+    assert _settings_from_args(d).lm_model == "y"
+    # Deprecated --lm-model alias still writes lm_model (back-compat).
+    a = _build_parser().parse_args(["run", "--lm-model", "z"])
+    assert _settings_from_args(a).lm_model == "z"
+
+
+def test_settings_from_args_deep_model_wins_over_lm_model_both_orders():
+    from harpyja.config.settings import Settings
+    from harpyja.eval.swebench_eval import _settings_from_args
+
+    # D1: canonical --deep-model wins regardless of CLI order (distinct dests
+    # reconciled in _settings_from_args, NOT argparse positional last-wins).
+    order1 = _build_parser().parse_args(
+        ["run", "--deep-model", "D", "--lm-model", "L"]
+    )
+    order2 = _build_parser().parse_args(
+        ["run", "--lm-model", "L", "--deep-model", "D"]
+    )
+    assert _settings_from_args(order1).lm_model == "D"
+    assert _settings_from_args(order2).lm_model == "D"
+    # Neither flag → the AC2 default.
+    bare = _build_parser().parse_args(["run", "--fixtures", "x"])
+    assert _settings_from_args(bare).lm_model == Settings().lm_model
+
+
+def test_settings_from_args_scout_model_precedence():
+    from harpyja.config.settings import Settings
+    from harpyja.eval.swebench_eval import _settings_from_args
+
+    base = Settings()
+    args = _build_parser().parse_args(["run", "--scout-model", "explicit"])
+    assert _settings_from_args(args).scout_model == "explicit"  # beats default
+    assert base.scout_model != "explicit"  # base not mutated (frozen-replace)
+
+
+def test_settings_from_args_deep_model_precedence():
+    from harpyja.config.settings import Settings
+    from harpyja.eval.swebench_eval import _settings_from_args
+
+    base = Settings()
+    args = _build_parser().parse_args(["run", "--deep-model", "explicit"])
+    assert _settings_from_args(args).lm_model == "explicit"
+    assert base.lm_model != "explicit"  # base not mutated
+
+
+def test_run_help_lists_scout_and_deep_model():
+    import argparse
+
+    parser = _build_parser()
+    # Find the `run` subparser and introspect its option strings.
+    sub = [
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    ][0]
+    run_help = sub.choices["run"].format_help()
+    assert "--scout-model" in run_help
+    assert "--deep-model" in run_help
+    assert "--lm-model" in run_help
+    # The alias is marked deprecated in its help text.
+    assert "deprecated" in run_help.lower()
+
+
+def test_sweep_help_lists_scout_and_deep_model():
+    import argparse
+
+    parser = _build_parser()
+    sub = [
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    ][0]
+    sweep_help = sub.choices["sweep"].format_help()
+    assert "--scout-model" in sweep_help
+    assert "--deep-model" in sweep_help
+    assert "--lm-model" in sweep_help
+    assert "deprecated" in sweep_help.lower()
+
+
 def test_run_missing_resolved_fixture_exits_nonzero_actionable(tmp_path):
     with pytest.raises(SystemExit) as ei:
         main(["run", "--fixtures", str(tmp_path), "--out-dir", str(tmp_path / "out")])

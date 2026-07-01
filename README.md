@@ -59,6 +59,12 @@ brutally specialized subsystem that does one thing extremely well.
   > which **OOMs `mode=auto` on a 16 GB machine** (co-loading Scout + the Deep model + the Deno/Pyodide
   > sandbox). **The documented hardware floor needs re-characterizing for the Q8 working config**; until
   > then treat "8 GB / 4B" as the *aspirational* target, not a validated minimum.
+  >
+  > **Defaults (spec 0016 / B1 fix):** the default `scout_model` is the *served* Q8 tag
+  > `hf.co/dstolf/FastContext-1.0-4B-RL-Q8_0-GGUF:latest` (the old recommended-Q4 tag was not
+  > served by Ollama → HTTP 404 on every call). The default Deep model (`lm_model`) is provisionally
+  > `hf.co/Qwen/Qwen3-8B-GGUF:latest` ("for now"). Override either from the eval CLI with
+  > `--scout-model` / `--deep-model` (`run`/`sweep`), or via `harpyja.toml` / `HARPYJA_*`.
 
 ## How it works
 

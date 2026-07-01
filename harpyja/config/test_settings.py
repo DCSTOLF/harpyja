@@ -123,8 +123,12 @@ def test_settings_scout_loads_from_env(tmp_path, monkeypatch):
 
 
 # --- Spec 0007: Scout FastContext model + FC_* params (AC3) ---
+# Spec 0016: scout default flipped to the served dstolf Q8 RL tag (B1 fix) — the
+# old mitkox RL-Q4 tag was not served by Ollama → HTTP 404 on every Scout call.
+_FC_GGUF = "hf.co/dstolf/FastContext-1.0-4B-RL-Q8_0-GGUF:latest"
 
-_FC_GGUF = "hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest"
+# The old, unserved default — must no longer be a live field default (spec 0016 AC6).
+_OLD_UNSERVED_SCOUT = "hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest"
 
 
 def test_settings_scout_model_default():
@@ -132,6 +136,27 @@ def test_settings_scout_model_default():
     assert s.scout_model == _FC_GGUF
     # Scout's fine-tune is distinct from Deep's driver model.
     assert s.scout_model != s.lm_model
+
+
+def test_settings_lm_model_default():
+    # Spec 0016 (AC2 / D2): the Deep default flipped from the llama.cpp placeholder
+    # "local" to a served Ollama tag. No prior test pinned this value.
+    s = Settings()
+    assert s.lm_model == "hf.co/Qwen/Qwen3-8B-GGUF:latest"
+
+
+def test_settings_defaults_drop_unserved_tags():
+    # Spec 0016 (AC6): drift guard by FIELD-DEFAULT INTROSPECTION, never a text grep —
+    # so docstrings, comments, and historical fixtures cannot trip a false positive.
+    import dataclasses
+
+    default_values = {
+        f.name: (f.default_factory() if f.default is dataclasses.MISSING else f.default)
+        for f in dataclasses.fields(Settings)
+    }
+    assert _OLD_UNSERVED_SCOUT not in default_values.values()
+    assert default_values["scout_model"] == _FC_GGUF
+    assert default_values["lm_model"] != "local"
 
 
 def test_settings_scout_fc_param_defaults():

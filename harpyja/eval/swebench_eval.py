@@ -793,14 +793,22 @@ def _live_stack_factory():
 def _settings_from_args(args: argparse.Namespace):
     """Build `Settings` from CLI flags via `dataclasses.replace` (never mutation).
 
-    The default `lm_model` (`"local"`) is a llama.cpp placeholder; against Ollama the
-    operator must name a served Deep model, so `run`/`sweep` expose model overrides.
+    Spec 0016: `run`/`sweep` expose `--scout-model` (Scout/gate model) and the
+    canonical `--deep-model` (Deep model), with `--lm-model` retained as a deprecated
+    alias. The Deep flags live on distinct argparse dests and are reconciled here so
+    `--deep-model` wins regardless of CLI order (canonical `or` alias) — not via
+    argparse positional last-wins. The default Deep model is now a served Ollama tag;
+    a llama.cpp operator names their model explicitly through these flags.
     """
     from harpyja.config.settings import Settings
 
     overrides = {}
-    if getattr(args, "lm_model", None):
-        overrides["lm_model"] = args.lm_model
+    if getattr(args, "scout_model", None):
+        overrides["scout_model"] = args.scout_model
+    # Canonical `--deep-model` beats the deprecated `--lm-model` alias, order-independent.
+    deep = getattr(args, "deep_model", None) or getattr(args, "lm_model", None)
+    if deep:
+        overrides["lm_model"] = deep
     if getattr(args, "lm_api_base", None):
         overrides["lm_api_base"] = args.lm_api_base
     if getattr(args, "deep_max_subqueries", None) is not None:
@@ -879,7 +887,13 @@ def _build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=cmd_prune)
 
     def _add_model_flags(sp):
-        sp.add_argument("--lm-model", default=None, help="Deep model name (e.g. qwen2.5-coder:3b)")
+        # Spec 0016: `--scout-model` overrides the Scout/gate model (fixes B1 — the
+        # served-model escape hatch). `--deep-model` is the canonical Deep override;
+        # `--lm-model` is kept as a DEPRECATED alias (distinct dest so the canonical
+        # flag wins regardless of CLI order — reconciled in `_settings_from_args`).
+        sp.add_argument("--scout-model", default=None, help="Scout/gate model (served tag)")
+        sp.add_argument("--deep-model", default=None, help="Deep model (e.g. qwen2.5-coder:3b)")
+        sp.add_argument("--lm-model", default=None, help="[deprecated] alias of --deep-model")
         sp.add_argument("--lm-api-base", default=None, help="local OpenAI-compatible endpoint")
         sp.add_argument("--deep-max-subqueries", type=int, default=None)
 

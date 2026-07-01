@@ -4,7 +4,7 @@ Wave 0 keeps the surface small and the precedence explicit (AC6). The toml file
 mirrors `Settings` field names at the top level, e.g.::
 
     lm_api_base = "http://localhost:11434/v1"
-    lm_model = "local"
+    lm_model = "hf.co/Qwen/Qwen3-8B-GGUF:latest"
     max_results = 8
 """
 
@@ -40,7 +40,12 @@ class Settings:
     """Resolved configuration. Frozen so overrides return new instances."""
 
     lm_api_base: str = "http://localhost:11434/v1"
-    lm_model: str = "local"
+    # Spec 0016 (B1 fix / D2): flipped from the llama.cpp placeholder "local" to a
+    # served Ollama tag. This is a GLOBAL default — every bare `Settings()` caller
+    # (incl. the MCP server's `mode=auto` Deep tier) gets it. A llama.cpp operator
+    # (where "local" was a benign don't-care) must now set `lm_model` explicitly via
+    # toml/env/`--deep-model`. Provisional ("for now"), not a long-term Deep choice.
+    lm_model: str = "hf.co/Qwen/Qwen3-8B-GGUF:latest"
     max_results: int = 8
     allow_remote: bool = False
 
@@ -74,7 +79,12 @@ class Settings:
     # `scout_model` is Scout-specific and distinct from Deep's `lm_model`; it maps
     # to FC_MODEL. The rest map to FC_MAX_TOKENS / FC_TEMPERATURE /
     # FC_REASONING_EFFORT (kept as strings — they become env values verbatim).
-    scout_model: str = "hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest"
+    # Spec 0016 (B1 fix): flipped from the UNSERVED mitkox RL-Q4 tag (404 on every
+    # Scout call) to the served dstolf Q8 RL tag. NB: `scout_model` also backs the
+    # Verification Gate (`verify_method="scout_model"`), so this changes which served
+    # model the gate scores with — broken→served plumbing, distinct from the B2
+    # gate-judging-logic problem.
+    scout_model: str = "hf.co/dstolf/FastContext-1.0-4B-RL-Q8_0-GGUF:latest"
     scout_max_tokens: int = 1024
     scout_temperature: str = "0"
     scout_reasoning_effort: str = "none"

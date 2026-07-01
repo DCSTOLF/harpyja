@@ -1,7 +1,7 @@
 ---
 id: "0016"
 title: "scout_model"
-status: draft
+status: closed
 created: 2026-07-01
 authors: [claude]
 packages: [harpyja/config, harpyja/eval]
@@ -40,11 +40,35 @@ Ref: 0015 (B1 / live-run-findings D1), 0008 (`verify_method` / no-false-capabili
 
 ## What
 
-**INVARIANT (plumbing, not capability):** no change to tier logic, the gate, the
-classifier, or the citation format. This spec changes two **defaults** and adds two
-**CLI override flags** so the eval reaches a served model. It does not claim any
-model is *good* — only that the default is *served*, and that any served model can be
-named from the CLI without editing source.
+**INVARIANT (plumbing, not capability):** no change to tier *logic*, the classifier,
+the citation format, or the gate's **algorithm**. This spec changes two **defaults**
+and adds two **CLI override flags** so the eval reaches a served model. It does not
+claim any model is *good* — only that the default is *served* (see the "served"
+clarification below), and that any served model can be named from the CLI without
+editing source.
+
+**Gate-coupling caveat (stated, not hidden).** `scout_model` does **double duty**: it
+is Scout-tier's retrieval model AND — because `verify_method="scout_model"` is the
+only shipped gate backend (`settings.py:83-94`, `_VERIFY_METHODS`) — the model the
+Verification Gate calls to score citations. Flipping `scout_model`'s value therefore
+changes the **model the gate scores with**, from an unserved (broken) tag to a served
+one. This is defensible as *plumbing* (broken→served), and it is deliberately
+**distinct** from B2, the out-of-scope gate-quality problem, which changes the gate's
+*judging logic*. This spec changes only *which served model the gate calls*; it does
+not touch how the gate judges. The next OQ2 run must attribute any gate-behavior delta
+to this served-model change, not conflate it with a (future) B2 fix.
+
+**"Served" is instance-relative, not universal.** A model tag is "served" only
+relative to a particular local Ollama instance. The claim here is narrow: the new
+defaults name tags in the **documented required local Ollama set** (repo memory /
+README), replacing a tag that is served **nowhere** in that set. The skip-not-fail
+smoke (AC7) proves the default avoids the known-bad tag and matches the served set on
+the eval host — not a universal out-of-box guarantee.
+
+**Air-gap note.** All `hf.co/...` strings here are **local Ollama model tags**, not a
+license to fetch from Hugging Face at Harpyja runtime. The change touches model
+*tags*, never endpoints; the runtime air-gap (Model Gateway → localhost only) is
+untouched.
 
 **INVARIANT (precedence preserved):** the layered settings precedence
 (defaults < `harpyja.toml` < `HARPYJA_*` env < per-request) is unchanged. A CLI flag
@@ -62,12 +86,17 @@ Scope:
 - **Flip the Deep default** (`settings.py::Settings.lm_model`) from the llama.cpp
   placeholder `"local"` to the served `hf.co/Qwen/Qwen3-8B-GGUF:latest` ("for now" —
   a provisional served default, not a claim it is the right long-term Deep model).
+  This is an intentional **global** default flip (see Decision D2): it is a `Settings`
+  default, so it affects **every bare `Settings()` caller**, including the MCP server's
+  `mode=auto` Deep tier — not only the eval CLI. Its blast radius and the llama.cpp
+  trade-off are enumerated in D2; per-request/toml/env/CLI override remains the escape
+  hatch for a llama.cpp operator.
 - **Add `--scout-model`** to the shared `_add_model_flags` group (so both `run` and
   `sweep` gain it) and thread it through `_settings_from_args` as a `scout_model`
   override.
-- **Add `--deep-model`** as the canonical name for the Deep model override, mapping to
-  the same `lm_model` setting the existing `--lm-model` writes (reconciliation of the
-  two names resolved in plan; back-compat for `--lm-model` preserved).
+- **Add `--deep-model`** as the **canonical** name for the Deep model override,
+  mapping to the `lm_model` setting; **`--lm-model` is retained as a deprecated
+  back-compat alias** (see Decision D1 for the both-supplied precedence).
 
 ## Acceptance criteria
 
@@ -87,25 +116,38 @@ skip-not-fail; `[doc]` = documentation.
    `_settings_from_args(ns(scout_model="x")).scout_model == "x"`, and that **omitting**
    the flag yields the new default from AC1.
 4. **[unit]** Both `run` and `sweep` accept `--deep-model NAME` writing the `lm_model`
-   setting; `--lm-model` is retained as a back-compat alias to the same destination.
-   A test asserts both flags resolve to `lm_model`, and the precedence between them
-   (when both/neither are supplied) is deterministic per the plan's decision.
+   setting; `--lm-model` is retained as a deprecated alias to the same setting. Per
+   Decision D1, `--deep-model` wins **regardless of CLI order** when both are supplied
+   (reconciled in `_settings_from_args`, not via argparse positional last-wins). A test
+   asserts: each flag alone resolves to `lm_model`; both-supplied (in *both* orders)
+   resolves to the `--deep-model` value; neither → the new default from AC2.
 5. **[unit]** Override precedence for BOTH new flags: an explicit
    `--scout-model`/`--deep-model` beats the new default; no flag → the new default;
    the base `Settings()` is not mutated (frozen-replace contract). One `[unit]` test
    pins this for each flag.
-6. **[unit]** Drift guard: no live default in `harpyja/` still names the old unserved
-   scout tag (`mitkox/…RL-Q4_K_M`) or the `"local"` `lm_model` placeholder as a
-   `Settings` default. (Historical fixture data, e.g.
-   `scout/fixtures/fc_citation_false_raw_samples.txt`, is captured sample text, not a
-   default, and is explicitly excluded.)
+6. **[unit]** Drift guard, by **field-default introspection, not text grep**: assert
+   `Settings()` (or `dataclasses.fields(Settings)` defaults) no longer carries the old
+   unserved scout tag (`mitkox/…RL-Q4_K_M`) nor `"local"` for `lm_model`. Inspecting
+   resolved field values (never a source scan) is what keeps docstrings, comments,
+   tests, and historical fixtures (e.g. `scout/fixtures/fc_citation_false_raw_samples.txt`)
+   from tripping a false positive.
 7. **[integration]** Skip-not-fail live smoke: `swebench_eval run`/`sweep` invoked with
-   **no** model flags reaches a **served** Scout model — the out-of-box call does not
-   404 on Scout for an unserved-model reason. (Env-gated; skips when Ollama/served tags
-   are absent — never fails the suite.)
-8. **[doc]** The `settings.py` `scout_model` comment and the README model guidance name
-   the served Q8 default (and note the Deep default is provisional / "for now"). The
-   change is recorded in changelog/history as the B1 fix from spec 0015.
+   **no** model flags reaches a Scout model that is **present in the local Ollama served
+   set** — a *positive* membership check against Ollama's `/api/tags` for the resolved
+   `scout_model`, so the test cannot pass trivially when the endpoint is down. It
+   distinguishes the three cases — **missing Ollama** (skip), **missing tag** (skip
+   with a diagnostic), and **the old unserved tag** (would fail) — and asserts the
+   default is not the old tag. Env-gated; skips (never fails) when Ollama is absent.
+8. **[integration]** `run --help` and `sweep --help` each list `--scout-model` and
+   `--deep-model`, with `--lm-model` shown as the deprecated alias. A `[unit]`-level
+   parser-introspection test suffices (no live process).
+9. **[doc]** Every doc consumer of the flipped defaults is made consistent in this
+   change (blast-radius convention): the `settings.py` `scout_model` comment, the
+   README model guidance (name the served Q8 default; note the Deep default is
+   provisional / "for now"), AND the `_settings_from_args` docstring at
+   `swebench_eval.py:796` (which currently asserts the `lm_model` default is `"local"`
+   — factually wrong after the flip). Recorded in changelog/history as the B1 fix from
+   spec 0015.
 
 The load-bearing ACs are **1, 3, and 4**: AC1 makes the default *reach a served model*
 (the actual B1 fix); AC3/AC4 give the operator a CLI escape hatch so a future
@@ -122,16 +164,26 @@ served-model change never again requires a source edit or a Python workaround.
 - Choosing the *permanent* Deep model — the Qwen3-8B default is provisional ("for now").
 - Flipping any other `Settings` default (gate threshold, top_n, verify_method).
 
+## Decisions (resolved in review)
+
+- **D1 — `--deep-model` canonical, `--lm-model` deprecated alias; `--deep-model` wins
+  regardless of order.** Adopt `--deep-model` as the canonical Deep-model flag and keep
+  `--lm-model` as a **deprecated back-compat alias** (no break). When both are supplied,
+  `--deep-model` wins **irrespective of command-line order** — so the two flags get
+  **distinct argparse dests** reconciled in `_settings_from_args` (canonical beats
+  alias), NOT a shared dest with argparse positional last-wins. AC4 pins both orders.
+- **D2 — the Deep `lm_model` flip is intentional and global; blast radius accepted.**
+  `lm_model` is a `Settings` default, so flipping it changes **every bare `Settings()`
+  caller**: the eval `run`/`sweep` drivers AND the MCP server's `mode=auto` Deep tier.
+  This global flip is intended ("for now"). **Trade-off accepted:** against an Ollama
+  backend the old `"local"` placeholder is unserved anyway, so the global default is
+  already broken there; against a **llama.cpp `llama-server`** endpoint, `"local"` is a
+  benign don't-care and the Ollama-style Qwen tag will **not** resolve — so a llama.cpp
+  operator relying on the default would regress. The mitigation is the unchanged
+  override precedence (toml/env/`--deep-model`): a llama.cpp operator sets `lm_model`
+  explicitly. This trade-off is accepted rather than scoped-to-eval because the primary
+  supported backend for this eval arc is Ollama, and the default must be *served there*.
+
 ## Open questions
 
-1. **(resolve-in-plan)** `--deep-model` vs the existing `--lm-model`: adopt
-   `--deep-model` as canonical with `--lm-model` as a back-compat alias to the same
-   `lm_model` dest, or rename outright? Default proposal: **alias** (no break). Fix the
-   both-supplied precedence (argparse last-wins on a shared dest) explicitly so AC4 is
-   deterministic.
-2. **(resolve-in-plan)** Flipping `lm_model`'s default changes the **global** Deep
-   default (it affects the MCP server's `mode=auto`, not only the eval CLI). Confirm
-   this global flip is intended ("for now"), vs. scoping the Deep-served default to the
-   eval driver only. Default proposal: **global flip** — the placeholder `"local"` is
-   not served by Ollama either, so the global default is already broken against the
-   documented Ollama backend.
+_none — D1 and D2 resolved above during review._

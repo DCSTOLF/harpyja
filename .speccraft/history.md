@@ -2,6 +2,67 @@
 
 Append-only. Newest first.
 
+## 2026-07-01 — Spec 0016 (scout_model) shipped — the B1 serving/plumbing fix from 0015: two Settings defaults flipped to SERVED tags + a CLI override escape hatch
+
+**Spec:** specs/0016-scout-model/
+**Decision:** Close **B1** from spec 0015 (`live-run-findings.md` D1) — the out-of-box eval
+could not reach a served model — as a pure **serving/plumbing** fix: two `Settings` default
+VALUES flip to served Ollama tags and two CLI override flags are added, with **no** change to
+tier logic, the classifier, the citation format, or the gate's algorithm. Four durable points.
+(1) **A `Settings` default must name a SERVED model.** `scout_model` flips from the UNSERVED
+`hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest` (HTTP 404 on every Scout call → a
+fully-degraded run for a non-model reason) to the served `hf.co/dstolf/FastContext-1.0-4B-RL-Q8_0-GGUF:latest`;
+`lm_model` flips from the llama.cpp placeholder `"local"` to the served
+`hf.co/Qwen/Qwen3-8B-GGUF:latest`. An unserved default is an infrastructure defect, not a
+config preference — the same no-false-capability discipline applied to model *tags*. (2) **The
+scout flip is stated cross-subsystem coupling, not a hidden gate change (D-body caveat).**
+Because `verify_method="scout_model"` is the only shipped gate backend, `scout_model` does
+double duty — Scout-tier retrieval AND the model the Verification Gate scores citations with —
+so the flip changes *which served model the gate calls* (broken→served plumbing), which is
+deliberately DISTINCT from the still-open **B2** gate-*judging-logic* problem; the next OQ2 run
+must not conflate the two. (3) **The `lm_model` flip is intentionally GLOBAL, blast radius named
+and accepted (D2).** It is a bare `Settings` default, so it hits **every** `Settings()` caller —
+the eval `run`/`sweep` drivers AND the MCP server's `mode=auto` Deep tier — not only the eval
+CLI. Against Ollama (the primary supported backend for this arc) the old `"local"` was already
+unserved; against a llama.cpp `llama-server` endpoint `"local"` was a benign don't-care and the
+Ollama-style Qwen tag will not resolve, so a llama.cpp operator relying on the default regresses
+— mitigated by the unchanged override precedence (toml/env/`--deep-model`). The Qwen default is
+provisional ("for now"), not a long-term Deep choice. (4) **A canonical flag with a deprecated
+alias reconciles order-independently at the app layer, not via argparse positional last-wins
+(D1).** `run`/`sweep` gain `--scout-model` (the missing escape hatch — an operator can now name
+any served model without a source edit or the Python workaround the 0015 run needed) and the
+canonical `--deep-model`; `--lm-model` is kept as a **deprecated** back-compat alias on a
+**distinct argparse dest**, and `_settings_from_args` reconciles `deep = args.deep_model or
+args.lm_model` so the canonical flag wins regardless of CLI order. Every override is built via
+`dataclasses.replace` on a fresh `Settings()` — the frozen base-not-mutated contract preserved.
+**Why:** Spec 0015's OQ2 measurement degraded on every case for an infra reason — the default
+Scout model 404'd — and the CLI had no way to override it, so the out-of-box eval could not even
+reach a served model. This spec is the narrow prerequisite for re-attempting OQ2: make the
+default *served* and give the operator a source-edit-free escape hatch, without touching any tier
+or gate behavior. It does NOT claim any model is *good*, only that the default is *served*
+("served" is instance-relative — the claim is narrow: the new tags are in the documented required
+local Ollama set, replacing a tag served nowhere in it). (Repo memory: the dev host is now 32 GB
+and the dstolf Q8 SFT/RL tags are pulled locally, so the served-set claim is live-validated.)
+**Consequence — B1 closed; B2/B3 and the OQ2 re-run remain separate specs.** Shipped
+TDD-complete: **711 unit pass**, ruff clean; +11 new unit (2 config incl. an AC6 field-default
+**introspection** drift guard asserting `dataclasses.fields(Settings)` no longer carries the old
+unserved scout tag nor `"local"` — never a source grep; 9 CLI incl. the both-orders D1 test and
+`--help` introspection) plus the flipped `_FC_GGUF` constant driving the existing default test,
+and +1 integration `test_scout_model_default_present_in_ollama_served_set` — a **positive**
+`/api/tags` membership check with a three-way branch (Ollama unreachable → skip; tag absent →
+skip-with-diagnostic; the old unserved tag as default → FAIL), so it cannot pass trivially with
+the endpoint down; validated live (the Q8 default IS served). Docs made consistent in the same
+change (blast-radius convention): the `settings.py` `scout_model`/`lm_model` comments + the
+module-docstring toml example, the `_settings_from_args` docstring (no longer claims the Deep
+default is `"local"`), and the README model-guidance callout. **Out of scope / open follow-ups
+carried forward:** **B2** — the gate-as-judge false-escalation (the FastContext finder reused as a
+relevance judge rejecting correct citations, requests-1766/astropy-12907 — a separate gate-quality
+spec); **B3** — the model-gateway `urlopen` with no HTTP timeout (wedges a run indefinitely — a
+separate reliability spec); **re-attempting the OQ2 measurement** (a fresh spec after B1/B2/B3);
+choosing the **permanent** Deep model (the Qwen3-8B default is provisional); validating the Q8
+memory footprint / 8 GB-Q4 hardware floor; and, still open from Wave 2, **Wave-2.1 substring/fuzzy
+matching**.
+
 ## 2026-07-01 — Spec 0015 (OQ2) CLOSED as a FAILED RUN — implementation reverted, B0 salvaged, B1/B2/B3 seed new specs
 
 **Spec:** specs/0015-oq2/ (status: closed, outcome: failed-run)
