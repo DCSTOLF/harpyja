@@ -227,11 +227,36 @@ def test_settings_deep_loads_from_env(tmp_path, monkeypatch):
 
 def test_settings_has_verify_defaults():
     s = Settings()
-    assert s.verify_method == "scout_model"
+    # Spec 0018 (B2 fix / D1): the gate judge default flips from the OOD finder
+    # `scout_model` to the served instruct model — `verify_method` now selects it.
+    assert s.verify_method == "instruct_model"
     assert s.verify_threshold == 0.6
     assert s.verify_top_n == 3
     # Defaults appended last keep the float typed as a float.
     assert isinstance(s.verify_threshold, float)
+
+
+def test_settings_verify_method_default_is_instruct_model():
+    # Spec 0018 AC2: the DEFAULT flip is asserted via dataclass-field introspection
+    # (not a source grep), so this guards drift rather than matching a string in a file.
+    from dataclasses import fields
+
+    field = next(f for f in fields(Settings) if f.name == "verify_method")
+    assert field.default == "instruct_model"
+
+
+def test_verify_method_instruct_model_loads_clean():
+    # Spec 0018 AC1: the new instruct-model judge value constructs without error.
+    s = Settings(verify_method="instruct_model")
+    assert s.verify_method == "instruct_model"
+
+
+def test_verify_methods_membership_is_scout_and_instruct():
+    # Spec 0018 AC1 / D3: `verify_method` finally selects a judge; both the retained
+    # finder method and the new instruct method are accepted (nothing else).
+    from harpyja.config.settings import _VERIFY_METHODS
+
+    assert _VERIFY_METHODS == frozenset({"scout_model", "instruct_model"})
 
 
 def test_verify_threshold_coerces_float_from_toml(tmp_path, monkeypatch):

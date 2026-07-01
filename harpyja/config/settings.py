@@ -22,10 +22,13 @@ from harpyja.config.discovery import discover_config_path
 # Maps a Settings field name to its HARPYJA_* environment variable.
 _ENV_PREFIX = "HARPYJA_"
 
-# Spec 0008 — gate scoring backends that actually ship. Only `scout_model` is
-# implemented this wave; the seam is pluggable in code, but the config surface
-# rejects anything else loudly (no silent fall-through; no-false-capability).
-_VERIFY_METHODS = frozenset({"scout_model"})
+# Spec 0008 — gate scoring backends that actually ship; the seam is pluggable in
+# code, but the config surface rejects anything else loudly (no silent fall-through;
+# no-false-capability). Spec 0018 (B2 fix / D3): `verify_method` finally *selects* the
+# judge, so a second value ships — `instruct_model` (the new default) scores via the
+# served `lm_model`; `scout_model` (the OOD finder) is retained non-default for a
+# future finder-vs-instruct A/B.
+_VERIFY_METHODS = frozenset({"scout_model", "instruct_model"})
 
 
 class UnsupportedVerifyMethod(ValueError):
@@ -91,11 +94,16 @@ class Settings:
     scout_reasoning_effort: str = "none"
 
     # Spec 0008 (Wave 5) — Verification Gate (additive, appended last).
-    # `verify_method` selects the scoring backend; only `scout_model` ships (OQ1).
-    # `verify_threshold` is the pass cutoff on a normalized [0,1] score and
-    # `verify_top_n` bounds how many ranked citations the gate scores (OQ2/OQ3 —
-    # provisional defaults, tuned against the eval repo).
-    verify_method: str = "scout_model"
+    # `verify_method` selects the scoring backend; `verify_threshold` is the pass
+    # cutoff on a normalized [0,1] score and `verify_top_n` bounds how many ranked
+    # citations the gate scores (provisional defaults, tuned against the eval repo).
+    # Spec 0018 (B2 fix / D1): default flips from the OOD finder `scout_model` (which
+    # false-rejected correct citations — 0015 D2) to `instruct_model`, which scores via
+    # the served `lm_model`. NB the coupling: this makes `lm_model` a SECOND consumer —
+    # it already backs Deep (Tier 2), and now also backs the gate judge, so a future
+    # `lm_model` tune for Deep silently retunes the gate. `lm_model` is itself
+    # provisional (0016 "for now" Qwen3-8B), so the judge inherits a provisional default.
+    verify_method: str = "instruct_model"
     verify_threshold: float = 0.6
     verify_top_n: int = 3
 

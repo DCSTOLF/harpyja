@@ -106,9 +106,20 @@ memory or the model's budget.
 
 ### 2.7 Verification Gate
 The cheap insurance that makes `auto` trustworthy. After Tier 1 returns, the gate reads the actual cited
-lines and scores them against the query — by a small LLM judge call and/or embedding similarity, whichever
-the profile enables. Below threshold → escalate. This catches the dangerous case of a confident-but-wrong
-citation, which is worse than no citation because the agent will trust it.
+lines and scores them against the query with an LLM judge call. Below threshold → escalate. This catches the
+dangerous case of a confident-but-wrong citation, which is worse than no citation because the agent will
+trust it.
+
+`verify_method` selects the judge (spec 0018 / B2 fix). The default `instruct_model` scores via the served
+`lm_model` — an instruction-following model that is in-distribution for "rate 0.0–1.0" — replacing the
+earlier reuse of the `scout_model` *finder* fine-tune, which was out-of-distribution as a scorer and
+false-rejected correct citations (0015 D2). The score parse is strict: a reply that is not a bare `[0,1]`
+number (a line number, an out-of-range value, or prose) is **non-conforming** and degrades the gate rather
+than fabricating a score — a distinct `ScoreParseError` the gate turns into a graceful, non-conformance-named
+degrade (the 0014/0017 visibility convention). The retained `scout_model` method stays available (non-default)
+as the finder-vs-instruct A/B baseline. NB `lm_model` now backs both Deep (Tier 2) and the gate judge — a
+tune of it for one retunes the other. This is a judging-*mechanism* fix; calibrating `verify_threshold` over
+the new score distribution is a separate concern (the OQ2 re-run).
 
 ### 2.8 Model Gateway
 A single abstraction over the local OpenAI-compatible endpoint (llama.cpp's `llama-server` or Ollama). Holds

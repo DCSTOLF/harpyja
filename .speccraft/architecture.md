@@ -13,8 +13,11 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    matrix — the **single source of truth** both `_locate_auto` and the tests read) →
    `_locate_auto` executes the planned ladder (seed → Scout → `gate` → Deep), where
    `gate` (`VerificationGate.verify`) reads the cited lines back from disk, scores the
-   top-N via an injected `Judge` (default `make_scout_model_judge`, routed through
-   `ModelGateway.complete`), and decides whether the trailing Tier-2 step runs — so the
+   top-N via an injected `Judge` selected by `settings.verify_method`
+   (`select_judge`/`_JUDGE_FACTORIES` co-located in `gate.py`; default `instruct_model` →
+   `make_instruct_judge` over the served `lm_model`, an in-distribution 0–1 scorer, spec 0018;
+   the OOD `scout_model` finder judge retained non-default as the A/B baseline), routed through
+   `ModelGateway.complete`, and decides whether the trailing Tier-2 step runs — so the
    realized `tiers_run` is a prefix of the planned ladder. `wiring.build_verification_gate`
    is the production `gate_factory`. Stable gate flags: `gate-low-confidence` /
    `gate-scoring-failed` / `gate-skipped:scout-empty` / `gate-skipped:no-line-range`
@@ -23,7 +26,18 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    not a verified pass; `locate.py` escalates if a tier remains in `auto` else carries it
    tagged, never at high confidence — distinct from low-confidence / scoring-failed). The
    Citation Formatter survives a line-less span un-merged (sorted after lined spans on a
-   None-safe rank key, no fabricated range).
+   None-safe rank key, no fabricated range). As of spec 0018 (B2 fix) the judge score parse
+   is **strict** and **non-fabricating**: `_parse_score -> float | None` accepts only a bare
+   `[0,1]` score (an optional `Score:` label / single trailing period tolerated); a line
+   number, out-of-range value, or prose returns `None`, and the judge raises a typed
+   `ScoreParseError` (a `ValueError` subclass) so the gate's existing `except` degrades
+   (`failed=True`) rather than fabricating a `1.0` pass — whole-gate degrade per D7, checked
+   in `verify` **before** the generic branch (ScoreParseError ⊂ ValueError) and named with one
+   distinct WARNING (no double-emit, distinct from the 0017 timeout WARNING). `_score_or_raise`
+   is shared by both judge factories so they degrade identically. `verify_method` now backs
+   `lm_model` as a SECOND consumer alongside Deep (Tier 2) — a tune of one retunes the other.
+   This is a judging-*mechanism* fix; calibrating `verify_threshold` over the new score
+   distribution is the OQ2 re-run. See history.md 2026-07-01 (spec 0018).
 3. `harpyja/index/` — file walker, ranked JSONL manifest, incremental hashing.
    Live as of Wave 1: `walk`/`ignore` (pathspec, no `git`), `classify`, `prior`,
    `hash`, `manifest` (atomic same-dir temp + `os.replace`, per-file `degraded`

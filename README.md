@@ -65,6 +65,13 @@ brutally specialized subsystem that does one thing extremely well.
   > served by Ollama → HTTP 404 on every call). The default Deep model (`lm_model`) is provisionally
   > `hf.co/Qwen/Qwen3-8B-GGUF:latest` ("for now"). Override either from the eval CLI with
   > `--scout-model` / `--deep-model` (`run`/`sweep`), or via `harpyja.toml` / `HARPYJA_*`.
+  >
+  > **Verification-gate judge (spec 0018 / B2 fix):** `verify_method` defaults to `instruct_model`, which
+  > scores citation relevance with `lm_model` (an in-distribution instruct model) instead of reusing the
+  > `scout_model` finder as a scorer — the finder was out-of-distribution and false-rejected correct
+  > citations. NB this makes `lm_model` a second consumer (Deep **and** the gate judge). The retained
+  > `scout_model` method is still selectable (non-default). This fixes the judging *mechanism* only;
+  > tuning `verify_threshold` for the new score distribution is deferred to the OQ2 re-run.
 
 ## How it works
 

@@ -2,6 +2,89 @@
 
 Append-only. Newest first.
 
+## 2026-07-01 — Spec 0018 (judge) shipped — the B2 fix from 0015: the Verification Gate's relevance judge moves off the OOD `scout_model` finder onto the in-distribution `lm_model` instruct model, with a strict non-fabricating score parse
+
+**Spec:** specs/0018-judge/
+**Decision:** Close **B2** from spec 0015 (`live-run-findings.md` D2) — the Verification Gate
+reused `make_scout_model_judge` (over `scout_model`, a FastContext citation-*finder* fine-tune)
+as a 0–1 relevance *scorer* via a plain chat prompt, and `_parse_score` grabbed the first number
+anywhere and clamped to `[0,1]`, so the gate scored **correct** citations as noise and
+false-rejected them (astropy-12907 cited `separable.py`, the real bug site, and got
+`gate-low-confidence`) — as a **gate-quality / judging-mechanism** fix: no tier logic, no gate
+calibration, no escalation policy, no classifier, no citation format touched. Six durable points.
+(1) **The judge must be in-distribution for the task it is asked to do — score relevance, not find
+citations.** The gate now judges with `make_instruct_judge` over `settings.lm_model` (served
+Qwen3-8B instruct, in-distribution for "rate 0.0–1.0"), which the 0016 B1 fix made available by
+flipping `lm_model` from the `"local"` placeholder to a served instruct model; the OOD finder
+judge is **retained non-default** (D5) as the exact finder-vs-instruct A/B baseline the OQ2 re-run
+will want, so nothing has to be resurrected. (2) **A best-effort scorer degrades on a
+non-conforming reply — it never fabricates a score from noise.** `_parse_score` becomes strict
+(`float | None`, anchored single-match `^\s*(?:score\s*:\s*)?(\d+(?:\.\d*)?|\.\d+)\s*\.?\s*$`,
+range-checked to `[0,1]`): a bare line number (`219`, the exact B2 regression — must NOT clamp to
+`1.0`), an out-of-range value (`1.2`, `-0.1`), or prose-after-number (`0, because…`, D6) all
+return `None`. A `None` raises a typed `ScoreParseError`, the gate's *existing* `except →
+GateOutcome(failed=True)` fires (the same "make the un-raisable raisable" move as 0017/B3), and the
+gate degrades — **never** a fabricated `1.0` pass or `0.0` reject. The elegant unifier folded at
+review: an out-of-range number and a line number are the same rule (both non-conforming → `None`),
+so the range check *is* the B2 fix. On ambiguity the gate prefers **degrade-and-escalate over
+reject** (the 0015 harm was false *rejection*). `_parse_score` is shared plumbing via
+`_score_or_raise`, so the retained finder judge degrades **identically** (AC13) and cannot silently
+keep the old fabricating behavior. (3) **A typed-degrade cause that subclasses another caught type
+must be isinstance-checked FIRST.** `ScoreParseError ⊂ ValueError`, so `verify`'s `except` tests it
+**before** the 0017 timeout branch and the generic branch — otherwise the generic branch would
+catch it and it would degrade under the wrong name (and double-emit). It emits **exactly one**
+distinct WARNING naming the non-conformance, with the generic "scoring failed" message asserted
+**absent** (AC7, the 0017 double-emit lesson, asserted on the record message not `caplog.text`) and
+distinct from the timeout WARNING — extending the 0014/0017 log-signal visibility convention, no
+`GateOutcome` schema change. (4) **`verify_method` finally becomes a real selector.**
+`_VERIFY_METHODS = {"scout_model", "instruct_model"}`, default flips to `instruct_model`;
+`select_judge`/`_JUDGE_FACTORIES` (co-located in `gate.py` so the production builder and the
+`verify()` fallback share one source of truth) dispatch, and `build_verification_gate`
+(`wiring.py`) routes on it — honoring the 0008 pluggable-seam intent it had only nominally used.
+D7: a single non-conforming reply degrades the **whole** gate for that `verify` call (a model not
+following the bare-number instruction is suspect for the batch); per-span abstain is a deferred
+refinement. (5) **Stated coupling — `lm_model` is now dual-consumer.** It already backed Deep
+(Tier 2); it now **also** backs the gate judge, so a future `lm_model` tune for Deep silently
+retunes the gate — the same one-value-two-subsystems situation the repo codified for `scout_model`
+in 0016, named in the `settings.py` comment, `ARCHITECTURE.md` §2.7, and the README. `lm_model` is
+itself provisional (0016 "for now" Qwen3-8B), so the judge inherits a provisional default.
+(6) **Honesty (no-false-capability): mechanism fixed ≠ accuracy proven.** This fixes the judging
+*mechanism*; it does **not** by itself demonstrate astropy-12907 now passes end-to-end — that needs
+a calibrated `verify_threshold` over the new instruct-model score *distribution*, which is the OQ2
+re-run's job. The `0.6` default is now an untested operating point; AC10 (correct-citation-passes)
+and AC11 (live smoke) are honestly disclaimed as **plumbing/wiring, not accuracy** claims. The
+changelog says "B2 *mechanism* fixed; accuracy deferred to the OQ2 re-run," **never** "B2 closed"
+or "false-rejection eliminated."
+**Why:** Spec 0015's OQ2 measurement could not be trusted because the gate's relevance signal was
+noise — calibrating `verify_threshold`/`verify_top_n` over a dysfunctional judge would measure gate
+dysfunction, not gate tuning (0015 AC5 `gate_quality_confounded`). B2 is the last of the three 0015
+blockers; with the judge scoring in-distribution and never fabricating, the gate's operating point
+becomes a meaningful thing to calibrate. It makes no model better; it stops the gate from *asking
+the wrong model the wrong way* and then trusting a fabricated number.
+**Consequence — B2 mechanism fixed; the 0015 blocker sequence is now B1(0016)+B2(0018)+B3(0017)
+all fixed, so the OQ2 re-run is unblocked (a fresh spec).** Shipped TDD-complete: **757 unit pass**
+(+32 over the 725 baseline), ruff clean; T17 live instruct-judge smoke **PASSED live**
+(skip-not-fail, explicitly a wiring/parse smoke, not an accuracy claim). Load-bearing proofs: AC5's
+executable boundary table (`219`/`Score: 219`/`1.2`/`-0.1`/`0, because…`/`""`/`n/a` → `None`, the
+regression that must not clamp), AC6 (a `219` reply degrades `failed=True` with `score != 1.0`),
+AC7 (exactly one non-conformance WARNING, generic absent), AC13 (both judges degrade identically),
+and AC10 (the inverted-harm regression — a correctly-scored correct citation now passes, plumbing
+not accuracy). Docs made consistent in the same change (blast-radius convention): `settings.py`
+comment, `gate.py` docstrings, `ARCHITECTURE.md` §2.7, README config note — each stating this is a
+judging-*mechanism* fix, not a calibration change. **Deviation:** none material; T12's
+`_score_or_raise` extraction was folded into T6 (both judges share it from first landing).
+**Out of scope / follow-ups carried forward:** the **OQ2 re-run** (now unblocked — calibrate
+`verify_threshold` over the new instruct-model score distribution, and demonstrate astropy-12907
+passes end-to-end; the accuracy proof B2 defers); **per-span non-conformance abstain** (D7 chose
+whole-gate degrade; scoring the conforming spans and dropping only the non-conforming one is a
+deferred refinement if OQ2 shows whole-gate degrade costs recall); a **deterministic lexical judge**
+(`verify_method="lexical"`, considered, not chosen — a plausible future method behind the same
+selector); **constrained-decoding score extraction** (logit-bias / single-token numeric forcing, a
+parse-hardening beyond a strict regex); the **permanent `lm_model` choice** (Qwen3-8B is
+provisional); **model footprint / co-residency** (the gate now calls `lm_model` alongside Scout's
+`scout_model` — Ollama model-swap thrash on a constrained host, tracked with the Q8 / 8 GB work);
+and, still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-07-01 — Spec 0017 (gateway_http_timeout) shipped — the B3 fix from 0015: a finite `urlopen(timeout=)` makes the un-raisable raisable so the existing gate degrade can fire
 
 **Spec:** specs/0017-gateway-http-timeout/

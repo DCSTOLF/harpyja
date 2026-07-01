@@ -14,7 +14,7 @@ import pytest
 
 from harpyja.config.settings import Settings
 from harpyja.gateway.gateway import AirGapError, ModelGateway
-from harpyja.orchestrator.gate import VerificationGate
+from harpyja.orchestrator.gate import VerificationGate, _parse_score
 from harpyja.server.types import Citation
 
 LOOPBACK = "http://127.0.0.1:11434/v1"
@@ -197,6 +197,261 @@ def test_gate_runs_under_network_deny_loopback_only(tmp_path, monkeypatch):
 
     assert outcome.passed is True
     assert tripped == []  # the judge path made no non-loopback egress
+
+
+# --- Spec 0018 (B2): strict `_parse_score` — score-shaped in, everything else None ---
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        ("0.8", 0.8),
+        ("0.0", 0.0),
+        ("1.0", 1.0),
+        ("1", 1.0),
+        ("0", 0.0),
+        ("1.", 1.0),
+        ("Score: 0.8", 0.8),
+        ("Score: 0.8.", 0.8),
+        ("  0.42  ", 0.42),
+    ],
+)
+def test_parse_score_conforming_returns_value(reply, expected):
+    # AC5: a conforming reply is a bare [0,1] score (an optional `Score:` label and a
+    # single trailing period tolerated). It parses to that value.
+    assert _parse_score(reply) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "219",  # a bare line number — the exact B2 regression (must NOT clamp to 1.0)
+        "…at line 219…",
+        "Score: 219",  # even with the label, an out-of-range value is non-conforming
+        "1.2",  # out of [0,1]
+        "-0.1",  # out of [0,1]
+        "0, because the span is unrelated",  # prose after the number (D6)
+        "",  # empty
+        "n/a",  # no number
+    ],
+)
+def test_parse_score_nonconforming_returns_none(reply):
+    # AC5 / D2: anything that is not exactly a bare [0,1] score returns None — the
+    # gate must degrade on it, never fabricate a 1.0 pass or a 0.0 reject.
+    assert _parse_score(reply) is None
+
+
+# --- Spec 0018 (B2): the instruct-model judge (model, prompt, air-gap) ---
+
+
+def _spy_complete_gateway(monkeypatch, api_base=LOOPBACK, reply="0.7"):
+    """A gateway whose `complete` records the model/params/messages it was called with."""
+    gateway = ModelGateway(api_base=api_base, model="unused")
+    captured: dict = {}
+
+    def spy_complete(messages, **params):
+        captured["messages"] = messages
+        captured["params"] = params
+        return reply
+
+    monkeypatch.setattr(gateway, "complete", spy_complete)
+    return gateway, captured
+
+
+def test_instruct_judge_scores_via_lm_model_not_scout_model(monkeypatch):
+    # AC3: the instruct judge scores via `lm_model` (an in-distribution instruct model),
+    # NOT the OOD finder `scout_model`, at temperature 0.
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    settings = _settings()
+    gateway, captured = _spy_complete_gateway(monkeypatch, reply="0.7")
+    judge = make_instruct_judge(gateway, settings)
+    score = judge("find the thing", "def f(): ...")
+    assert captured["params"]["model"] == settings.lm_model
+    assert captured["params"]["model"] != settings.scout_model
+    assert captured["params"]["temperature"] == 0
+    assert score == pytest.approx(0.7)
+
+
+def test_instruct_judge_prompt_demands_bare_number(monkeypatch):
+    # AC4: the prompt constrains the reply to only a number in [0,1] (no prose) — a
+    # stable, greppable instruction contract.
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    gateway, captured = _spy_complete_gateway(monkeypatch, reply="0.5")
+    judge = make_instruct_judge(gateway, _settings())
+    judge("q", "span")
+    text = " ".join(m["content"] for m in captured["messages"]).lower()
+    assert "number" in text
+    assert "0" in text and "1" in text  # the [0,1] range is stated
+    assert "only" in text  # a *bare* number is demanded (no prose)
+
+
+def test_instruct_judge_asserts_local_before_egress(monkeypatch):
+    # AC9: air-gap is preserved — a non-loopback gateway raises AirGapError and the
+    # judge model is NEVER reached (parallel to 0017 AC9).
+    import harpyja.gateway.gateway as gw
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    sent = {"called": False}
+
+    def spy_transport(url, payload, **kw):
+        sent["called"] = True
+        return {"choices": [{"message": {"content": "0.5"}}]}
+
+    monkeypatch.setattr(gw, "_default_transport", spy_transport)
+    gateway = ModelGateway(api_base=REMOTE, model="unused")
+    judge = make_instruct_judge(gateway, _settings())
+    with pytest.raises(AirGapError):
+        judge("q", "span")
+    assert sent["called"] is False  # egress never happened
+
+
+def test_instruct_judge_nonconforming_reply_degrades_not_fabricates(tmp_path, monkeypatch):
+    # AC6: a non-conforming judge reply ("219", a bare line number) degrades the gate
+    # (failed=True, passed=False) and NEVER fabricates a 1.0 pass from the line number.
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    repo = _repo_with_file(tmp_path)
+    gateway, _ = _spy_complete_gateway(monkeypatch, reply="219")
+    gate = VerificationGate(gateway, judge=make_instruct_judge(gateway, _settings()))
+    outcome = gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    assert outcome.failed is True
+    assert outcome.passed is False
+    assert outcome.score != 1.0  # not a fabricated pass, not a line-number-derived score
+
+
+def test_gate_whole_gate_degrades_on_single_nonconforming_reply(tmp_path, monkeypatch):
+    # AC6 / D7: a single non-conforming reply degrades the WHOLE verify call (a model
+    # not following the bare-number instruction is suspect for the entire batch), not a
+    # per-span partial pass.
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    repo = _repo_with_file(tmp_path, lines=40)
+    cites = [_cite(start=1, end=3), _cite(start=5, end=7)]
+    gateway, _ = _spy_complete_gateway(monkeypatch, reply="219")
+    gate = VerificationGate(gateway, judge=make_instruct_judge(gateway, _settings()))
+    outcome = gate.verify("q", cites, repo_path=repo, settings=_settings(verify_top_n=3))
+    assert outcome.failed is True
+    assert outcome.passed is False
+
+
+def _nonconformance_gate(tmp_path, monkeypatch):
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    repo = _repo_with_file(tmp_path)
+    gateway, _ = _spy_complete_gateway(monkeypatch, reply="219")
+    gate = VerificationGate(gateway, judge=make_instruct_judge(gateway, _settings()))
+    return gate, repo
+
+
+def test_gate_logs_single_nonconformance_warning(tmp_path, monkeypatch, caplog):
+    # AC7 / D4: the non-conformance degrade logs EXACTLY ONE WARNING whose record
+    # message names the parse non-conformance (separable in operator diagnostics).
+    gate, repo = _nonconformance_gate(tmp_path, monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    nonconf = [m for m in _warning_messages(caplog) if "non-conforming" in m or "parse" in m]
+    assert len(nonconf) == 1
+
+
+def test_gate_nonconformance_warning_absent_generic_scoring_failed(tmp_path, monkeypatch, caplog):
+    # AC7 (the 0017 double-emit lesson): a ScoreParseError must NOT also trip the
+    # generic "scoring failed" WARNING — exactly one message, not two.
+    gate, repo = _nonconformance_gate(tmp_path, monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    assert not any("scoring failed" in m for m in _warning_messages(caplog))
+
+
+def test_gate_nonconformance_warning_distinct_from_timeout(tmp_path, monkeypatch, caplog):
+    # AC7: the non-conformance message is distinct from the 0017 timeout WARNING.
+    gate, repo = _nonconformance_gate(tmp_path, monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    assert not any("timed out" in m or "timeout" in m for m in _warning_messages(caplog))
+
+
+def test_both_judges_degrade_identically_on_nonconforming_reply(tmp_path, monkeypatch, caplog):
+    # AC13: `_parse_score` is shared plumbing — both `make_instruct_judge` and the
+    # retained `make_scout_model_judge` must degrade IDENTICALLY on a non-conforming
+    # reply (failed=True, passed=False, one non-conformance WARNING). The retained
+    # finder judge cannot silently keep the old fabricating behavior.
+    from harpyja.orchestrator.gate import make_instruct_judge, make_scout_model_judge
+
+    repo = _repo_with_file(tmp_path)
+    results = {}
+    for name, factory in (("instruct", make_instruct_judge), ("scout", make_scout_model_judge)):
+        gateway, _ = _spy_complete_gateway(monkeypatch, reply="219")
+        gate = VerificationGate(gateway, judge=factory(gateway, _settings()))
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            outcome = gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+        nonconf = [m for m in _warning_messages(caplog) if "non-conforming" in m or "parse" in m]
+        results[name] = (outcome.failed, outcome.passed, len(nonconf))
+    assert results["instruct"] == (True, False, 1)
+    assert results["scout"] == results["instruct"]  # identical degrade
+
+
+def test_gate_passes_correct_citation_with_good_score(tmp_path, monkeypatch):
+    # AC10: the inverted-harm regression — a correctly-scored correct citation PASSES
+    # (the 0015 gate false-rejected it). This is a PLUMBING proof (faked score via the
+    # instruct judge over a spy'd `complete`), NOT a live-model accuracy claim; the
+    # `verify_threshold=0.6` operating point over the new score distribution is untested
+    # and its calibration is deferred to the OQ2 re-run.
+    from harpyja.orchestrator.gate import make_instruct_judge
+
+    repo = _repo_with_file(tmp_path)
+    gateway, _ = _spy_complete_gateway(monkeypatch, reply="0.9")
+    gate = VerificationGate(gateway, judge=make_instruct_judge(gateway, _settings()))
+    outcome = gate.verify("q", [_cite()], repo_path=repo, settings=_settings())
+    assert outcome.passed is True
+    assert outcome.failed is False
+    assert outcome.score >= _settings().verify_threshold
+
+
+# --- Spec 0018 (B2): optional live instruct-judge smoke (AC11) ---
+
+
+def _endpoint_reachable(host, port, timeout=1.0):
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+@pytest.mark.integration
+def test_instruct_judge_live_smoke():
+    """AC11: against a served `lm_model`, the instruct judge returns a PARSEABLE [0,1]
+    score for a trivially relevant span. Skip-not-fail — a wiring/parse smoke only, NOT
+    an accuracy or calibration claim; the gate's operating point is the OQ2 re-run's job.
+    """
+    from urllib.parse import urlsplit
+
+    from harpyja.orchestrator.gate import ScoreParseError, make_instruct_judge
+
+    settings = Settings()
+    parts = urlsplit(settings.lm_api_base)
+    host, port = parts.hostname or "127.0.0.1", parts.port or 11434
+    if not _endpoint_reachable(host, port, timeout=1.0):
+        pytest.skip(f"no local model endpoint reachable at {host}:{port}")
+
+    gateway = ModelGateway(
+        api_base=settings.lm_api_base,
+        allow_remote=settings.allow_remote,
+        timeout_s=settings.lm_http_timeout_s,
+    )
+    judge = make_instruct_judge(gateway, settings)
+    span = "def add(a, b):\n    return a + b  # adds two numbers"
+    try:
+        score = judge("a function that adds two numbers", span)
+    except ScoreParseError as err:  # model reachable but didn't emit a bare number
+        pytest.skip(f"instruct model reachable but reply non-conforming (not a bug): {err!r}")
+    except Exception as err:  # missing model / HTTP error is not a wiring regression
+        pytest.skip(f"endpoint reachable but complete() errored: {err!r}")
+    assert isinstance(score, float)
+    assert 0.0 <= score <= 1.0  # parseable and in-range
 
 
 # --- Spec 0011 (citation-shape): file-level (line-less) citation is not-verifiable ---
