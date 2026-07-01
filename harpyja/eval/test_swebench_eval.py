@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+from pathlib import Path
 
 import pytest
 
@@ -256,6 +258,75 @@ def _convert_args(out_dir):
     return argparse.Namespace(
         out_dir=str(out_dir), sample=0, per_repo=None, seed=0, verbose=False
     )
+
+
+# --- Spec 0015 (AC8): provision worktree-path defect surfaced at the 12-repo scale ---
+#
+# `git worktree add` ran with cwd=<clone> and a RELATIVE worktree path (because the
+# Makefile's --work-dir is relative), so git created the tree UNDER the clone while the
+# resolved fixture recorded `wt.resolve()` (relative to the process cwd) — every
+# recorded repo path pointed at a non-existent dir. Network-free repro via a local repo.
+
+def _init_local_git_repo(path) -> str:
+    import subprocess
+
+    path.mkdir(parents=True, exist_ok=True)
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    def run(*a):
+        return subprocess.run(["git", *a], cwd=path, check=True,
+                              capture_output=True, env={**os.environ, **env})
+
+    run("init", "--quiet")
+    (path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "--quiet", "-m", "init")
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=path, check=True,
+                          capture_output=True).stdout.decode().strip()
+
+
+def test_provision_relative_work_dir_resolves_to_real_worktrees(tmp_path, monkeypatch):
+    import os as _os
+    import subprocess
+
+    import harpyja.eval.swebench_eval as se
+
+    source = tmp_path / "source_repo"
+    commit = _init_local_git_repo(source)
+
+    fixtures = tmp_path / "fix"
+    fixtures.mkdir()
+    se._write_jsonl(fixtures / RAW_NAME, [{
+        "case_id": "o__n-1", "repo": "o/n", "base_commit": commit,
+        "query": "q", "expected_spans": [{"path": "mod.py", "start": 1, "end": 2}],
+        "classification": "point",
+    }])
+
+    # Clone offline from the local source instead of GitHub.
+    def fake_clone(clone, owner_name):
+        if (clone / ".git").exists():
+            return
+        subprocess.run(["git", "clone", "--quiet", str(source), str(clone)], check=True)
+
+    monkeypatch.setattr(se, "_ensure_clone", fake_clone)
+
+    # The bug needs a RELATIVE --work-dir from a process cwd that is NOT the clone dir.
+    base = tmp_path / "cwd"
+    base.mkdir()
+    monkeypatch.chdir(base)
+    se.cmd_provision(argparse.Namespace(
+        fixtures=str(fixtures), work_dir="relwork",  # relative — the trigger
+    ))
+
+    resolved = se._read_jsonl(fixtures / se.RESOLVED_NAME)
+    assert len(resolved) == 1
+    repo_path = resolved[0]["repo"]
+    # The load-bearing assertion: the RECORDED path must be a real checked-out worktree
+    # (with the file the runner will scan), not a phantom path git put elsewhere.
+    assert _os.path.isdir(repo_path), f"recorded repo path does not exist: {repo_path}"
+    assert (Path(repo_path) / "mod.py").is_file()
 
 
 def test_convert_with_mocked_hf_emits_raw_jsonl(tmp_path, monkeypatch):

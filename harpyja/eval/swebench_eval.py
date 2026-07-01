@@ -311,7 +311,11 @@ def cmd_provision(args: argparse.Namespace) -> None:
         sys.exit(f"{raw} not found — run `convert` first.")
     cases = _read_jsonl(raw)
 
-    work = Path(args.work_dir)
+    # Resolve to absolute: `_ensure_worktree` runs `git worktree add` with cwd=<clone>,
+    # so a RELATIVE worktree path (e.g. the Makefile's --work-dir eval_work) would be
+    # created UNDER the clone while the resolved fixture records `wt.resolve()` (relative
+    # to the process cwd) — the two diverge and every recorded path 404s (spec 0015 B0).
+    work = Path(args.work_dir).resolve()
     clones = work / "clones"
     trees = work / "worktrees"
     clones.mkdir(parents=True, exist_ok=True)

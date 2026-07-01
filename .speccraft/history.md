@@ -2,6 +2,42 @@
 
 Append-only. Newest first.
 
+## 2026-07-01 — Spec 0015 (OQ2) CLOSED as a FAILED RUN — implementation reverted, B0 salvaged, B1/B2/B3 seed new specs
+
+**Spec:** specs/0015-oq2/ (status: closed, outcome: failed-run)
+**Decision:** The live `mode=auto` OQ2 measurement over the 12-repo SWE-bench subset could
+NOT be completed, so the spec is closed for its **findings**, not its deliverable. AC1 was
+partially proven (a 3-case smoke ran `mode=auto` to completion with no crash — the 0014 Deep
+`AdapterParseError` fix holds at scale), but the full N=50 run never finished and AC2–AC7
+were not delivered. Rather than carry un-exercised measurement code, the **entire OQ2
+implementation was reverted to HEAD (7aedad8)** — typed-outcome enum + precedence, per-point
+degrade gate, gate-confound threshold, report schema bump `0013/1→0014/1` +
+`combined_degrade_rate`, sweep provenance, sibling-driver wiring, `run_oq2_sweep`, `make
+oq2-full`, and their tests. **One incidental fix was salvaged (B0):** provisioning ran `git
+worktree add` with `cwd=<clone>` against a *relative* `--work-dir`, so git created worktrees
+under the clone while the resolved fixture recorded `wt.resolve()` (process-cwd-relative) —
+every path 404'd; fix is `cmd_provision`: `Path(args.work_dir).resolve()`, locked by
+`test_provision_relative_work_dir_resolves_to_real_worktrees` (network-free, local git repo).
+**Three blockers explain the failure and seed follow-up specs:** **B1** — `Settings().scout_model`
+defaults to `hf.co/mitkox/FastContext-1.0-4B-RL-Q4_K_M-GGUF:latest`, which is not served (HTTP
+404), and the CLI has no `--scout-model` flag, so the out-of-box eval degrades on every case
+for an infra reason. **B2** — the verification gate reuses `scout_model` (a citation-FINDER
+fine-tune) as a relevance JUDGE via a plain "reply 0–1" prompt; it scored astropy-12907's
+CORRECT citation (`separable.py`, the real bug site) as `gate-low-confidence`, and
+`_parse_score` grabs the first number in the reply (a line number → clamps to 1.0). This IS
+the AC4 / requests-1766 gate-false-escalation phenomenon; its fix was always scoped as a
+separate gate-quality spec. **B3** — `gateway.py::_default_transport` calls `urlopen(req)`
+with no `timeout=`, so a stalled/torn-down Ollama connection (FastContext Q8 on a ~1,880-file
+repo, or a socket dropped across sleep/500) wedges the run forever (observed 2.5 h at 0% CPU
+with `caffeinate` on); related, `run_swebench`'s `ThreadPoolExecutor(max_workers=1)` per-case
+timeout cannot kill the blocked worker so cases deadlock behind it. This is why no full run
+completed. **Verified NOT bugs (don't re-chase):** `parse_final_answer` parses real Q8-RL
+output correctly; suffix recovery is wired (`scout/wiring.py:46`). Lesson: this measurement
+needed the serving/robustness layer (B1/B3) hardened and the gate quality (B2) understood
+BEFORE a multi-hour live sweep was attempted — the sweep machinery was premature. Detail in
+`specs/0015-oq2/live-run-findings.md` + `changelog.md`. **700 unit pass** after revert, ruff
+clean.
+
 ## 2026-06-30 — Deep AdapterParseError → typed parse-error degrade shipped — the second typed-degrade floor, with first-class visibility (the rule promoted to a standing convention)
 
 **Spec:** specs/0014-adapterparseerror/
