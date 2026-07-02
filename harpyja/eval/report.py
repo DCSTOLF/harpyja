@@ -23,7 +23,23 @@ from pathlib import Path
 
 # Bumped for spec 0011 (additive scout-degrade-visibility fields; older shapes
 # still validate because build_report default-populates the new fields).
-SCHEMA_VERSION = "0013/1"
+# Spec 0019 bumps 0013/1 -> 0014/1: gate-confound outcome + ceiling + instruct/scout
+# A/B false-escalation twins (all additive, appended last-with-defaults).
+SCHEMA_VERSION = "0014/1"
+
+# Spec 0019 (D2): the gate-confound + A/B aggregate field names, declared ONCE here
+# so the recommend→report field set has a single anti-drift source (a drift-guard
+# test asserts each has a default). Rates default null, counts default 0, flag False.
+_GATE_CONFOUND_AGG_FIELDS = (
+    "gate_confounded",
+    "gate_confounded_measured_rate",
+    "gate_false_escalation_instruct",
+    "gate_false_escalation_instruct_count",
+    "gate_false_escalation_instruct_total",
+    "gate_false_escalation_scout",
+    "gate_false_escalation_scout_count",
+    "gate_false_escalation_scout_total",
+)
 
 # D7 — enumerated required field names (the pinned contract).
 _RUN_METADATA_FIELDS = (
@@ -47,6 +63,8 @@ _RUN_METADATA_FIELDS = (
     "malformed_skipped_count",
     # spec 0011 — additive: the eval-only degraded-dominated threshold in effect.
     "degraded_dominated_threshold",
+    # spec 0019 — additive: the gate-confound ceiling in effect (eval-only knob).
+    "gate_false_escalation_ceiling",
 )
 _SETTINGS_SNAPSHOT_FIELDS = ("verify_method", "verify_threshold", "verify_top_n")
 _CASE_FIELDS = (
@@ -108,6 +126,9 @@ _AGGREGATE_FIELDS = (
     # degrades (counted once), while these stay separate for attribution.
     "deep_degrade_count",
     "deep_degrade_rate",
+    # spec 0019 — additive: gate-confound outcome + instruct/scout A/B false-escalation
+    # twins (declared once in _GATE_CONFOUND_AGG_FIELDS). Rates null-with-zero-count.
+    *_GATE_CONFOUND_AGG_FIELDS,
 )
 
 # Schema-stable defaults for the additive fields, injected by build_report when a
@@ -120,6 +141,7 @@ _RUN_METADATA_DEFAULTS = {
     "new_file_only_excluded_count": 0,
     "malformed_skipped_count": 0,
     "degraded_dominated_threshold": None,  # spec 0011 (eval-only knob in effect)
+    "gate_false_escalation_ceiling": None,  # spec 0019 (eval-only knob in effect)
 }
 _CASE_DEFAULTS = {
     "production_gate_ran": None,
@@ -145,6 +167,16 @@ _AGGREGATE_DEFAULTS = {
     # (so a legacy 0012 block still validates after the bump).
     "deep_degrade_count": 0,
     "deep_degrade_rate": None,
+    # spec 0019 — gate-confound outcome + A/B twins; "not computed" default = flag
+    # False, rates null, counts 0 (so a legacy 0013 block still validates).
+    "gate_confounded": False,
+    "gate_confounded_measured_rate": None,
+    "gate_false_escalation_instruct": None,
+    "gate_false_escalation_instruct_count": 0,
+    "gate_false_escalation_instruct_total": 0,
+    "gate_false_escalation_scout": None,
+    "gate_false_escalation_scout_count": 0,
+    "gate_false_escalation_scout_total": 0,
 }
 
 

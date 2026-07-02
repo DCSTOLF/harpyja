@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from harpyja.eval.config import EvalConfig
 from harpyja.eval.recommend import (
+    OUTCOME_GATE_CONFOUNDED,
+    OUTCOME_RECOMMENDED,
     SweepPoint,
     advantage_exceeds_spread,
     rank_sweep,
+    recommend_oq2,
 )
 
 # ---- D3 variance rule -------------------------------------------------------
@@ -94,3 +97,63 @@ def test_rank_sweep_no_point_clears_bar_records_honestly():
     rec = rank_sweep(pts, EvalConfig())
     assert rec.incumbent_validated is False
     assert "bar" in rec.rationale.lower()
+
+
+# ---- Spec 0019 D2/AC9: gate-confounded typed null ---------------------------
+
+def _clean_grid():
+    # A grid where rank_sweep would happily pick a clean winner.
+    return [
+        _pt(0.6, 3, catch=0.95, false_esc=0.30, false_runs=[0.30, 0.30, 0.30]),
+        _pt(0.7, 3, catch=0.95, false_esc=0.05, false_runs=[0.05, 0.05, 0.05]),
+    ]
+
+
+def test_gate_confounded_below_ceiling_defers_to_rank_sweep():
+    # Measured instruct false-escalation <= ceiling: the judge is trustworthy
+    # enough to calibrate over, so recommend_oq2 returns exactly rank_sweep's pick.
+    cfg = EvalConfig()  # ceiling 0.20
+    pts = _clean_grid()
+    rec = recommend_oq2(pts, measured_false_escalation=0.10, eval_config=cfg)
+    clean = rank_sweep(pts, cfg)
+    assert rec.outcome == OUTCOME_RECOMMENDED
+    assert rec.gate_false_escalation_measured is None
+    assert (rec.verify_threshold, rec.verify_top_n) == (
+        clean.verify_threshold,
+        clean.verify_top_n,
+    )
+
+
+def test_gate_confounded_above_ceiling_emits_typed_null():
+    # Measured > ceiling: DO NOT calibrate verify_threshold over a still-broken
+    # judge — emit the gate-confounded typed null instead of a clean pick.
+    cfg = EvalConfig()
+    rec = recommend_oq2(_clean_grid(), measured_false_escalation=0.35, eval_config=cfg)
+    assert rec.outcome == OUTCOME_GATE_CONFOUNDED
+    assert rec.incumbent_validated is False
+    assert rec.advantage_exceeds_variance is False
+
+
+def test_gate_confounded_carries_measured_rate():
+    cfg = EvalConfig()
+    rec = recommend_oq2(_clean_grid(), measured_false_escalation=0.42, eval_config=cfg)
+    assert rec.outcome == OUTCOME_GATE_CONFOUNDED
+    assert rec.gate_false_escalation_measured == 0.42
+    assert "gate-confounded" in rec.rationale.lower()
+
+
+def test_gate_confounded_exactly_at_ceiling_is_not_confounded():
+    # Boundary: == ceiling is NOT confounded (strict `>`), so it defers to rank_sweep.
+    cfg = EvalConfig()  # ceiling 0.20
+    rec = recommend_oq2(_clean_grid(), measured_false_escalation=0.20, eval_config=cfg)
+    assert rec.outcome == OUTCOME_RECOMMENDED
+
+
+def test_recommend_oq2_none_measured_defers_to_rank_sweep():
+    # No G2 measurement available (e.g. zero correct-Tier-1 point cases) -> not
+    # confounded by absence; defer to the clean recommender.
+    cfg = EvalConfig()
+    pts = _clean_grid()
+    rec = recommend_oq2(pts, measured_false_escalation=None, eval_config=cfg)
+    assert rec.outcome == OUTCOME_RECOMMENDED
+    assert (rec.verify_threshold, rec.verify_top_n) == (0.7, 3)

@@ -204,6 +204,20 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `runner.py::aggregate_outcomes` and the `swebench_eval.py` per-case driver. **As of spec
    0014** the schema is `0013/1` (additive `deep_degrade_{count,rate}` twins; `degraded_dominated`
    now keys off the scout+deep per-case **union**, counted once per case).
+   **As of spec 0019** the schema is `0014/1` (additive last-with-defaults: run-metadata
+   `gate_false_escalation_ceiling`; aggregate `gate_confounded` / `gate_confounded_measured_rate`
+   + instruct/scout A/B false-escalation twins, hoisted to one `_GATE_CONFOUND_AGG_FIELDS`
+   anti-drift source; legacy `0013/1` blocks still validate). `recommend.py` gains a
+   gate-confound DISPATCHER `recommend_oq2` wrapping the unchanged `rank_sweep`: a measured
+   instruct-judge false-escalation strictly above the new eval-only
+   `EvalConfig.gate_false_escalation_ceiling` (0.20, provisional) emits the `gate-confounded`
+   typed null (`OUTCOME_GATE_CONFOUNDED`, carrying the rate) rather than calibrating
+   `verify_threshold` over a still-broken judge — wired into `run_swebench_sweep` (best-achievable
+   instruct false-escalation = min over measured grid points, instruct-base runs only). A
+   setup-time **preflight doctor** (`preflight_models_present` / `PreflightError` / `cmd_preflight`
+   + a `preflight` CLI subparser) asserts required served-model tags are **pulled** behind
+   `assert_local` (no second outbound path; "pulled" ≠ co-resident-loadable, OOM named as a
+   residual risk). SUT frozen — measurement, not construction. See history.md 2026-07-02 (spec 0019).
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

@@ -2,6 +2,80 @@
 
 Append-only. Newest first.
 
+## 2026-07-02 — Spec 0019 (oq2-rerun) shipped the OQ2 re-run INSTRUMENT + gate-confound MECHANISM — the SUT stays frozen; the actual OQ2 numbers remain an operator sweep (mechanism+instrument shipped ≠ OQ2 calibrated)
+
+**Spec:** specs/0019-oq2-rerun/
+**Decision:** With the three 0015 blockers now all fixed — **B1 (0016)** served scout/deep
+defaults + CLI overrides, **B3 (0017)** finite gateway HTTP timeout, **B2 (0018)**
+in-distribution instruct-model judge + strict non-fabricating parse — build the re-run
+INSTRUMENT on top, as a pure **measurement/eval** spec: the SUT (tiers / gate / matrix /
+judge) is **FROZEN**, every change lands in `harpyja/eval/` (the harness, additively
+extensible even under the measurement-not-construction invariant). Five durable points.
+(1) **A recommender refuses to calibrate over an instrument it has measured to be broken.**
+`EvalConfig.gate_false_escalation_ceiling = 0.20` (eval-only, `Settings`-disjoint,
+**provisional** — a named bar, not a tuned prior) is the gate-confound bar; `recommend.py`
+gains `recommend_oq2(points, measured_false_escalation, eval_config)`, which on a measured
+instruct false-escalation **strictly `> ceiling`** emits the `gate-confounded` typed null
+(`OUTCOME_GATE_CONFOUNDED`, carrying the measured rate) instead of tuning `verify_threshold`
+over a judge that rejects correct citations — else defers to the **unchanged** `rank_sweep`.
+Boundary `== ceiling` is not confounded (strict `>`); `None` (unmeasured) defers. This is the
+principled successor to 0015's `gate_quality_confounded` and 0018's "mechanism fixed ≠
+accuracy proven": an honest confound flag beats a threshold calibrated over a still-broken
+gate. `Recommendation.outcome` / `.gate_false_escalation_measured` are additive, appended
+last-with-defaults so every existing construction stays valid. (2) **Preflight is a
+setup-time doctor, single-seam and honesty-scoped (D4).** `preflight_models_present` asserts
+`gateway.assert_local` FIRST (no second outbound path — the `/api/tags` read is the same
+loopback-gated egress class it preflights), then a deduped required-tag membership check
+naming the first absent tag — B1's 404 re-surfaced at SETUP, loudly, not mid-run. It claims
+only that models are **"pulled"**, NOT co-resident-loadable, and explicitly names OOM under
+`mode=auto` as a residual risk the cheap G1 smoke catches (no-false-capability applied to a
+doctor probe). Shipped with `cmd_preflight` + a `preflight` CLI subparser. (3) **Report schema
+0013/1 → 0014/1, additive last-with-defaults.** Run-metadata `gate_false_escalation_ceiling`;
+aggregate `gate_confounded` / `gate_confounded_measured_rate` + instruct/scout A/B
+false-escalation twins, all null-with-zero-count defaults, hoisted to one
+`_GATE_CONFOUND_AGG_FIELDS` anti-drift source with a drift-guard test; legacy blocks still
+validate. (4) **One oracle, characterization-locked.** A new `test_metrics.py` lock proves
+both gate denominators (false-escalation vs catch-rate) flip with the single
+`_any_primary_overlap` oracle — no second correctness definition, null-with-zero-count
+preserved (no production edit; the behavior already existed). (5) **Honesty — mechanism +
+instrument shipped ≠ OQ2 calibrated.** This ships the gate-confound mechanism and the
+calibration instrument; the actual OQ2 recommendation / typed null over the real N=12 subset
+requires the **operator** sweep (`HARPYJA_N12_FIXTURES` + served models). G1/G2/G3-at-scale
+are `@pytest.mark.integration` skip-not-fail DEMONSTRATIONS, not CI-run. **OQ2 is not
+calibrated; B2 is not closed; astropy-12907 end-to-end is not demonstrated here.**
+**Why:** Spec 0015's OQ2 wedged on B3 and surfaced B1/B2/B3, each since fixed in its own
+spec. But 0018 fixed the judging *mechanism* and explicitly deferred proving *accuracy*, and
+`verify_threshold=0.6` was calibrated over the OLD finder-model distribution — meaningless
+against the new instruct judge. This spec builds the instrument to prove, IN ORDER, the three
+things 0015 couldn't reach (G1 completes → G2 gate-quality demonstrable → G3 calibrates), each
+willing to stop-and-report a finding, without touching any tier or gate behavior. It makes no
+model better; it builds the honest instrument that can either calibrate OQ2 or report a typed
+confound.
+**Consequence — the OQ2 re-run instrument + the gate-confound mechanism are shipped; the
+operator sweep and OQ2 calibration remain open.** Shipped TDD-complete: **777 unit pass**
+(+20 over the 757 baseline), ruff clean. Load-bearing proofs: the strict-`>` boundary tests
+(`0.20 == ceiling` NOT confounded; `None` defers), the `gate-confounded` sweep-runner test
+(a correct citation the gate rejects → false-escalation 1.0 > ceiling → typed null carrying
+the rate), the schema legacy-tolerance + round-trip + anti-drift tests, and the preflight
+`assert_local`-first / missing-model-names-it / pulled-not-coresident units. Live preflight
+PASSED on this host (the three required tags are pulled); the sweep-scale ACs are
+operator-gated. **Deviation (recorded honestly):** `plan.md` scoped T11 as
+scaffolding-ONLY, but leaving `run_swebench_sweep` calling `rank_sweep` would have left the
+`gate-confounded` outcome **wired-but-dormant** and AC9 aspirational — so `recommend_oq2` +
+the ceiling were wired INTO the sweep runner (the best-achievable instruct false-escalation =
+min over measured grid points, only when base `verify_method=="instruct_model"`), TDD'd with 3
+new unit tests. The plan under-scoped; the implement pass caught it; the fix stayed within the
+measurement-not-construction invariant (harness additively extensible; SUT frozen). **Out of
+scope / follow-ups carried forward:** the **actual operator OQ2 sweep** (served models +
+`HARPYJA_N12_FIXTURES` — produce the real recommendation OR typed null over N=12); **permanent
+ceiling calibration** (replace the provisional 0.20 with a data-driven bar once the
+instruct-judge score distribution is measured); **astropy-12907 end-to-end proof** (the B2
+accuracy deferral, still not discharged); **per-span non-conformance abstain** (0018 D7 chose
+whole-gate degrade); the **permanent `lm_model` choice** (Qwen3-8B provisional; the judge
+inherits it); **Q8 model footprint / co-residency** (OOM under `mode=auto` — the preflight
+"pulled ≠ loadable" residual risk); and, still open from Wave 2, **Wave-2.1 substring/fuzzy
+matching**.
+
 ## 2026-07-01 — Spec 0018 (judge) shipped — the B2 fix from 0015: the Verification Gate's relevance judge moves off the OOD `scout_model` finder onto the in-distribution `lm_model` instruct model, with a strict non-fabricating score parse
 
 **Spec:** specs/0018-judge/

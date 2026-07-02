@@ -19,6 +19,7 @@ from harpyja.eval.swebench_eval import (
     POINT_SPAN_MAX_LINES,
     PROVENANCE_NAME,
     RAW_NAME,
+    PreflightError,
     _build_parser,
     _read_jsonl,
     _to_eval_case,
@@ -28,6 +29,7 @@ from harpyja.eval.swebench_eval import (
     main,
     parse_patch,
     partition_scorable,
+    preflight_models_present,
 )
 
 # --- sample unified diffs ----------------------------------------------------
@@ -545,3 +547,82 @@ def test_makefile_does_not_reference_runner_fixture_placeholder():
     # the upload's nonexistent CLI must be gone after reconciliation
     assert "harpyja.eval.runner --fixture" not in _makefile_text()
     assert "harpyja.eval.sweep --fixture" not in _makefile_text()
+
+
+# --- Spec 0019 (AC1/AC2): preflight — models pulled, air-gap first ------------
+
+def _settings(**over):
+    from dataclasses import replace
+
+    from harpyja.config.settings import Settings
+
+    return replace(Settings(), **over) if over else Settings()
+
+
+def _tags_payload(*names):
+    # Ollama /api/tags shape: {"models": [{"name": ...}, ...]}. Only names matter —
+    # a "pulled" membership check needs no size/VRAM detail (co-residence is NOT
+    # what preflight proves).
+    return {"models": [{"name": n} for n in names]}
+
+
+def _loopback_resolver(host):
+    return ["127.0.0.1"]
+
+
+def test_preflight_models_present_all_present_passes():
+    s = _settings()  # default scout_model + lm_model (judge + deep)
+    payload = _tags_payload(s.scout_model, s.lm_model)
+    # must not raise; returns the deduped required tag set it verified.
+    verified = preflight_models_present(s, payload, resolver=_loopback_resolver)
+    assert s.scout_model in verified and s.lm_model in verified
+
+
+def test_preflight_models_present_missing_model_raises_naming_it():
+    s = _settings()
+    payload = _tags_payload(s.scout_model)  # judge/deep tag absent
+    with pytest.raises(PreflightError) as ei:
+        preflight_models_present(s, payload, resolver=_loopback_resolver)
+    assert s.lm_model in str(ei.value)  # the message NAMES the missing model
+
+
+def test_preflight_asserts_local_before_tags_read():
+    from harpyja.gateway.gateway import AirGapError
+
+    # Non-loopback endpoint + a payload that WOULD satisfy membership: air-gap must
+    # fire FIRST, so we get AirGapError, not a membership pass. Spy resolver proves
+    # assert_local was consulted (no second outbound path introduced by preflight).
+    s = _settings(lm_api_base="http://example.com:11434/v1")
+    payload = _tags_payload(s.scout_model, s.lm_model)
+    consulted = []
+
+    def spy_resolver(host):
+        consulted.append(host)
+        return ["93.184.216.34"]  # non-loopback
+
+    with pytest.raises(AirGapError):
+        preflight_models_present(s, payload, resolver=spy_resolver)
+    assert consulted == ["example.com"]
+
+
+def test_preflight_claims_pulled_not_coresident():
+    # A minimal names-only payload (no size/VRAM fields a co-residence probe would
+    # need) passes — proving preflight verifies PULLED membership only, and its
+    # message on failure names OOM as a residual G1-caught risk, never a co-resident
+    # guarantee.
+    s = _settings()
+    ok = preflight_models_present(
+        s, _tags_payload(s.scout_model, s.lm_model), resolver=_loopback_resolver
+    )
+    assert set(ok) == {s.scout_model, s.lm_model}
+    # failure message is honest about scope
+    with pytest.raises(PreflightError) as ei:
+        preflight_models_present(s, _tags_payload(s.scout_model), resolver=_loopback_resolver)
+    assert "pulled" in str(ei.value).lower()
+
+
+def test_preflight_subparser_wired():
+    parser = _build_parser()
+    ns = parser.parse_args(["preflight"])
+    assert ns.cmd == "preflight"
+    assert callable(ns.func)

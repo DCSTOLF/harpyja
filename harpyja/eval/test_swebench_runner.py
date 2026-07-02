@@ -397,6 +397,44 @@ def test_swebench_sweep_high_agreement_is_calibration(tmp_path):
     assert rec["oq2_basis"] == "calibration"
 
 
+def test_swebench_sweep_stamps_gate_confound_ceiling(tmp_path):
+    # Spec 0019 (AC7/D2): the eval-only ceiling in effect is recorded in metadata.
+    report = _sweep(tmp_path, prod_label="point")
+    assert (
+        report["run_metadata"]["gate_false_escalation_ceiling"]
+        == EvalConfig().gate_false_escalation_ceiling
+    )
+
+
+def test_swebench_sweep_recommendation_carries_outcome(tmp_path):
+    # Clean case (gate passes correct citations): outcome is `recommended`, no confound.
+    rec = _sweep(tmp_path, prod_label="point")["recommendation"]
+    assert rec["outcome"] == "recommended"
+    assert rec["gate_false_escalation_measured"] is None
+
+
+def test_swebench_sweep_gate_confounded_when_judge_false_escalates(tmp_path):
+    # Spec 0019 (AC9): a correct Tier-1 citation the gate REJECTS -> escalates ->
+    # false-escalation 1.0 on the point subset, exceeding the 0.20 ceiling at every
+    # grid point. The sweep must emit the `gate-confounded` typed null carrying the
+    # measured rate instead of calibrating verify_threshold over a still-broken judge.
+    from harpyja.eval.config import EvalConfig
+    from harpyja.eval.swebench_eval import run_swebench_sweep
+
+    _setart(tmp_path)
+    cases = [EvalCase("p1", "q", "/r", (ExpectedSpan("a.py", 1, 5),), "point")]
+    factory = _Factory(
+        {"/r": _stack(scout_spans=[("a.py", 1, 5)], deep_spans=[("a.py", 1, 5)], gate_passed=False)}
+    )
+    report = run_swebench_sweep(
+        cases, _settings(), EvalConfig(k_runs=1), stack_factory=factory,
+        thresholds=(0.5, 0.6), top_ns=(3,), production_classifier=lambda q: "point",
+    )
+    rec = report["recommendation"]
+    assert rec["outcome"] == "gate-confounded"
+    assert rec["gate_false_escalation_measured"] == 1.0
+
+
 def test_swebench_sweep_does_not_mutate_base_settings(tmp_path):
     base = _settings()
     before = (base.verify_threshold, base.verify_top_n)

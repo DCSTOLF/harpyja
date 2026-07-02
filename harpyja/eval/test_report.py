@@ -202,8 +202,9 @@ def test_report_multi_repo_shape_validates():
 # --- spec 0014: Deep-degrade visibility — schema 0012/1 → 0013/1 (P6) ---------
 
 
-def test_report_schema_version_is_0013():
-    assert SCHEMA_VERSION == "0013/1"
+def test_report_schema_version_is_0014():
+    # spec 0019 bumps additively 0013/1 -> 0014/1 (gate-confound + ceiling + A/B twins).
+    assert SCHEMA_VERSION == "0014/1"
 
 
 def test_deep_degrade_fields_present_with_defaults():
@@ -356,3 +357,99 @@ def test_validate_report_tolerates_null_cited_lines():
     validate_report(rep)  # no raise
     # round-trips through JSON as null
     assert json.loads(json.dumps(rep))["cases"][0]["citations"][0]["start_line"] is None
+
+
+# --- Spec 0019 (OQ2 re-run): gate-confound outcome + ceiling + instruct/scout A/B ---
+
+
+def test_gate_confound_and_ceiling_fields_present_with_defaults():
+    # AC5/AC6/D2: the new run-metadata ceiling + aggregate gate-confound and A/B twins
+    # appear via the centralized defaults even when a block omits them.
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    assert "gate_false_escalation_ceiling" in rep["run_metadata"]
+    assert rep["run_metadata"]["gate_false_escalation_ceiling"] is None
+    agg = rep["aggregate"]
+    for f in (
+        "gate_confounded",
+        "gate_confounded_measured_rate",
+        "gate_false_escalation_instruct",
+        "gate_false_escalation_instruct_count",
+        "gate_false_escalation_instruct_total",
+        "gate_false_escalation_scout",
+        "gate_false_escalation_scout_count",
+        "gate_false_escalation_scout_total",
+    ):
+        assert f in agg, f
+    # null-with-zero-count defaults: rates null, counts 0, flag False
+    assert agg["gate_confounded"] is False
+    assert agg["gate_confounded_measured_rate"] is None
+    assert agg["gate_false_escalation_instruct"] is None
+    assert agg["gate_false_escalation_instruct_count"] == 0
+    assert agg["gate_false_escalation_scout_total"] == 0
+    validate_report(rep)  # no raise
+
+
+def test_validate_report_accepts_gate_confound_and_ab_fields():
+    # A fully-populated 0019 block validates.
+    rm = _run_metadata(gate_false_escalation_ceiling=0.20)
+    agg = _aggregate(
+        gate_confounded=True,
+        gate_confounded_measured_rate=0.42,
+        gate_false_escalation_instruct=0.42,
+        gate_false_escalation_instruct_count=5,
+        gate_false_escalation_instruct_total=12,
+        gate_false_escalation_scout=0.75,
+        gate_false_escalation_scout_count=9,
+        gate_false_escalation_scout_total=12,
+    )
+    rep = build_report(rm, [_case()], agg)
+    validate_report(rep)  # no raise
+    assert rep["run_metadata"]["gate_false_escalation_ceiling"] == 0.20
+    assert rep["aggregate"]["gate_confounded"] is True
+    assert rep["aggregate"]["gate_false_escalation_scout"] == 0.75
+
+
+def test_0013_and_0019_aggregate_shapes_both_validate():
+    # A legacy 0013-shaped block (new fields absent → defaulted) AND a fully populated
+    # 0019 block both pass the one loud validator.
+    legacy = build_report(_run_metadata(), [_case()], _aggregate())
+    full = build_report(
+        _run_metadata(gate_false_escalation_ceiling=0.20),
+        [_case()],
+        _aggregate(
+            gate_confounded=False,
+            gate_false_escalation_instruct=0.10,
+            gate_false_escalation_instruct_count=1,
+            gate_false_escalation_instruct_total=10,
+        ),
+    )
+    validate_report(legacy)
+    validate_report(full)
+
+
+def test_gate_confound_fields_have_single_anti_drift_source():
+    # T8 anti-drift: the gate-confound aggregate field set is declared ONCE
+    # (_GATE_CONFOUND_AGG_FIELDS) and every name is both enumerated in the required
+    # tuple and default-populated — so adding a name without a default is caught here,
+    # not by a half-populated report reading as complete.
+    from harpyja.eval.report import (
+        _AGGREGATE_DEFAULTS,
+        _AGGREGATE_FIELDS,
+        _GATE_CONFOUND_AGG_FIELDS,
+    )
+
+    for name in _GATE_CONFOUND_AGG_FIELDS:
+        assert name in _AGGREGATE_FIELDS, f"{name} missing from _AGGREGATE_FIELDS"
+        assert name in _AGGREGATE_DEFAULTS, f"{name} missing a default"
+
+
+def test_report_round_trip_gate_confounded():
+    # AC9: the gate-confounded outcome + measured rate survive a JSON round-trip and
+    # re-validate (the typed null is durable in the artifact, not just in memory).
+    rm = _run_metadata(gate_false_escalation_ceiling=0.20)
+    agg = _aggregate(gate_confounded=True, gate_confounded_measured_rate=0.35)
+    rep = build_report(rm, [_case()], agg)
+    reloaded = json.loads(json.dumps(rep))
+    validate_report(reloaded)  # no raise
+    assert reloaded["aggregate"]["gate_confounded"] is True
+    assert reloaded["aggregate"]["gate_confounded_measured_rate"] == 0.35

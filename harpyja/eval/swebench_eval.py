@@ -652,7 +652,7 @@ def run_swebench_sweep(
     `AGREEMENT_FLOOR` it is flagged low-confidence (deltas-only), not a calibration.
     """
     from harpyja.eval.config import aggregate_runs
-    from harpyja.eval.recommend import SweepPoint, rank_sweep
+    from harpyja.eval.recommend import SweepPoint, recommend_oq2
     from harpyja.eval.report import SCHEMA_VERSION
 
     wrapped_metrics = (
@@ -697,7 +697,18 @@ def run_swebench_sweep(
             false_escalation_runs=false_present,
         ))
 
-    rec = rank_sweep(rank_inputs, eval_config)
+    # Spec 0019 (D2/AC9): gate-confound guard. When the base run uses the instruct
+    # judge, take the BEST-achievable instruct false-escalation across the grid (the
+    # minimum over points that actually measured it) as the G2 signal: if even the
+    # best threshold rejects correct citations above the ceiling, the judge — not the
+    # threshold — is the problem, so recommend_oq2 emits `gate-confounded` rather than
+    # calibrating over it. A scout-judge baseline run (or a grid with no measured
+    # point) passes None and defers to the clean recommender.
+    measured_fe = None
+    if base_settings.verify_method == "instruct_model":
+        fe_means = [p.false_escalation_mean for p in rank_inputs if p.false_escalation_runs]
+        measured_fe = min(fe_means) if fe_means else None
+    rec = recommend_oq2(rank_inputs, measured_fe, eval_config)
     agreement_rate = _mean_or_none(agreement_vals)
     low_confidence = agreement_rate is None or agreement_rate < AGREEMENT_FLOOR
 
@@ -725,6 +736,8 @@ def run_swebench_sweep(
             "new_file_only_excluded_count": new_file_only_excluded_count,
             "malformed_skipped_count": malformed_skipped_count,
             "classifier_agreement_rate": agreement_rate,
+            # spec 0019 — the eval-only gate-confound ceiling in effect.
+            "gate_false_escalation_ceiling": eval_config.gate_false_escalation_ceiling,
         },
         "sweep": sweep_points,
         "recommendation": {
@@ -734,6 +747,10 @@ def run_swebench_sweep(
             "advantage_exceeds_variance": rec.advantage_exceeds_variance,
             "incumbent_validated": rec.incumbent_validated,
             "rationale": rec.rationale,
+            # spec 0019 — OQ2 outcome: `recommended` or the `gate-confounded` typed
+            # null (carrying the measured instruct false-escalation), never a forced pick.
+            "outcome": rec.outcome,
+            "gate_false_escalation_measured": rec.gate_false_escalation_measured,
             # D-route agreement guard (review round-2)
             "classifier_agreement_rate": agreement_rate,
             "agreement_floor": AGREEMENT_FLOOR,
@@ -815,6 +832,72 @@ def _settings_from_args(args: argparse.Namespace):
         overrides["deep_max_subqueries"] = args.deep_max_subqueries
     base = Settings()
     return replace(base, **overrides) if overrides else base
+
+
+class PreflightError(Exception):
+    """A required served model is not pulled on the run host (spec 0019, AC1)."""
+
+
+def _required_model_tags(settings) -> list[str]:
+    """The deduped set of served model tags a `mode=auto` run needs.
+
+    `scout_model` backs Tier-1 Scout (and, when `verify_method="scout_model"`, the
+    gate finder); `lm_model` backs BOTH Deep (Tier-2) AND the default instruct-model
+    gate judge, and is what `--deep-model` resolves to — so the "three models" of the
+    spec (scout / judge / deep) dedupe to the distinct TAGS actually required.
+    """
+    return sorted({settings.scout_model, settings.lm_model})
+
+
+def preflight_models_present(settings, tags_payload, *, resolver=None) -> list[str]:
+    """Assert every required served model tag is PULLED, air-gap enforced first.
+
+    Spec 0019 (AC1/AC2/D4): this is B1's 404 surfaced at SETUP, not mid-run. Two
+    honesty constraints: (a) the presence probe runs behind `gateway.assert_local`
+    on the resolved loopback endpoint FIRST, so preflight adds NO second outbound
+    path (the air-gap stays enforced in the one place); (b) it verifies models are
+    **pulled**, NOT co-resident-loadable — OOM under `mode=auto` remains a residual
+    mid-run risk that the cheap G1 smoke catches. `tags_payload` is the already-fetched
+    `/api/tags` body (injected in unit tests; fetched live by `cmd_preflight`).
+    Returns the deduped required tag set on success; raises `PreflightError` naming
+    the first absent tag otherwise.
+    """
+    from harpyja.gateway.gateway import assert_local
+
+    assert_local(settings.lm_api_base, resolver=resolver)
+    served = {m.get("name") for m in (tags_payload or {}).get("models", [])}
+    required = _required_model_tags(settings)
+    missing = [t for t in required if t not in served]
+    if missing:
+        raise PreflightError(
+            f"preflight: required model(s) not pulled on the run host: {missing} "
+            f"(served: {sorted(served)}); pull them before provisioning. NOTE: this "
+            "verifies models are PULLED, not co-resident-loadable — OOM under "
+            "mode=auto remains a mid-run risk, caught cheaply by the G1 smoke."
+        )
+    return required
+
+
+def cmd_preflight(args: argparse.Namespace) -> None:
+    """Fetch `/api/tags` behind `assert_local` and assert the required tags are pulled."""
+    import json as _json
+    import urllib.request
+    from urllib.parse import urlsplit
+
+    from harpyja.gateway.gateway import assert_local
+
+    settings = _settings_from_args(args)
+    # Air-gap FIRST — the /api/tags read below is the ONLY outbound call and is
+    # loopback-gated exactly like the model calls it is preflighting.
+    assert_local(settings.lm_api_base)
+    parts = urlsplit(settings.lm_api_base)
+    host = parts.hostname or "localhost"
+    port = parts.port or 11434
+    tags_url = f"{parts.scheme or 'http'}://{host}:{port}/api/tags"
+    with urllib.request.urlopen(tags_url, timeout=5.0) as resp:  # noqa: S310 (loopback)
+        payload = _json.loads(resp.read())
+    verified = preflight_models_present(settings, payload)
+    print(f"[preflight] models pulled: {verified}", file=sys.stderr)
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -915,6 +998,12 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--per-case-timeout", type=float, default=None)
     _add_model_flags(s)
     s.set_defaults(func=cmd_sweep)
+
+    # spec 0019 — doctor-style setup guard: assert the served models are pulled
+    # (behind assert_local) BEFORE provisioning, so B1's 404 fails loudly at setup.
+    pf = sub.add_parser("preflight", help="assert required served models are pulled")
+    _add_model_flags(pf)
+    pf.set_defaults(func=cmd_preflight)
 
     return p
 

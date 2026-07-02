@@ -211,6 +211,26 @@ def test_gate_false_escalation_null_with_count_on_zero_denominator():
     assert (false_esc, correct_total) == (0, 0)
 
 
+# ---- Spec 0019 (AC5): one oracle governs BOTH gate denominators -------------
+
+def test_gate_denominator_membership_flips_with_the_single_oracle():
+    # A case's Tier-1 correctness (the ONE overlap oracle) decides which gate
+    # denominator it lands in — correct -> false-escalation population; wrong ->
+    # catch-rate population. The two are mutually exclusive and both defined by the
+    # same oracle, so a locate-accuracy flip must move the case between them.
+    correct = _outcome(tier1=(("a.py", 10, 20),), tiers_run=(0, 1))  # overlaps expected
+    assert tier1_correct(correct.tier1_citations, correct.expected_spans) is True
+    _, _, fe_total = gate_false_escalation([correct])
+    _, _, cr_total = gate_catch_rate([correct])
+    assert (fe_total, cr_total) == (1, 0)  # in false-esc denom, not catch-rate
+
+    wrong = _outcome(tier1=(("b.py", 1, 2),), tiers_run=(0, 1, 2))  # misses expected
+    assert tier1_correct(wrong.tier1_citations, wrong.expected_spans) is False
+    _, _, fe_total_w = gate_false_escalation([wrong])
+    _, _, cr_total_w = gate_catch_rate([wrong])
+    assert (fe_total_w, cr_total_w) == (0, 1)  # flipped: catch-rate denom, not false-esc
+
+
 # --- Spec 0011 (citation-shape): file-level (line-less) path-only overlap (AC18) ---
 
 

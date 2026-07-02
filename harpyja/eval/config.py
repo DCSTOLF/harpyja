@@ -31,6 +31,12 @@ class EvalConfig:
     # degrade floor, not the SUT, so escalation/accuracy/OQ2 are marked unreliable.
     # Provisional; revisit once Scout fires on real data. Eval-only (never the SUT).
     degraded_dominated_threshold: float = 0.5
+    # Spec 0019 (D2): the gate-confound ceiling. When the measured instruct-judge
+    # false-escalation rate exceeds this, G3 emits the `gate-confounded` typed null
+    # (carrying the measured rate) instead of calibrating verify_threshold over a
+    # still-broken judge — an honest confound flag beats a threshold tuned over a
+    # gate that rejects correct citations. Provisional 0.20; eval-only (never the SUT).
+    gate_false_escalation_ceiling: float = 0.20
 
 
 def aggregate_runs(values: Sequence[float]) -> dict[str, float | None]:

@@ -24,6 +24,14 @@ def test_eval_config_has_degraded_dominated_threshold_default():
     assert EvalConfig().degraded_dominated_threshold == 0.5
 
 
+def test_eval_config_has_gate_false_escalation_ceiling_default():
+    # Spec 0019 (D2): the gate-confound ceiling is an eval-only bar (provisional
+    # 0.20). Above it, G3 emits the `gate-confounded` typed null instead of
+    # calibrating verify_threshold over a still-broken judge. Disjointness from
+    # Settings is guarded by test_eval_config_is_independent_of_settings.
+    assert EvalConfig().gate_false_escalation_ceiling == 0.20
+
+
 def test_eval_config_is_frozen():
     cfg = EvalConfig()
     try:

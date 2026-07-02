@@ -15,6 +15,13 @@ from dataclasses import dataclass
 # The provisional incumbent from spec 0008 (verify_threshold, verify_top_n).
 INCUMBENT = (0.6, 3)
 
+# Spec 0019 (D2): OQ2 outcome identifiers. A clean run yields a `recommended`
+# recommendation (validate-or-flip the incumbent); a run whose measured
+# instruct-judge false-escalation exceeds the ceiling yields the `gate-confounded`
+# typed null — calibrating verify_threshold over a still-broken judge is refused.
+OUTCOME_RECOMMENDED = "recommended"
+OUTCOME_GATE_CONFOUNDED = "gate-confounded"
+
 
 @dataclass(frozen=True)
 class SweepPoint:
@@ -35,6 +42,13 @@ class Recommendation:
     advantage_exceeds_variance: bool
     incumbent_validated: bool
     rationale: str
+    # Spec 0019 (D2): additive, appended last-with-defaults so every existing
+    # construction stays valid. `outcome` is OUTCOME_RECOMMENDED for a clean pick
+    # and OUTCOME_GATE_CONFOUNDED when the gate itself is too unreliable to
+    # calibrate over; `gate_false_escalation_measured` carries the measured rate on
+    # a confounded outcome (None otherwise).
+    outcome: str = OUTCOME_RECOMMENDED
+    gate_false_escalation_measured: float | None = None
 
 
 def advantage_exceeds_spread(
@@ -133,3 +147,52 @@ def rank_sweep(points: Sequence[SweepPoint], eval_config) -> Recommendation:
         incumbent_validated=False,
         rationale="incumbent did not clear the catch-rate bar; recommending best survivor",
     )
+
+
+def gate_confounded_recommendation(measured_rate: float, eval_config) -> Recommendation:
+    """Spec 0019 (D2): the `gate-confounded` typed null.
+
+    Emitted when the measured instruct-judge false-escalation rate exceeds
+    `eval_config.gate_false_escalation_ceiling`: the gate rejects correct citations
+    often enough that any `verify_threshold` tuned over this score distribution
+    would calibrate a still-broken gate. We refuse the pick and report the confound,
+    carrying the measured rate. `verify_threshold`/`verify_top_n` mirror the
+    incumbent purely as a placeholder — `outcome` is the load-bearing field.
+    """
+    thr, top_n = INCUMBENT
+    return Recommendation(
+        verify_threshold=thr,
+        verify_top_n=top_n,
+        catch_rate_bar=eval_config.catch_rate_bar,
+        advantage_exceeds_variance=False,
+        incumbent_validated=False,
+        rationale=(
+            f"gate-confounded: instruct-judge false-escalation {measured_rate:.3f} "
+            f"exceeds the ceiling {eval_config.gate_false_escalation_ceiling}; a "
+            "threshold tuned over this distribution would calibrate a still-broken "
+            "gate — OQ2 withheld pending a gate-accuracy fix"
+        ),
+        outcome=OUTCOME_GATE_CONFOUNDED,
+        gate_false_escalation_measured=measured_rate,
+    )
+
+
+def recommend_oq2(
+    points: Sequence[SweepPoint],
+    measured_false_escalation: float | None,
+    eval_config,
+) -> Recommendation:
+    """Spec 0019 (D2): gate-confound dispatcher wrapping the D3/D4 recommender.
+
+    If G2 measured a material instruct-judge false-escalation rate — strictly
+    greater than `gate_false_escalation_ceiling` — emit the `gate-confounded` typed
+    null instead of calibrating over it. Otherwise (rate `None`, i.e. unmeasured, or
+    at/below the ceiling) defer to `rank_sweep`. Boundary `== ceiling` is NOT
+    confounded (strict `>`).
+    """
+    if (
+        measured_false_escalation is not None
+        and measured_false_escalation > eval_config.gate_false_escalation_ceiling
+    ):
+        return gate_confounded_recommendation(measured_false_escalation, eval_config)
+    return rank_sweep(points, eval_config)

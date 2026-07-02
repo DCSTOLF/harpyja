@@ -326,3 +326,192 @@ def test_scout_model_default_present_in_ollama_served_set():
         )
     # Positive membership: the default IS served.
     assert default_scout in served
+
+
+# ---- Spec 0019 (OQ2 re-run): G1 → G2 → G3 gate demonstrations ----------------
+#
+# All @pytest.mark.integration, skip-not-fail: these DEMONSTRATE the three
+# sequential gates on the served stack + the provisioned N=12 point subset; they
+# never gate CI. Set HARPYJA_N12_FIXTURES to the provisioned fixtures dir to run the
+# sweep-scale ACs. Each gate is willing to stop-and-report: a stopped run is an
+# accepted outcome, not a test failure.
+
+
+def _fetch_tags(settings) -> set[str] | None:
+    """Fetch Ollama's served tag set behind assert_local; None if unreachable."""
+    import json as _json
+    import urllib.request
+    from urllib.parse import urlsplit
+
+    from harpyja.gateway.gateway import assert_local
+
+    assert_local(settings.lm_api_base)  # air-gap first — the only outbound call
+    parts = urlsplit(settings.lm_api_base)
+    host = parts.hostname or "localhost"
+    port = parts.port or 11434
+    if not _socket_reachable(host, port):
+        return None
+    tags_url = f"{parts.scheme or 'http'}://{host}:{port}/api/tags"
+    try:
+        with urllib.request.urlopen(tags_url, timeout=3.0) as resp:  # noqa: S310 (loopback)
+            return {m["name"] for m in _json.loads(resp.read()).get("models", [])}
+    except OSError:
+        return None
+
+
+@pytest.mark.integration
+def test_preflight_live_models_present_or_loud():
+    """AC1: preflight asserts the three served models are pulled BEFORE provisioning.
+
+    skip-not-fail: unreachable Ollama → skip; a required model not pulled → skip with
+    a diagnostic naming it (the operator hasn't pulled it — the LOUD raise on absence
+    is unit-tested). All present → the doctor passes and returns the verified set.
+    """
+    from harpyja.eval.swebench_eval import (
+        PreflightError,
+        _required_model_tags,
+        preflight_models_present,
+    )
+
+    settings = _settings_live()
+    served = _fetch_tags(settings)
+    if served is None:
+        pytest.skip("Ollama not reachable — cannot run live preflight")
+    payload = {"models": [{"name": n} for n in served]}
+    try:
+        verified = preflight_models_present(settings, payload)
+    except PreflightError as err:
+        pytest.skip(f"required model not pulled (operator setup): {err}")
+    assert set(verified) == set(_required_model_tags(settings))
+
+
+@pytest.mark.integration
+def test_g1_astropy12907_smoke_completes(tmp_path):
+    """AC3 (G1): the single case B2 was diagnosed on runs end-to-end mode=auto to
+    completion. skip-not-fail: needs the served stack + the provisioned fixtures that
+    include astropy-12907. A recorded pass/fail (report written + schema-valid) is the
+    success condition — a correct citation is NOT asserted (that is G2's job)."""
+    fixtures = os.environ.get("HARPYJA_N12_FIXTURES")
+    if not fixtures:
+        pytest.skip("set HARPYJA_N12_FIXTURES to run the G1 astropy-12907 smoke")
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+    cases, provenance, excluded, malformed = _load_resolved(fixtures)
+    astro = [c for c in cases if "astropy" in c.case_id and "12907" in c.case_id]
+    if not astro:
+        pytest.skip("astropy-12907 not present in the provisioned fixture set")
+    out = tmp_path / "out"
+    report = run_swebench(
+        astro, _settings_live(), EvalConfig(k_runs=1), stack_factory=_factory(),
+        out_dir=out, write=True, provenance=provenance,
+        new_file_only_excluded_count=excluded, malformed_skipped_count=malformed,
+    )
+    validate_report(report)  # G1 pass = completes end-to-end, schema-valid
+    assert (out / "report.json").exists()
+    assert report["run_metadata"]["seed_n"] == 1
+
+
+@pytest.mark.integration
+def test_g2_gate_quality_first_class(tmp_path):
+    """AC4 (G2): gate false-escalation + catch rate are first-class report metrics,
+    and the gate-confound ceiling in effect is stamped. skip-not-fail on fixtures."""
+    fixtures = os.environ.get("HARPYJA_N12_FIXTURES")
+    if not fixtures:
+        pytest.skip("set HARPYJA_N12_FIXTURES to run G2 gate-quality")
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+    cases, provenance, excluded, malformed = _load_resolved(fixtures)
+    report = run_swebench_sweep(
+        cases, _settings_live(), EvalConfig(k_runs=1), stack_factory=_factory(),
+        thresholds=(0.6,), top_ns=(3,), out_dir=tmp_path / "out", write=True,
+        provenance=provenance, new_file_only_excluded_count=excluded,
+        malformed_skipped_count=malformed, production_classifier=lambda q: "point",
+    )
+    # gate quality is first-class: measured per grid point + ceiling recorded.
+    pt = report["sweep"][0]["aggregate"]
+    assert "gate_false_escalation" in pt and "gate_catch_rate" in pt
+    assert report["run_metadata"]["gate_false_escalation_ceiling"] == 0.20
+
+
+@pytest.mark.integration
+def test_g2_ab_instruct_vs_scout_judge(tmp_path):
+    """AC6 (G2 A/B): the same subset under verify_method=instruct_model vs scout_model
+    (pure config override; SUT unchanged). Both runs produce a gate_false_escalation
+    aggregate, measured side-by-side. skip-not-fail on fixtures."""
+    fixtures = os.environ.get("HARPYJA_N12_FIXTURES")
+    if not fixtures:
+        pytest.skip("set HARPYJA_N12_FIXTURES to run the G2 A/B judge comparison")
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+    cases, provenance, excluded, malformed = _load_resolved(fixtures)
+
+    def _run(method):
+        s = replace(_settings_live(), verify_method=method)
+        rep = run_swebench(
+            cases, s, EvalConfig(k_runs=1), stack_factory=_factory(),
+            out_dir=tmp_path / method, write=True, provenance=provenance,
+            new_file_only_excluded_count=excluded, malformed_skipped_count=malformed,
+            production_classifier=lambda q: "point",
+        )
+        validate_report(rep)
+        return rep["aggregate"]["gate_false_escalation"]
+
+    instruct_fe = _run("instruct_model")
+    scout_fe = _run("scout_model")
+    # Both measured side-by-side (either may be None on a zero correct-Tier-1 denom).
+    assert instruct_fe is None or isinstance(instruct_fe, float)
+    assert scout_fe is None or isinstance(scout_fe, float)
+
+
+@pytest.mark.integration
+def test_g3_sweep_completes_at_scale_and_oq2_typed(tmp_path):
+    """AC7 + AC9 (G3): the full grid sweep completes (0017 holds at scale — no wedge),
+    the incumbent (0.6, 3) is IN the grid (D1 validate-or-flip), a mean+spread table
+    is produced, and OQ2 is emitted as a variance-gated recommendation OR a typed null
+    (never a forced pick). skip-not-fail on fixtures."""
+    fixtures = os.environ.get("HARPYJA_N12_FIXTURES")
+    if not fixtures:
+        pytest.skip("set HARPYJA_N12_FIXTURES to run the G3 sweep")
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+    cases, provenance, excluded, malformed = _load_resolved(fixtures)
+    thresholds = (0.4, 0.6, 0.8)  # coarse grid INCLUDING the incumbent 0.6 (D1)
+    report = run_swebench_sweep(
+        cases, _settings_live(), EvalConfig(), stack_factory=_factory(),
+        thresholds=thresholds, top_ns=(3,), out_dir=tmp_path / "out", write=True,
+        provenance=provenance, new_file_only_excluded_count=excluded,
+        malformed_skipped_count=malformed, production_classifier=lambda q: "point",
+    )
+    assert len(report["sweep"]) == len(thresholds)  # table produced, no wedge
+    for pt in report["sweep"]:
+        assert "mean" in pt["aggregate"]["gate_false_escalation"]  # mean+spread per point
+    rec = report["recommendation"]
+    assert rec["outcome"] in ("recommended", "gate-confounded")
+    if rec["outcome"] == "gate-confounded":
+        assert rec["gate_false_escalation_measured"] is not None
+
+
+@pytest.mark.integration
+def test_g3_reliability_gate_records_degrade(tmp_path):
+    """AC8 (G3): the scout∪deep degrade posture is recorded; a degraded_dominated
+    sweep is loudly flagged rather than silently publishing OQ2. skip-not-fail."""
+    fixtures = os.environ.get("HARPYJA_N12_FIXTURES")
+    if not fixtures:
+        pytest.skip("set HARPYJA_N12_FIXTURES to run the G3 reliability check")
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+    cases, provenance, excluded, malformed = _load_resolved(fixtures)
+    report = run_swebench(
+        cases, _settings_live(), EvalConfig(k_runs=1), stack_factory=_factory(),
+        out_dir=tmp_path / "out", write=True, provenance=provenance,
+        new_file_only_excluded_count=excluded, malformed_skipped_count=malformed,
+        production_classifier=lambda q: "point",
+    )
+    validate_report(report)
+    agg = report["aggregate"]
+    # degrade posture is measured (first-class), never silent.
+    assert agg["scout_degrade_rate"] is not None
+    assert isinstance(agg["degraded_dominated"], bool)
+    # if the run is degrade-dominated it must carry a reliability note (loud, not silent).
+    if agg["degraded_dominated"]:
+        assert agg["reliability_notes"]
