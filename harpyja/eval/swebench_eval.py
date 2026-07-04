@@ -900,6 +900,24 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     print(f"[preflight] models pulled: {verified}", file=sys.stderr)
 
 
+def cmd_oq2(args: argparse.Namespace) -> None:
+    """Spec 0020 — run the OQ2 operator protocol and write a `0020/1` gate-ledger."""
+    from harpyja.eval.config import EvalConfig
+    from harpyja.eval.oq2_live import run_oq2_operator
+
+    result = run_oq2_operator(
+        args.fixtures, _settings_from_args(args), EvalConfig(),
+        out_dir=args.out_dir,
+        thresholds=args.thresholds, top_ns=args.top_ns,
+        per_case_timeout=args.per_case_timeout, write=True,
+    )
+    print(
+        f"[oq2] disposition={result.disposition} outcome={result.outcome} "
+        f"gates={[g.gate for g in result.gates]} → {args.out_dir}/gate_ledger.json",
+        file=sys.stderr,
+    )
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     from harpyja.eval.config import EvalConfig
 
@@ -1004,6 +1022,17 @@ def _build_parser() -> argparse.ArgumentParser:
     pf = sub.add_parser("preflight", help="assert required served models are pulled")
     _add_model_flags(pf)
     pf.set_defaults(func=cmd_preflight)
+
+    # spec 0020 — the OQ2 operator protocol: G0 preflight → G1 smoke → G2 gate-quality
+    # → G3 sweep, stop-and-report, emitting a 0020/1 gate-ledger with one typed outcome.
+    oq = sub.add_parser("oq2", help="run the OQ2 operator protocol (G0→G1→G2→G3)")
+    oq.add_argument("--fixtures", default="harpyja/eval/fixtures")
+    oq.add_argument("--out-dir", default="eval_work/reports")
+    oq.add_argument("--thresholds", type=float, nargs="*", default=None)
+    oq.add_argument("--top-ns", type=int, nargs="*", default=None)
+    oq.add_argument("--per-case-timeout", type=float, default=None)
+    _add_model_flags(oq)
+    oq.set_defaults(func=cmd_oq2)
 
     return p
 

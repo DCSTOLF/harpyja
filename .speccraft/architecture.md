@@ -218,6 +218,31 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    + a `preflight` CLI subparser) asserts required served-model tags are **pulled** behind
    `assert_local` (no second outbound path; "pulled" ≠ co-resident-loadable, OOM named as a
    residual risk). SUT frozen — measurement, not construction. See history.md 2026-07-02 (spec 0019).
+   **As of spec 0020** the package carries the **OQ2 operator protocol** — the sweep that RUNS the
+   0019 instrument, still measurement, not a runtime tier. `oq2_protocol.py::run_oq2_protocol` is a
+   sequential four-gate stop-and-report driver (G0 preflight → G1 smoke → G2 gate-quality → G3
+   sweep) over injected collaborators, each verdict recorded before the next gate; close-vs-hold is
+   split **by cause** (D7) — a SUT-observing outcome (`STOP:SMOKE` / a G3 label) **closes**, an
+   environment failure (preflight fail / fixtures absent / G1-sub-check-(a) OOM under co-load) is a
+   **BLOCKED hold** naming the fix. `oq2_classify.py::classify_g3_outcome` is a **pure projection
+   ABOVE the byte-frozen `recommend_oq2` dispatcher** (which still emits only `recommended` /
+   `gate-confounded`), mapping its result + `degraded_dominated` + effective-N to one of
+   `{RECOMMENDATION, GATE_CONFOUNDED, DEGRADED_DOMINATED, NOT_SEPARABLE}`, precedence
+   **DEGRADED_DOMINATED > GATE_CONFOUNDED > NOT_SEPARABLE > RECOMMENDATION**, all true conditions
+   recorded, the no-survivor `S` (`incumbent_validated is False AND advantage_exceeds_variance is
+   False`) computed only when `rank_sweep` ran (no phantom `NOT_SEPARABLE`), `indicative_only` a
+   RECOMMENDATION-only sub-flag (effective-N < `n_floor`); `recommend_oq2` / `rank_sweep` stay
+   byte-frozen. `oq2_ledger.py` is a **new pinned artifact** `LEDGER_SCHEMA_VERSION = "0020/1"`
+   (distinct from the sweep report `0014/1`, which is NOT bumped): per-gate verdicts + measured
+   sub-values + close/hold cause + G3 label & D/G/S booleans + run provenance, loud
+   `validate_gate_ledger` / `LedgerSchemaError`, `write_gate_ledger` reusing
+   `report.atomic_write_json` (outside-repo guard single-sourced). `oq2_live.py` + the `oq2` CLI
+   subcommand (`cmd_oq2` in `swebench_eval.py`) are the live seam that drives the real G0→G3
+   collaborators over the served stack. The live operator run produced a typed **DEFERRED** null —
+   G2 unmeasurable (`correct_tier1_count = 0` → `gate_false_escalation = null`) because Scout Tier-1
+   is ≈ 0 correct on SWE-bench point cases (verified real, model-independent), so OQ2 gate
+   calibration is blocked UPSTREAM on Scout locate accuracy. SUT frozen. See history.md 2026-07-04
+   (spec 0020).
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 

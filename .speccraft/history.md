@@ -2,6 +2,93 @@
 
 Append-only. Newest first.
 
+## 2026-07-04 — Spec 0020 (OQ2 — the operator sweep) shipped the sequential G0→G3 operator protocol + the `0020/1` gate-ledger; the live run produced a typed **DEFERRED** null — Scout Tier-1 ≈ 0 correct on SWE-bench (verified, model-independent) is the real upstream blocker (OQ2 gate calibration is NOT reached; the SUT stays frozen)
+
+**Spec:** specs/0020-oq2/
+**Decision:** Run the 0019 instrument as the OQ2 **operator sweep** — a four-gate sequential
+stop-and-report protocol (G0 preflight → G1 smoke → G2 gate-quality → G3 sweep), emitting exactly
+one typed outcome + a durable gate-ledger — as a pure **measurement/eval** spec: the SUT (tiers /
+gate / matrix / judge / classifier / citation format) stays **FROZEN**, every change lands
+additively in `harpyja/eval/`. Four durable points. (1) **The four G3 labels come from a
+PROJECTION LAYER above the byte-frozen dispatcher, never a widening of it (D1).** New pure
+`classify_g3_outcome(recommendation, aggregate, eval_config)` (`oq2_classify.py`) maps the
+byte-unchanged 0019 `recommend_oq2` result (which still emits only its two strings,
+`recommended` / `gate-confounded`) + `degraded_dominated` + effective-N down to one of
+`{RECOMMENDATION, GATE_CONFOUNDED, DEGRADED_DOMINATED, NOT_SEPARABLE}`, precedence
+**DEGRADED_DOMINATED > GATE_CONFOUNDED > NOT_SEPARABLE > RECOMMENDATION**, ALL true blocking
+conditions recorded (not only the winner). The no-survivor `S` signal is derived on the frozen
+`Recommendation` — the UNIQUE state `incumbent_validated is False AND advantage_exceeds_variance
+is False` (a variance-beating flip carries `advantage_exceeds_variance is True`; a validated
+incumbent carries `incumbent_validated is True`) — and computed ONLY when `rank_sweep` ran
+(`outcome != gate-confounded`), so a phantom `NOT_SEPARABLE` is never booked alongside
+`GATE_CONFOUNDED`; `indicative_only` (effective-N < `n_floor` = 30) is a RECOMMENDATION-only
+sub-flag. D2 boundary held: within-variance is a validated-incumbent RECOMMENDATION, not
+NOT_SEPARABLE. `recommend_oq2` / `rank_sweep` stay byte-frozen (P1 field-reachability lock + P2
+behavior-snapshot golden lock in `test_recommend.py` — a snapshot, never a source grep).
+(2) **The gate-ledger is a NEW pinned artifact, `LEDGER_SCHEMA_VERSION = "0020/1"` (D8/AC2),
+distinct from the sweep report `0014/1`.** `oq2_ledger.py` carries per-gate verdicts (each G1
+sub-check's measured value + the close/hold cause; G2's instruct-vs-finder A/B; G3's label +
+all D/G/S booleans) + run provenance (SUT git SHA, resolved `EvalConfig`, fixture-subset id,
+model tags, the grid), loud `validate_gate_ledger` / `LedgerSchemaError`, and a
+`write_gate_ledger` that reuses `report.atomic_write_json` so the outside-the-indexed-repo guard
+stays single-sourced; `report.SCHEMA_VERSION` is NOT bumped. (3) **Close ≠ hold, split BY CAUSE
+(D7).** `oq2_protocol.py::run_oq2_protocol` records each verdict before the next gate; a SUT-
+observing outcome (`STOP:SMOKE` — a run that *completed* then degrade-dominated or gate-false-
+rejected — or a G3 label) **closes**, while an environment failure (G0 preflight fail, fixtures
+absent, or a G1 sub-check-(a) non-completion for an environment reason: OOM / resource
+exhaustion under co-load — the G0-invisible residual, since G0 proves models *pulled*, not
+co-resident-loadable) is a **BLOCKED hold** that names the fix. This makes 0019's F4 loophole
+airtight: skip-not-fail is NOT a valid close for 0020, and a resource failure can never
+masquerade as a SUT finding. (4) **A typed null (incl. an unmeasurable metric) is a complete,
+valid deliverable that names the next spec (AC11) — never a forced `(threshold, top_n)` pick.**
+`oq2_live.py` + the `oq2` CLI subcommand (`cmd_oq2`) are the live seam that produced the recorded
+outcome end-to-end.
+**Why:** Specs 0016/0017/0018 fixed the three 0015 blockers (B1/B3/B2) and 0019 shipped the
+instrument + gate-confound mechanism but deliberately deferred the numbers; mechanism + instrument
+≠ OQ2 calibrated. The dev host is now 32 GB with `mode=auto` OOM resolved and the served models
+pulled, so there was no infrastructural reason left to defer — hence AC12 makes a recorded typed
+outcome the close gate, not another skip-not-fail demo. The four-gate sequencing IS the spec: it
+makes 0015's mistake (a long, expensive run over a broken gate) structurally impossible — find a
+wedge in minutes, not hours.
+**Consequence — the operator protocol + `0020/1` ledger shipped and unit-verified; the live run
+produced a typed DEFERRED null; OQ2 gate calibration is NOT reached, blocked UPSTREAM on Scout
+locate accuracy (itself the honest deliverable).** Shipped TDD-complete: **820 unit pass** (+43
+over the 777 baseline), ruff clean. **Operator-run outcome (typed DEFERRED, a valid deliverable):**
+G0 PASS (tags present, validated twice); G1 (astropy-12907, `mode=auto`) PASS but with an honest
+caveat — `tier1_correct=False` (Scout missed the gold span, the gate correctly caught the wrong
+citation at catch_rate 1.0 and escalated to Deep, which also missed; sub-check (c) vacuously
+satisfied, case not solved end-to-end); **G2 DEFERRED** — the instruct pass over 38 point cases
+completed (~3.3 h) with **`correct_tier1_count = 0`** → `gate_false_escalation = null` **by
+definition** (you cannot measure whether a judge false-*rejects* correct citations when Scout emits
+none), so the finder A/B + G3 sweep are MOOT (`verify_method` changes the judge, not Scout's
+citations) and were not run. **Root cause verified real, not a harness artifact:** direct Tier-1
+spot-checks confirmed `expected_spans` load, Scout runs/returns citations, oracle correct — Scout
+Tier-1 is genuinely ≈ 0 correct on SWE-bench point cases (best case **right-file-wrong-span**:
+astropy-12907 cited `separable.py:66-102` vs gold `242-248`; else empty/wrong-file). **Not a
+model-swap fix (verified):** `qwen3:4b-instruct` as the Scout finder also 0/3, same pattern, and on
+astropy-12907 **both models produced the identical wrong span** → span-level localization / task
+difficulty, not model quality. **Environment findings recorded (D9-a/D9-b):** `qwen3-coder:30b` as
+Deep+judge **OOM'd** the 32 GB host (swap 94 % full — the D9 co-residency risk realized, an AC4/D7
+BLOCKED-hold cause), resolved by dropping to `qwen3:8b` (~9.5 GB co-resident); and
+`make_instruct_judge` does **not** disable model "thinking" (the anchored `_parse_score` would fail
+on a `<think>` block) — a latent 0018 SUT robustness gap, not biting here (`qwen3:8b` empirically
+returns bare, well-calibrated numbers). **Deviations (recorded honestly):** the five protocol
+RED/GREEN pairs (T7–T16) were batched into one comprehensive RED + one GREEN (test-first preserved);
+T18 refactor was a no-op (the driver already single-sources `_verdict_dict` / `commit`); T19 built
+the live harness + ran G0/G1 live, with the full G2/G3 sweep operator-gated and (given the DEFERRED
+root cause) moot — AC12's "skip-not-fail ≠ close" honored, the spec closes on a recorded
+SUT-observing DEFERRED outcome. **Scope honesty — never claim OQ2 was calibrated or that Scout was
+fixed:** mechanism + instrument shipped, G0/G1 validated live, OQ2 gate calibration remains blocked
+upstream. **Named follow-up: Scout Tier-1 span-level localization on SWE-bench** (the
+right-file-wrong-span pattern from long issue-text queries; file/proximity vs exact-span scoring;
+finder capability) — **NOT** a gate-accuracy, threshold-calibration, or finder-model-swap spec.
+Secondary follow-ups carried forward: **judge thinking-defense hardening** (D9-b — set
+`/no_think` / `enable_thinking=False` or tolerate a `<think>` prefix in `_parse_score`); a
+**smaller-footprint Deep + a co-residency budget** (D9-a); reconciling the `escalation_rate: 0.0`
+vs 3.3 h-runtime **accounting anomaly** before trusting secondary metrics; **permanent ceiling
+calibration** (the provisional 0.20 is still unmeasured — G2 never yielded a rate); the **permanent
+`lm_model` / Deep choice**; and, still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+
 ## 2026-07-02 — Spec 0019 (oq2-rerun) shipped the OQ2 re-run INSTRUMENT + gate-confound MECHANISM — the SUT stays frozen; the actual OQ2 numbers remain an operator sweep (mechanism+instrument shipped ≠ OQ2 calibrated)
 
 **Spec:** specs/0019-oq2-rerun/

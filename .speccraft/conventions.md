@@ -251,6 +251,49 @@
   it the result is flagged low-confidence / deltas-only — a relative ranking, never a
   calibration to flip a default on. (See `harpyja/eval/swebench_eval.py` D-route,
   `classifier_agreement_rate`, `AGREEMENT_FLOOR`, `production_gate_ran`.)
+- A new taxonomy/outcome **label is a projection layer ABOVE a byte-frozen dispatcher,
+  never a widening of it** — measurement-not-construction in the type. When a
+  measurement needs richer outcomes than the SUT's own frozen dispatcher emits, add a
+  **pure projection** that maps the byte-unchanged dispatcher result (+ the harness
+  aggregate) down to the extended label set, in a **separate module**, so the file that
+  must never be perturbed is not touched (and can be golden-locked). Encode any
+  precedence as a **total order over overlapping (non-partition) conditions**, record
+  **all** true conditions (not only the winner), and compute a condition **only when its
+  input actually ran** (e.g. a no-survivor signal only when the sweep executed, never
+  under a short-circuit) so a phantom label is never booked alongside the one that
+  short-circuited it. Prove the extended labels' discriminators are reachable on the
+  frozen result **without editing the dispatcher** (a field-reachability lock) and pin
+  the dispatcher with a **behavior snapshot**, not a source grep. (See
+  `harpyja/eval/oq2_classify.py` `classify_g3_outcome` above the frozen
+  `recommend_oq2` / `rank_sweep`, `test_recommend.py` P1/P2 locks, spec 0020 D1/D3/AC6.)
+- A **measurement spec closes on a recorded, SUT-observing typed outcome that names the
+  next spec — skip-not-fail is never a close**, and a typed null (including an
+  *unmeasurable* / DEFERRED metric with a zero-count denominator) is a **complete, valid
+  deliverable**, never a forced pick to manufacture a clean-looking number. Draw the
+  **close-vs-hold boundary BY CAUSE, not by which stage stopped**: an outcome that
+  actually observed the SUT (a completed-then-failed finding, or a produced label) is a
+  **close**; an environment failure (a missing dependency, absent fixtures, OOM /
+  resource exhaustion under co-load) is a **BLOCKED hold** that names the exact fix — so
+  a resource failure can never masquerade as a SUT finding. Emit a durable, loudly
+  validated **ledger** artifact (its own pinned, version-stamped schema, distinct from
+  the sweep report; reuse the one atomic outside-repo writer) recording each stage's
+  verdict + measured sub-values + the close/hold cause + run provenance, so a STOP /
+  BLOCKED verdict is reproducible. (See `harpyja/eval/oq2_protocol.py`
+  `run_oq2_protocol`, `harpyja/eval/oq2_ledger.py` `LEDGER_SCHEMA_VERSION` `"0020/1"`,
+  spec 0020 D7/D8/AC2/AC11/AC12.)
+- Before reporting a **null / undefined measurement, verify the null is real — not a
+  harness artifact** — by spot-checking the oracle, the fixtures, and the SUT
+  invocation directly, and separate a genuine **upstream** limit from a measurement bug
+  before naming a follow-up. A metric that is `null` because its denominator is
+  legitimately zero (e.g. a judge's false-*rejection* rate is undefined when the finder
+  emits zero correct citations to reject) is an honest deliverable ONLY once the zero
+  denominator is confirmed to reflect the SUT and not a loading/scoring defect — and the
+  follow-up it names must target the **actual** upstream blocker (here: finder locate
+  accuracy), not the downstream metric that merely went undefined (gate calibration).
+  Cross-check with an independent A/B where feasible (a second model reproducing the same
+  failure argues task difficulty, not model quality). (See spec 0020's G2 DEFERRED
+  root-cause verification: `correct_tier1_count = 0` confirmed via direct Tier-1
+  spot-checks + a `qwen3:4b-instruct` A/B, not accepted at face value.)
 
 ## Logging
 

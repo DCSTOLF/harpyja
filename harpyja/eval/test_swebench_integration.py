@@ -515,3 +515,48 @@ def test_g3_reliability_gate_records_degrade(tmp_path):
     # if the run is degrade-dominated it must carry a reliability note (loud, not silent).
     if agg["degraded_dominated"]:
         assert agg["reliability_notes"]
+
+
+# ---- Spec 0020 (AC12): the OQ2 operator protocol, live G0→G3 ----------------
+
+@pytest.mark.integration
+def test_oq2_operator_protocol_live_g0_to_g3(tmp_path):
+    """AC12: drive the REAL run_oq2_operator end-to-end over the served stack +
+    provisioned N=12 subset, asserting a recorded 0020/1 gate-ledger with a typed
+    outcome (a G3 label or STOP:SMOKE close) or a BLOCKED hold that names the fix.
+
+    Operator-gated & EXPENSIVE (skip-not-fail): the full clean G3 sweep is
+    k_runs × grid × point-cases mode=auto runs with the D9 30B judge — many hours.
+    Opt in explicitly with HARPYJA_OQ2_RUN=1 plus HARPYJA_N12_FIXTURES; otherwise this
+    skips (never fails). NOTE (AC12): a SKIP here is NOT a valid CLOSE for spec 0020 —
+    closing requires this to actually run and record a typed outcome.
+    """
+    from harpyja.eval.oq2_ledger import LEDGER_SCHEMA_VERSION, validate_gate_ledger
+    from harpyja.eval.oq2_live import run_oq2_operator
+
+    fixtures = os.environ.get("HARPYJA_N12_FIXTURES")
+    if os.environ.get("HARPYJA_OQ2_RUN") != "1" or not fixtures:
+        pytest.skip("set HARPYJA_OQ2_RUN=1 + HARPYJA_N12_FIXTURES to run the OQ2 operator sweep")
+    if not _live_stack_available():
+        pytest.skip(_NEEDS_STACK)
+
+    # D9 config: Scout stays the served RL-Q8 finder; Deep + the instruct judge = 30B.
+    deep = os.environ.get("HARPYJA_OQ2_DEEP_MODEL", "qwen3-coder:30b")
+    settings = replace(_settings_live(), lm_model=deep)
+    result = run_oq2_operator(
+        fixtures, settings, EvalConfig(),
+        out_dir=tmp_path / "oq2", per_case_timeout=600.0, write=True,
+    )
+    validate_gate_ledger(result.ledger)
+    assert result.ledger["ledger_version"] == LEDGER_SCHEMA_VERSION
+    assert result.disposition in ("close", "hold")
+    # a close observed the SUT (STOP:SMOKE or a G3 label); a hold names the fix.
+    if result.disposition == "hold":
+        assert result.outcome == "BLOCKED"
+    else:
+        assert result.outcome in (
+            "STOP:SMOKE", "RECOMMENDATION", "GATE_CONFOUNDED",
+            "DEGRADED_DOMINATED", "NOT_SEPARABLE",
+        )
+    written = (tmp_path / "oq2" / "gate_ledger.json")
+    assert written.exists()
