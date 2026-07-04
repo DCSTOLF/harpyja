@@ -294,6 +294,39 @@
   failure argues task difficulty, not model quality). (See spec 0020's G2 DEFERRED
   root-cause verification: `correct_tier1_count = 0` confirmed via direct Tier-1
   spot-checks + a `qwen3:4b-instruct` A/B, not accepted at face value.)
+- A diagnostic/attribution that cannot be **recovered from a persisted artifact is a
+  LABELED ESTIMATE, never a fabricated recorded number** — the honest-precision /
+  no-false-capability rule applied to a measurement's provenance. Two instances, one rule.
+  (a) A metric-integrity diagnostic that rests on a per-run dump asserts that dump's
+  **existence FIRST**: `eval_work/` is gitignored / machine-local, so per-run diagnostics
+  evaporate and un-committed secondaries survive only in an operator transcript — if the
+  dump is absent the deliverable **degrades to an explicitly-labeled estimate** (e.g.
+  per-tier proportions from a ≤2-case micro-run × N cases), anchored on the one recorded
+  aggregate (a wall-clock total), never a re-quoted transcript figure dressed as measured.
+  (b) A per-tier decomposition the frozen runner never persisted (case-level `latency_ms`
+  only, not Scout/judge/Deep granularity) is attributed at the **eval boundary** by
+  wrapping a collaborator's **public** method (a `_wrap_timed` that is a safe no-op on a
+  missing/None method and restores in `finally`) — **never inside frozen orchestrator
+  internals** — and the split is labeled `"estimate"` while the total stays
+  wall-clock-anchored. (See `harpyja/eval/escalation_microrun.py` `_wrap_timed` /
+  `build_micro_result`, spec 0021 T0 / AC3, review C1.)
+- A recorded diagnostic **finding taxonomy is MECE**: when candidate outcome values are
+  not mutually exclusive — one is an *explanation UNDER* another rather than an
+  *alternative TO* it — split the finding into **orthogonal axes, one value per axis**,
+  rather than forcing a false either/or into a single flat enum. Spec 0021 records
+  `accounting ∈ {ACCOUNTING_BUG, CORRECT_NO_ESCALATION}` × `wrong_citation_fate ∈
+  {GATE_FALSE_ACCEPTANCE, NO_ESCALATION_PATH, DEEP_DEGRADED_OR_UNAVAILABLE, NOT_APPLICABLE}`
+  because `GATE_FALSE_ACCEPTANCE` *explains why* `escalation_rate=0` was correct (it is not
+  a rival to `CORRECT_NO_ESCALATION`): whether the count was faithful is independent of why
+  the wrong cases didn't escalate. Each axis value is grounded independently (the accounting
+  axis by a coupling PIN over the derived metric; the fate axis by a projection over the
+  frozen SUT). A projection/characterization of frozen SUT behavior is grounded in READING
+  THE FROZEN SOURCE, not the spec/plan's assumption about it — when they conflict the code
+  wins and the test is corrected to pin the actual behavior (spec 0021's honest-empty case:
+  the plan assumed Tier-1 escalates, `_locate_auto` gate-skips it and never does;
+  `classify_escalation` gained a `tier1_empty` parameter and the trigger test was corrected
+  — a test asserting a false claim about the SUT is worse than none). (See
+  `harpyja/eval/escalation.py` `WrongCitationFate`, spec 0021 AC4 / review C2.)
 
 ## Logging
 

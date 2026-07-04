@@ -111,6 +111,35 @@ def test_escalation_rate_counts_tier2_over_all_auto_cases():
     assert escalation_rate(outcomes) == 0.5
 
 
+# ---- Spec 0021 (AC1): the tiers_run <-> escalation_rate COUPLING ------------
+# The novel assertion (distinct from the plain-rate test above) is that the metric
+# is DERIVED from tiers_run: a case reaching Tier-2 increments the numerator; a
+# Tier-1-terminal case does not. This pins that escalation_rate=0 is a real
+# no-escalation (the 0020 result), not a lost/miscounted signal.
+
+def test_escalation_rate_counts_case_reaching_tier2():
+    # A single case whose ladder reached Tier-2 -> rate 1.0 (numerator incremented).
+    assert escalation_rate([_outcome(tiers_run=(0, 1, 2))]) == 1.0
+
+
+def test_escalation_rate_ignores_tier1_terminal_case():
+    # A single case terminating at Tier-1 -> rate 0.0 (numerator NOT incremented),
+    # even though Tier-1 ran. Escalation is strictly "2 in tiers_run".
+    assert escalation_rate([_outcome(tiers_run=(0, 1))]) == 0.0
+
+
+def test_escalation_rate_zero_when_no_case_reaches_tier2():
+    # The 0020 shape, reproduced from injected fixtures: a population where no case
+    # reached Tier-2 yields exactly 0.0 -> escalation_rate=0 is a faithful
+    # no-escalation, not a dropped count (CORRECT_NO_ESCALATION accounting axis).
+    outcomes = [
+        _outcome(tiers_run=(0,)),
+        _outcome(tiers_run=(0, 1)),
+        _outcome(tiers_run=(1,)),
+    ]
+    assert escalation_rate(outcomes) == 0.0
+
+
 def test_tier01_resolve_rate():
     outcomes = [
         _outcome(tiers_run=(0, 1)),

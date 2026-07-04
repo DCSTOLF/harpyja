@@ -244,6 +244,27 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    calibration is blocked UPSTREAM on Scout locate accuracy. SUT frozen. See history.md 2026-07-04
    (spec 0020).
 
+   **As of spec 0021** the package carries two additive diagnostic modules from the
+   `escalation_rate=0` metric-integrity investigation (still measurement, not a runtime
+   tier; the SUT `harpyja/orchestrator/` was read-only reference, NOT modified).
+   `escalation.py` is a **pure projection over the byte-frozen `_locate_auto`**:
+   `WrongCitationFate` enum {`GATE_FALSE_ACCEPTANCE`, `NO_ESCALATION_PATH`,
+   `DEEP_DEGRADED_OR_UNAVAILABLE`, `NOT_APPLICABLE`} + `classify_escalation(*,
+   tier1_correct, gate_rejected, deep_available, ladder, tier1_empty=False) -> (will_escalate,
+   WrongCitationFate)` — ladders are passed IN (it never re-derives `matrix.plan_ladder`;
+   the test derives every ladder BY CALLING it). `escalation_microrun.py` is an additive
+   instrumented ≤2-case micro-run (`_wrap_timed` / `build_micro_result` /
+   `run_escalation_microrun`) that attributes per-tier wall-clock at the **eval boundary**
+   by wrapping collaborators' public `scout_engine.search` / `gate.verify` /
+   `deep_engine.search` (restored in `finally`), labelling the split `"estimate"` — no
+   orchestrator edit. `test_metrics.py` gained the `tiers_run ⇄ escalation_rate` coupling
+   PIN. The recorded typed finding (`specs/.archive/0021-escalation-rate-0/findings.md`):
+   `accounting = CORRECT_NO_ESCALATION` (proven — the metric is derived, coupling-pinned),
+   `wrong_citation_fate` = 33 empty → `NO_ESCALATION_PATH` (confirmed) + 5 wrong undetermined
+   (0020 dump gone); the 0020 secondaries `wrong_tier1_count` / `span_hit_rate_primary` /
+   `gate_catch_rate` are flagged CONTAMINATED for the next spec to regenerate. Report schema
+   unchanged. See history.md 2026-07-04 (spec 0021).
+
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
 ## Key decisions

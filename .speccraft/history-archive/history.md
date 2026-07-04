@@ -418,3 +418,181 @@ Tier 2 Deep; the containment is an assumption verified by the network-deny integ
 AC11, not an asserted guarantee); and, still open from Wave 2, **Wave-2.1 substring/fuzzy
 matching**.
 
+## 2026-06-28 — SWE-bench Verified eval dataset + per-case-repo driver shipped — real-data instrument, measurement-only, recommend-only, live-validated
+
+**Spec:** specs/0010-swebench-eval-dataset/
+**Decision:** Give the 0009-6a eval **instrument** a real dataset to measure: a
+SWE-bench Verified adapter (`harpyja/eval/swebench_eval.py`) plus the **per-case-repo
+driver** the single-repo harness structurally lacked, so Harpyja produces its first
+**non-indicative** locate-accuracy numbers and a sweep-backed OQ2 picture — while
+preserving the **measurement-only / recommend-only INVARIANT inherited from 0009-6a
+(B1)**: no tier/gate/matrix/classifier CODE change, no `Settings` default flipped, the
+only `Settings` touch a `dataclasses.replace` on `verify_threshold`/`verify_top_n` in
+the sweep. Nine durable choices were pinned. (1) **Standalone-localization protocol
+(FastContext paper), not the SWE-bench harness.** `parse_patch` derives the gold
+patch's pre-image (`--- a/…`) hunk spans as ground truth and scores predicted citations
+against them at `base_commit` — **no** Docker, image build, patch apply, or test exec
+(Harpyja is a locator, not a patcher; also sidesteps x86-under-emulation pain). The
+~3-context-line inflation biases span-hit **upward** and is recorded as a durable
+`span_inflation_tolerance`, not framed neutral (R5). (2) **D-class — classification by
+patch shape.** `classify_by_patch_shape`: a single file with total pre-image span ≤
+`POINT_SPAN_MAX_LINES=25` ⇒ `point`, else `broad`. On the real N=50 sample this gave
+**38 point / 12 broad** — a usable point subset, so the all-broad
+uncalibratable-risk the review caught is avoided. (3) **D-route — a RECORDED EVALUATION
+INTERVENTION (resolves review B1).** Production routing keys on `classify_query(query)`
+(issue prose), uncorrelated with patch shape, so a patch-shape-`point` case would
+frequently route straight to Deep and the gate would never fire — the whole OQ2 signal
+computed over cases production never gated. The driver therefore injects a classifier
+returning `case.classification` through the existing **`LocateStack.classifier` seam**,
+swapping only the *input* to the unchanged routing/gate/matrix code so the gate
+genuinely fires; the production `classify_query` label is captured **before** the
+override, both labels are recorded per case + an aggregate `classifier_agreement_rate`,
+and a SUT-observed `production_gate_ran` (from `result.tiers_run`/`notes`) is kept
+**distinct** from the harness Scout-probe `gate_triggered`. This is **not** pure
+observation — surfaced loudly, never hidden — and the single-source-of-truth-routing
+flag dissolves because `classify_query`/`plan_ladder` stays the sole routing path.
+(4) **OQ2 agreement-rate guard (round-2).** Below `AGREEMENT_FLOOR=0.5` the sweep
+recommendation is flagged `oq2_low_confidence` / `oq2_basis=deltas-only` — a relative
+ranking, **never** a calibration to flip a default on (keeps a low-agreement run, where
+the gate fired on a synthetic routing distribution production never produces, from
+reading as a confident calibration). (5) **D-newfile + B2.** All-new-file instances
+(`--- /dev/null`, no pre-image) are flagged `new_file_only` and **EXCLUDED** from
+scoring with a surfaced count (no silent zero); `base_commit` lives only in the raw
+JSONL (`provision` reads it via `_read_jsonl`) and `load_dataset` ignores it — the
+round-1 "preserved on `EvalCase`" false-capability is gone. (6) **Per-case-repo
+driver.** The 0009-6a harness was single-repo (`run_dataset(..., repo_path, stack)`);
+SWE-bench is one worktree per case, so `run_swebench` builds its **own** `LocateStack`
+per case (D-route classifier injected) and **pools** outcomes into the UNCHANGED
+`metrics`/`recommend` layers + the additively-extended report, artifacts written
+outside EVERY case repo. (7) **Additive report schema.** `SCHEMA_VERSION` bumped
+`0009-6a/1` → `0010/1`; six run / three case / one aggregate field appended
+last-with-defaults, the field set + defaults **centralized in `report.py` `_*_DEFAULTS`**
+(the single anti-drift source, fulfilling the T26 refactor by construction) so BOTH the
+single-run and multi-repo shapes validate; durable metadata carries protocol id,
+new-file-excluded count, malformed-skipped count, agreement rate, span-inflation
+tolerance, contamination caveat, and dataset provenance (HF id/split/revision,
+raw-fixture sha256, sample case-ids). (8) **`mode=fast` seam (R3).** `run_case` now
+threads `mode`; `fast` is **Scout-terminal** (Wave-5 gate informational, never
+escalates) — the corrected SUT description, not "no gate". (9) **Network posture /
+air-gap scoping (R8).** `convert` (HF) and `provision` (`git clone`) are dev-time
+tools explicitly **OUT** of the runtime air-gap guarantee; `run`/`sweep` are offline
+(live integration asserts zero non-loopback egress).
+**Why:** With N=5 ≪ `N_FLOOR=30` the 0009-6a harness could only emit `indicative_only`
+runs — locate accuracy was unproven on a real tree and OQ2 (`0.6`/`3`, provisional
+since Wave 5) had nothing real to measure. SWE-bench Verified supplies 500
+human-validated issues whose pre-image hunk locations are patch-derivable ground
+truth — exactly the repo state at `base_commit` Harpyja scans — so a stratified sample
+clears the floor. Framing is deliberately modest (R4): SWE-bench is public, so the
+**absolute** numbers are not a generalization claim; the load-bearing outputs are the
+contamination-robust **relative** deltas (threshold/top_n against each other,
+fast-vs-auto). D-route exists because patch-shape and prose-classification are
+uncorrelated, so without the injected input the gate metrics would be partly fiction
+and partly flat — the precise "uncalibratable" failure D-class was written to prevent.
+**Consequence — instrument built + live-validated on REAL data; the full OQ2
+calibration is an operator opt-in.** Reconciliations surfaced in execution: the
+uploaded `_to_eval_case` emitted the wrong schema (`id`/expected-dict) → fixed to
+`case_id`/`expected_spans`-list; the uploaded `Makefile.swebench` pointed at a
+nonexistent `harpyja.eval.runner --fixture` CLI → reconciled to the real `swebench_eval
+run|sweep` subcommands; and default `Settings.lm_model="local"` (a llama.cpp
+placeholder) forced new `--lm-model`/`--lm-api-base`/`--deep-max-subqueries` flags
+(applied via `replace`) + a Makefile `LM_MODEL` so `make swebench-run` drives Ollama.
+Shipped TDD-complete: **611 unit pass** (+~54 new eval tests), ruff clean; **4
+integration passed LIVE in 185s** — live multi-repo driver e2e, zero non-loopback
+egress, live OQ2 sweep + agreement guard, and a **real HuggingFace `convert` smoke**.
+Real `convert --sample 50 --per-repo 5` → 50 real cases, 0 malformed, 0 new-file, 12
+repos, 38 point / 12 broad, committed as the portable raw fixture (clears `N_FLOOR=30`).
+Real `provision + run` (flask + requests, actually cloned + worktreed, 2/2 resolved) gave
+`span_hit_primary=0.5` (flask HIT, requests MISS), escalation 0.0 — and the instrument
+surfaced a **real Scout/FastContext defect**, NOT a gate finding: both cases carry
+`scout-degraded:backend-error` (FastContext's own `format_citations` crashes on real-query
+output → `ScoutUnavailable` → Tier-0 degrade, the spec-0007 AC10 case), so Tier-1/gate were
+**upstream-starved** and 0.5 is the Tier-0 degrade-floor, not an escalation-skip signal (an
+earlier draft mis-read this as "gate did not fire" — corrected per no-false-capability).
+**Implication:** Scout is non-functional on real SWE-bench until FastContext `format_citations`
+is made robust to string-shaped citations, so OQ2 cannot be calibrated from this dataset
+regardless of N — a new lead follow-up. The FULL live OQ2 sweep (all 12 cloned repos × K) is
+compute-bound and the documented opt-in (`make swebench-full` → `swebench-sweep`); **no
+`Settings` default flipped (B1)**
+— the flip remains a separate one-line follow-up spec citing this evidence. Open
+follow-ups carried forward: the **OQ2 default flip** (now backed by a real,
+N≥30-clearing instrument, guarded by the agreement floor); a **held-out
+decontamination mini-set** (R4, deferred); and, still open from Wave 2, **Wave-2.1
+substring/fuzzy matching**.
+
+## 2026-06-28 — Wave 6a Eval harness + OQ2 calibration shipped — measurement-only, recommend-only, live-validated
+
+**Spec:** specs/0009-6a/
+**Decision:** Land a NEW **measurement-only** package `harpyja/eval/` that observes
+the real `mode=auto` `locate()` path and reports locate accuracy, escalation rate,
+and gate catch / false-escalation metrics, plus an OQ2 `(verify_threshold,
+verify_top_n)` recommendation — and flips **no** `Settings` default (B1; the flip is
+a future one-line follow-up spec, so "measurement only, no behavior change" stays
+literally true). The harness is the first non-tier layer: it does not answer queries,
+it *measures* the system that does. Seven durable choices were pinned. (1) **The
+harness observes the SUT through its real public seam and never mutates its config.**
+The runner drives the production `harpyja.orchestrator.locate.locate(...)` via an
+injected `LocateStack` (fakes for unit, `build_live_stack` real factories for
+integration); the only `Settings` interaction is the sweep building grid points via
+`dataclasses.replace` on the real `verify_threshold` / `verify_top_n` fields, never
+mutation (`test_sweep_does_not_mutate_settings`). (2) **Eval-only knobs live off the
+production frozen `Settings` (K-placement deviation).** The spec body's "additive
+eval-only `Settings` field carrying K" was reconciled at plan time to a dedicated
+frozen `EvalConfig` (k_runs / proximity_window_lines / n_floor / catch_rate_bar),
+**field-name-disjoint** from `Settings` (`test_eval_config_is_independent_of_settings`)
+— K is a runner loop count the SUT never reads, so putting it in the production config
+is a coupling smell with no compensating uniformity benefit. (3) **ONE overlap oracle
+defines correctness for every derived metric (D3/D5).** `_any_primary_overlap` (ANY
+cited span overlaps ANY expected span in the same file; touching ranges count, D6) is
+reused by span-hit accuracy, gate catch-rate, AND gate false-escalation — there is no
+second notion of correctness that could drift, asserted by
+`test_gate_metrics_use_same_oracle_as_span_hit`. The Tier-1 signal is captured
+**independently of escalation**: because the gate replaces citations when it
+escalates, `CaseOutcome` carries both `tier1_citations` (gate oracle, an honest extra
+Scout call on point cases) and `final_citations` (accuracy). (4) **Gate metrics are
+scoped to the point-query subset only (D1).** `gate_catch_rate` /
+`gate_false_escalation` range over `classification == "point"` cases; broad queries
+bypass the gate (straight to Deep per the 0008 matrix) and are EXCLUDED from both gate
+denominators, while `escalation_rate` is a separate aggregate over ALL auto cases —
+the two are never conflated. (5) **Null-with-count sentinel on a zero denominator
+(D2).** An undefined gate metric serializes as explicit `null` paired with its (zero)
+count field, so AC7 "all metrics populated" is honored by a present null-with-count,
+never an omitted key or a false `0.0`; the seed must carry ≥1 wrong- and ≥1
+correct-Tier-1 point case to keep live denominators non-zero. (6) **Recommendation is
+variance-gated and recommend-only (D3/D4, B1).** A sweep point displaces the incumbent
+`(0.6, 3)` only when its advantage strictly exceeds the incumbent's run-to-run spread
+(`mean(A) - mean(B) > pstdev(B)` over K runs); the D4 lexicographic scorer keeps points
+clearing the catch-rate bar, then minimizes false-escalation, tie-breaks lower top_n
+then lower threshold. Within noise, the incumbent is recorded **validated**, not
+guessed — a `0.55`-over-`0.6` flip on noise is the precise failure this prevents. (7)
+**Harness artifacts write outside the indexed repo + a pinned D7 schema.**
+`atomic_write_json` refuses (`ValueError`) to write inside or under `repo_path`
+(read-only guardrail mirroring the FastContext `trajectory_file`-outside-repo
+precedent) via a same-dir temp + `os.replace`; `validate_report` is loud
+(`ReportSchemaError`) over the enumerated D7 field set, and small-N runs self-flag
+`indicative_only`.
+**Why:** All three tiers and `mode=auto` were live and unit-green, but the design's
+core claims — escalation stays low, the gate catches wrong Tier-1 citations, the
+`scout_model` judge + `top_n=3` hold up — were **unfalsified**: no instrument measured
+locate accuracy on a real tree, and OQ2 (`verify_threshold=0.6` / `verify_top_n=3`,
+provisional since Wave 5) had no evidence behind it. This wave is that instrument. The
+single-oracle and point-scoped denominators exist so two implementers cannot produce
+silently incomparable harnesses; the variance gate exists so the recommendation cannot
+flap on model non-determinism.
+**Consequence — OQ2 partially resolved (the honest outcome).** The harness runs live
+and produces a recommendation, BUT the shipped seed is a **5-case starter** over one
+small vendored `legacy/` repo (N=5 ≪ the pinned `N_FLOOR=30`), so every run over it is
+correctly flagged `indicative_only=true` and the incumbent `(0.6, 3)` is **NOT
+displaced**. OQ2 therefore resolves as **"instrument built + live-validated;
+calibration deferred to a larger seed"** — NOT a fabricated tuning result. The
+provisional `0.6/3` and the `0.90` catch-rate bar remain provisional; a real
+calibration (one that could justify a default flip) needs the larger curated D1
+dataset (a vendored OSS legacy repo with ≥30 hand-labeled cases), which the plan
+explicitly delegates, and the flip itself is a separate one-line follow-up spec.
+Shipped TDD-complete: **557 unit tests pass** (+58 new), ruff clean; **5 integration
+tests (AC7 ×3 + AC8 ×2) passed LIVE in 634s** — real FastContext Scout + `scout_model`
+gate judge + Deep `qwen2.5-coder:3b` over Deno + rg (genuinely verified, not skipped).
+`per_tier_model_calls` is honest-`None` (no counter wired through `LocateStack` — a
+present null, not a false zero). Open follow-ups carried forward: **the larger D1
+dataset → a real OQ2 calibration → a potential default flip in a follow-up spec**; and,
+still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
+

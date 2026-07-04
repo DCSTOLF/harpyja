@@ -2,6 +2,77 @@
 
 Append-only. Newest first.
 
+## 2026-07-04 — **The 0020 `escalation_rate=0`-vs-3.3h anomaly is a recorded typed finding, not a bug: a projection-over-frozen-SUT diagnostic proves `accounting=CORRECT_NO_ESCALATION` and splits the wrong-citation fate on a second MECE axis — SUT frozen, no production change, and a metric-trust verdict gates the next spec** (spec 0021)
+
+**Spec:** specs/0021-escalation-rate-0/
+**Decision:** Resolve the 0020 G2 contradiction (a pass recording `escalation_rate = 0.0`
+yet taking ~3.3h) as a **metric-integrity diagnostic** in the 0019/0020
+measurement-not-construction lineage: the SUT (`harpyja/orchestrator/` tiers/gate/matrix/
+judge) stays **FROZEN and read-only** — `harpyja/orchestrator` is reference here, any
+proven accounting fix would have landed in the eval metric layer (`harpyja/eval/`), never
+the tiers/gate — and the deliverable is a RECORDED TYPED FINDING (`findings.md`), not a
+feature. Four durable points. (1) **The finding is MECE on TWO orthogonal axes, because a
+flat enum was not mutually exclusive (review C2):** `accounting ∈ {ACCOUNTING_BUG,
+CORRECT_NO_ESCALATION}` × `wrong_citation_fate ∈ {GATE_FALSE_ACCEPTANCE, NO_ESCALATION_PATH,
+DEEP_DEGRADED_OR_UNAVAILABLE, NOT_APPLICABLE}` — whether the *count* was faithful is
+independent of *why the wrong cases didn't escalate* (`GATE_FALSE_ACCEPTANCE` is an
+explanation UNDER `CORRECT_NO_ESCALATION`, not a rival to it). (2) **Accounting =
+`CORRECT_NO_ESCALATION`, PROVEN.** `escalation_rate` is derived (`metrics.py:126,129`
+`mean(2 in o.tiers_run)`) with no independent counter that could disagree — the classic
+"two sources drift" bug locus does not exist; 3 new `test_metrics.py` tests PIN the
+`tiers_run ⇄ escalation_rate` coupling and pass against the frozen metric, so `0.0` is a
+faithful no-escalation, not a lost count, and there is **no production change**. (3) **The
+wrong-citation fate is settled by a projection over the byte-frozen SUT, reprising 0020's
+`classify_g3_outcome`:** the additive pure `classify_escalation(...)`
+(`harpyja/eval/escalation.py`, `WrongCitationFate`) maps `(tier1_empty, tier1_correct,
+gate_rejected, deep_available, ladder)` to a fate, reading `plan_ladder` inputs but never
+re-deriving them (`test_escalation_trigger.py` obtains every ladder by CALLING
+`matrix.plan_ladder`, guarded that they are equal). Reading the frozen `_locate_auto`:
+the **33 empty** point cases route to `_honest_empty` (gate-skipped, `tiers_run=[0,1]`,
+"Never escalates") → **`NO_ESCALATION_PATH`, CONFIRMED** — the dominant reason
+`escalation_rate=0`; the **5 wrong-content** cases terminate at `[0,1]` either by gate
+false-acceptance or by a `deep-degraded` fallback → **`GATE_FALSE_ACCEPTANCE` |
+`DEEP_DEGRADED_OR_UNAVAILABLE`, UNDETERMINED** (dump gone; resolvable only by a served-model
+micro-run). This also corrected the plan's AC2 assumption (that honest-empty escalates)
+mid-implement — a characterization/projection test is grounded in the frozen source, not
+the plan, and a test asserting a false claim about the SUT is worse than none. (4) **What
+cannot be recovered is a LABELED ESTIMATE, never a fabricated recorded number.** The 0020
+per-case dump is ABSENT (`eval_work/reports/oq2_{fast,incumbent}/` empty; `eval_work/` is
+gitignored/machine-local; the quoted secondaries survive only in the operator transcript),
+so the 3.3h attribution is anchored on the one recorded aggregate (wall-clock total) and
+split by estimate: the sink is Scout FastContext exploration × 38 cases (~5.2 min/case),
+NOT Deep (`escalation_rate=0`). The additive `escalation_microrun.py` (`_wrap_timed` /
+`build_micro_result` / `run_escalation_microrun`) attributes per-tier timing at the EVAL
+BOUNDARY — wrapping a collaborator's public method, never inside frozen orchestrator
+internals — and labels the split `"estimate"`.
+**Why:** The 0020 close carried the `escalation_rate: 0.0`-vs-3.3h-runtime accounting
+anomaly forward as a named follow-up "before trusting secondary metrics." The next spec
+(Scout Tier-1 span-level localization) must not build on suspect numbers, and the load-
+bearing DEFERRED verdict (`correct_tier1_count = 0`) is independent and safe regardless —
+so the honest move is to attribute the wall-clock, prove whether `escalation_rate=0` is a
+bug or correct, and state which 0020 secondaries the next spec may trust. A full re-run of
+the 3.3h pass was explicitly forbidden (it defeats the diagnostic's purpose).
+**Consequence — the anomaly is resolved as a recorded finding, no SUT change, and the
+next spec's inputs are triaged.** Shipped TDD-complete: **820 → 835 unit pass** (+15), ruff
+clean, 1 integration skip-not-fail (the live micro-run, gated on served models).
+**Metric-trust verdict (AC5):** TRUST `escalation_rate=0` (derived + coupling-pinned +
+now structurally explained), `correct_tier1_count=0` (direct count), and
+`gate_false_escalation=null` (zero denominator); treat `wrong_tier1_count=5`,
+`span_hit_rate_primary=0.2`, `gate_catch_rate` as CONTAMINATED / unverifiable — the "5" is
+a non-empty-but-wrong lens inconsistent with the aggregate (which counts empties as wrong →
+38), and the rest are in no committed file. The next spec must REGENERATE those from a fresh
+instrumented run, not inherit the transcript figures. **The 0020 DEFERRED verdict is
+unchanged.** **Named follow-ups carried forward:** the pre-existing **Scout Tier-1
+span-level localization on SWE-bench** (the real blocker, `correct_tier1_count=0`);
+**resolving the 5-wrong-case fate** with a served-model `run_escalation_microrun` +
+`deep-degraded` capture (distinguishes `GATE_FALSE_ACCEPTANCE` from
+`DEEP_DEGRADED_OR_UNAVAILABLE`); **if false-acceptance, a gate-false-acceptance
+investigation** (the mirror of G2's false-escalation target); the **Deep co-residency
+budget** (0020 D9-a, the `qwen3-coder:30b` OOM that makes degradation-suppressed escalation
+live on this host); plus the standing 0020 carry-forwards (judge thinking-defense
+hardening, permanent ceiling calibration, permanent `lm_model`/Deep choice, and Wave-2.1
+substring/fuzzy matching).
+
 ## 2026-07-04 — Spec 0020 (OQ2 — the operator sweep) shipped the sequential G0→G3 operator protocol + the `0020/1` gate-ledger; the live run produced a typed **DEFERRED** null — Scout Tier-1 ≈ 0 correct on SWE-bench (verified, model-independent) is the real upstream blocker (OQ2 gate calibration is NOT reached; the SUT stays frozen)
 
 **Spec:** specs/0020-oq2/
@@ -689,184 +760,6 @@ measurable since Scout fires on real data; **`degraded_dominated_threshold` revi
 to a data-driven value once a real degrade-rate distribution exists (sequenced after
 the production OQ2); and, still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
 
-## 2026-06-28 — SWE-bench Verified eval dataset + per-case-repo driver shipped — real-data instrument, measurement-only, recommend-only, live-validated
-
-**Spec:** specs/0010-swebench-eval-dataset/
-**Decision:** Give the 0009-6a eval **instrument** a real dataset to measure: a
-SWE-bench Verified adapter (`harpyja/eval/swebench_eval.py`) plus the **per-case-repo
-driver** the single-repo harness structurally lacked, so Harpyja produces its first
-**non-indicative** locate-accuracy numbers and a sweep-backed OQ2 picture — while
-preserving the **measurement-only / recommend-only INVARIANT inherited from 0009-6a
-(B1)**: no tier/gate/matrix/classifier CODE change, no `Settings` default flipped, the
-only `Settings` touch a `dataclasses.replace` on `verify_threshold`/`verify_top_n` in
-the sweep. Nine durable choices were pinned. (1) **Standalone-localization protocol
-(FastContext paper), not the SWE-bench harness.** `parse_patch` derives the gold
-patch's pre-image (`--- a/…`) hunk spans as ground truth and scores predicted citations
-against them at `base_commit` — **no** Docker, image build, patch apply, or test exec
-(Harpyja is a locator, not a patcher; also sidesteps x86-under-emulation pain). The
-~3-context-line inflation biases span-hit **upward** and is recorded as a durable
-`span_inflation_tolerance`, not framed neutral (R5). (2) **D-class — classification by
-patch shape.** `classify_by_patch_shape`: a single file with total pre-image span ≤
-`POINT_SPAN_MAX_LINES=25` ⇒ `point`, else `broad`. On the real N=50 sample this gave
-**38 point / 12 broad** — a usable point subset, so the all-broad
-uncalibratable-risk the review caught is avoided. (3) **D-route — a RECORDED EVALUATION
-INTERVENTION (resolves review B1).** Production routing keys on `classify_query(query)`
-(issue prose), uncorrelated with patch shape, so a patch-shape-`point` case would
-frequently route straight to Deep and the gate would never fire — the whole OQ2 signal
-computed over cases production never gated. The driver therefore injects a classifier
-returning `case.classification` through the existing **`LocateStack.classifier` seam**,
-swapping only the *input* to the unchanged routing/gate/matrix code so the gate
-genuinely fires; the production `classify_query` label is captured **before** the
-override, both labels are recorded per case + an aggregate `classifier_agreement_rate`,
-and a SUT-observed `production_gate_ran` (from `result.tiers_run`/`notes`) is kept
-**distinct** from the harness Scout-probe `gate_triggered`. This is **not** pure
-observation — surfaced loudly, never hidden — and the single-source-of-truth-routing
-flag dissolves because `classify_query`/`plan_ladder` stays the sole routing path.
-(4) **OQ2 agreement-rate guard (round-2).** Below `AGREEMENT_FLOOR=0.5` the sweep
-recommendation is flagged `oq2_low_confidence` / `oq2_basis=deltas-only` — a relative
-ranking, **never** a calibration to flip a default on (keeps a low-agreement run, where
-the gate fired on a synthetic routing distribution production never produces, from
-reading as a confident calibration). (5) **D-newfile + B2.** All-new-file instances
-(`--- /dev/null`, no pre-image) are flagged `new_file_only` and **EXCLUDED** from
-scoring with a surfaced count (no silent zero); `base_commit` lives only in the raw
-JSONL (`provision` reads it via `_read_jsonl`) and `load_dataset` ignores it — the
-round-1 "preserved on `EvalCase`" false-capability is gone. (6) **Per-case-repo
-driver.** The 0009-6a harness was single-repo (`run_dataset(..., repo_path, stack)`);
-SWE-bench is one worktree per case, so `run_swebench` builds its **own** `LocateStack`
-per case (D-route classifier injected) and **pools** outcomes into the UNCHANGED
-`metrics`/`recommend` layers + the additively-extended report, artifacts written
-outside EVERY case repo. (7) **Additive report schema.** `SCHEMA_VERSION` bumped
-`0009-6a/1` → `0010/1`; six run / three case / one aggregate field appended
-last-with-defaults, the field set + defaults **centralized in `report.py` `_*_DEFAULTS`**
-(the single anti-drift source, fulfilling the T26 refactor by construction) so BOTH the
-single-run and multi-repo shapes validate; durable metadata carries protocol id,
-new-file-excluded count, malformed-skipped count, agreement rate, span-inflation
-tolerance, contamination caveat, and dataset provenance (HF id/split/revision,
-raw-fixture sha256, sample case-ids). (8) **`mode=fast` seam (R3).** `run_case` now
-threads `mode`; `fast` is **Scout-terminal** (Wave-5 gate informational, never
-escalates) — the corrected SUT description, not "no gate". (9) **Network posture /
-air-gap scoping (R8).** `convert` (HF) and `provision` (`git clone`) are dev-time
-tools explicitly **OUT** of the runtime air-gap guarantee; `run`/`sweep` are offline
-(live integration asserts zero non-loopback egress).
-**Why:** With N=5 ≪ `N_FLOOR=30` the 0009-6a harness could only emit `indicative_only`
-runs — locate accuracy was unproven on a real tree and OQ2 (`0.6`/`3`, provisional
-since Wave 5) had nothing real to measure. SWE-bench Verified supplies 500
-human-validated issues whose pre-image hunk locations are patch-derivable ground
-truth — exactly the repo state at `base_commit` Harpyja scans — so a stratified sample
-clears the floor. Framing is deliberately modest (R4): SWE-bench is public, so the
-**absolute** numbers are not a generalization claim; the load-bearing outputs are the
-contamination-robust **relative** deltas (threshold/top_n against each other,
-fast-vs-auto). D-route exists because patch-shape and prose-classification are
-uncorrelated, so without the injected input the gate metrics would be partly fiction
-and partly flat — the precise "uncalibratable" failure D-class was written to prevent.
-**Consequence — instrument built + live-validated on REAL data; the full OQ2
-calibration is an operator opt-in.** Reconciliations surfaced in execution: the
-uploaded `_to_eval_case` emitted the wrong schema (`id`/expected-dict) → fixed to
-`case_id`/`expected_spans`-list; the uploaded `Makefile.swebench` pointed at a
-nonexistent `harpyja.eval.runner --fixture` CLI → reconciled to the real `swebench_eval
-run|sweep` subcommands; and default `Settings.lm_model="local"` (a llama.cpp
-placeholder) forced new `--lm-model`/`--lm-api-base`/`--deep-max-subqueries` flags
-(applied via `replace`) + a Makefile `LM_MODEL` so `make swebench-run` drives Ollama.
-Shipped TDD-complete: **611 unit pass** (+~54 new eval tests), ruff clean; **4
-integration passed LIVE in 185s** — live multi-repo driver e2e, zero non-loopback
-egress, live OQ2 sweep + agreement guard, and a **real HuggingFace `convert` smoke**.
-Real `convert --sample 50 --per-repo 5` → 50 real cases, 0 malformed, 0 new-file, 12
-repos, 38 point / 12 broad, committed as the portable raw fixture (clears `N_FLOOR=30`).
-Real `provision + run` (flask + requests, actually cloned + worktreed, 2/2 resolved) gave
-`span_hit_primary=0.5` (flask HIT, requests MISS), escalation 0.0 — and the instrument
-surfaced a **real Scout/FastContext defect**, NOT a gate finding: both cases carry
-`scout-degraded:backend-error` (FastContext's own `format_citations` crashes on real-query
-output → `ScoutUnavailable` → Tier-0 degrade, the spec-0007 AC10 case), so Tier-1/gate were
-**upstream-starved** and 0.5 is the Tier-0 degrade-floor, not an escalation-skip signal (an
-earlier draft mis-read this as "gate did not fire" — corrected per no-false-capability).
-**Implication:** Scout is non-functional on real SWE-bench until FastContext `format_citations`
-is made robust to string-shaped citations, so OQ2 cannot be calibrated from this dataset
-regardless of N — a new lead follow-up. The FULL live OQ2 sweep (all 12 cloned repos × K) is
-compute-bound and the documented opt-in (`make swebench-full` → `swebench-sweep`); **no
-`Settings` default flipped (B1)**
-— the flip remains a separate one-line follow-up spec citing this evidence. Open
-follow-ups carried forward: the **OQ2 default flip** (now backed by a real,
-N≥30-clearing instrument, guarded by the agreement floor); a **held-out
-decontamination mini-set** (R4, deferred); and, still open from Wave 2, **Wave-2.1
-substring/fuzzy matching**.
-
-## 2026-06-28 — Wave 6a Eval harness + OQ2 calibration shipped — measurement-only, recommend-only, live-validated
-
-**Spec:** specs/0009-6a/
-**Decision:** Land a NEW **measurement-only** package `harpyja/eval/` that observes
-the real `mode=auto` `locate()` path and reports locate accuracy, escalation rate,
-and gate catch / false-escalation metrics, plus an OQ2 `(verify_threshold,
-verify_top_n)` recommendation — and flips **no** `Settings` default (B1; the flip is
-a future one-line follow-up spec, so "measurement only, no behavior change" stays
-literally true). The harness is the first non-tier layer: it does not answer queries,
-it *measures* the system that does. Seven durable choices were pinned. (1) **The
-harness observes the SUT through its real public seam and never mutates its config.**
-The runner drives the production `harpyja.orchestrator.locate.locate(...)` via an
-injected `LocateStack` (fakes for unit, `build_live_stack` real factories for
-integration); the only `Settings` interaction is the sweep building grid points via
-`dataclasses.replace` on the real `verify_threshold` / `verify_top_n` fields, never
-mutation (`test_sweep_does_not_mutate_settings`). (2) **Eval-only knobs live off the
-production frozen `Settings` (K-placement deviation).** The spec body's "additive
-eval-only `Settings` field carrying K" was reconciled at plan time to a dedicated
-frozen `EvalConfig` (k_runs / proximity_window_lines / n_floor / catch_rate_bar),
-**field-name-disjoint** from `Settings` (`test_eval_config_is_independent_of_settings`)
-— K is a runner loop count the SUT never reads, so putting it in the production config
-is a coupling smell with no compensating uniformity benefit. (3) **ONE overlap oracle
-defines correctness for every derived metric (D3/D5).** `_any_primary_overlap` (ANY
-cited span overlaps ANY expected span in the same file; touching ranges count, D6) is
-reused by span-hit accuracy, gate catch-rate, AND gate false-escalation — there is no
-second notion of correctness that could drift, asserted by
-`test_gate_metrics_use_same_oracle_as_span_hit`. The Tier-1 signal is captured
-**independently of escalation**: because the gate replaces citations when it
-escalates, `CaseOutcome` carries both `tier1_citations` (gate oracle, an honest extra
-Scout call on point cases) and `final_citations` (accuracy). (4) **Gate metrics are
-scoped to the point-query subset only (D1).** `gate_catch_rate` /
-`gate_false_escalation` range over `classification == "point"` cases; broad queries
-bypass the gate (straight to Deep per the 0008 matrix) and are EXCLUDED from both gate
-denominators, while `escalation_rate` is a separate aggregate over ALL auto cases —
-the two are never conflated. (5) **Null-with-count sentinel on a zero denominator
-(D2).** An undefined gate metric serializes as explicit `null` paired with its (zero)
-count field, so AC7 "all metrics populated" is honored by a present null-with-count,
-never an omitted key or a false `0.0`; the seed must carry ≥1 wrong- and ≥1
-correct-Tier-1 point case to keep live denominators non-zero. (6) **Recommendation is
-variance-gated and recommend-only (D3/D4, B1).** A sweep point displaces the incumbent
-`(0.6, 3)` only when its advantage strictly exceeds the incumbent's run-to-run spread
-(`mean(A) - mean(B) > pstdev(B)` over K runs); the D4 lexicographic scorer keeps points
-clearing the catch-rate bar, then minimizes false-escalation, tie-breaks lower top_n
-then lower threshold. Within noise, the incumbent is recorded **validated**, not
-guessed — a `0.55`-over-`0.6` flip on noise is the precise failure this prevents. (7)
-**Harness artifacts write outside the indexed repo + a pinned D7 schema.**
-`atomic_write_json` refuses (`ValueError`) to write inside or under `repo_path`
-(read-only guardrail mirroring the FastContext `trajectory_file`-outside-repo
-precedent) via a same-dir temp + `os.replace`; `validate_report` is loud
-(`ReportSchemaError`) over the enumerated D7 field set, and small-N runs self-flag
-`indicative_only`.
-**Why:** All three tiers and `mode=auto` were live and unit-green, but the design's
-core claims — escalation stays low, the gate catches wrong Tier-1 citations, the
-`scout_model` judge + `top_n=3` hold up — were **unfalsified**: no instrument measured
-locate accuracy on a real tree, and OQ2 (`verify_threshold=0.6` / `verify_top_n=3`,
-provisional since Wave 5) had no evidence behind it. This wave is that instrument. The
-single-oracle and point-scoped denominators exist so two implementers cannot produce
-silently incomparable harnesses; the variance gate exists so the recommendation cannot
-flap on model non-determinism.
-**Consequence — OQ2 partially resolved (the honest outcome).** The harness runs live
-and produces a recommendation, BUT the shipped seed is a **5-case starter** over one
-small vendored `legacy/` repo (N=5 ≪ the pinned `N_FLOOR=30`), so every run over it is
-correctly flagged `indicative_only=true` and the incumbent `(0.6, 3)` is **NOT
-displaced**. OQ2 therefore resolves as **"instrument built + live-validated;
-calibration deferred to a larger seed"** — NOT a fabricated tuning result. The
-provisional `0.6/3` and the `0.90` catch-rate bar remain provisional; a real
-calibration (one that could justify a default flip) needs the larger curated D1
-dataset (a vendored OSS legacy repo with ≥30 hand-labeled cases), which the plan
-explicitly delegates, and the flip itself is a separate one-line follow-up spec.
-Shipped TDD-complete: **557 unit tests pass** (+58 new), ruff clean; **5 integration
-tests (AC7 ×3 + AC8 ×2) passed LIVE in 634s** — real FastContext Scout + `scout_model`
-gate judge + Deep `qwen2.5-coder:3b` over Deno + rg (genuinely verified, not skipped).
-`per_tier_model_calls` is honest-`None` (no counter wired through `LocateStack` — a
-present null, not a false zero). Open follow-ups carried forward: **the larger D1
-dataset → a real OQ2 calibration → a potential default flip in a follow-up spec**; and,
-still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
-
 
 ## Compacted (older than the active window)
 
@@ -887,3 +780,9 @@ still open from Wave 2, **Wave-2.1 substring/fuzzy matching**.
 - **Specs:** specs/0005-wave-3-scout/, specs/0006-wave-4-deep-rlm/, specs/0007-fastcontext/, specs/0008-wave-5-verification-gate/
 - **Archive:** .speccraft/history-archive/history.md
 - Waves 3–5 layered the model-backed tiers on top of the deterministic Tier-0 floor, all behind the shared `Locator`/`CodeSpan` boundary so callers never branch on engine identity, and all reached through the **`ModelGateway` as the single outbound caller**: `complete()` air-gaps on **resolved** addresses via the one `assert_local`/`AirGapError` helper (no parallel checks) before any transport is touched, and a non-loopback endpoint raises a loud floor, never a silent degrade. **Scout (Tier 1, Wave 3 + `0007`)** sits behind a `ScoutBackend` Protocol (`FastContextBackend`, no top-level hard import) and drives the real Microsoft FastContext agent — its own Read/Glob/Grep loop, deliberately **not** `dspy.RLM`, the invariant keeping Tier 1 structurally distinct from Tier 2; because the factory is env-only, `FC_*` are injected under a module-level **`threading.Lock`** (not `asyncio.Lock`) while each `agent.run` is bridged onto its **own loop-free worker thread**, serializing Scout (accepted on the single-GPU profile) and never leaking to Deep, with the air-gap asserted before construct/spawn and read-only-ness proven by a no-repo-writes test; FastContext ships as a portable `git`-rev pin. **Deep (Tier 2, Wave 4)** is a `dspy.RLM` explorer confined to a Deno/Pyodide sandbox whose entire world is four bounded read-only host tools, reached only via `mode=deep`; its loop is bounded by a *load-bearing external trio* the backend cannot evade — `deep_max_tool_calls`, `deep_token_ceiling`, `deep_wall_clock_ms` (the last enforced by hard-killing an out-of-band subprocess, since a same-thread deadline can't fire behind a WASM busy loop) — plus host-mediated depth/subquery bounds that are transitively contained by the trio; a `deep-truncated:<bound>` note keeps a budget truncation visibly distinct from a complete run. The **typed-failure-only degradation boundary** is the tiers' shared, most-guarded property: each tier degrades to the tier below **only** on a typed cause (`ScoutUnavailable` / `DeepUnavailable` with named causes), while weak-or-empty citations are an honest result, never a smuggled tier-drop; an honest-empty run is kept distinct from a floor via suffix markers (`+no-matches`, `scout-degraded:<cause>`), and a hard precondition absent (`RipgrepMissingError`) propagates loudly. **Wave 5 (`0008`)** made `mode=auto` finally *climb* by wiring the four deferred seams — query classifier, planning matrix, Verification Gate, escalation ladder — as orchestration only (tier internals unchanged). The gate reads cited lines back from disk and scores relevance by reusing the already-loaded `scout_model` as a generative judge (free on the single-GPU profile), bounded to `verify_top_n` citations (no unbounded model cost on the hot path, dropped count logged), routed through the one `ModelGateway.complete()` with a belt-and-suspenders `assert_local` pre-check — deliberately *not* the third-party-owns-its-client pattern, since the gate is in-house code. `plan_ladder(mode, classification, index_ready)` over a seeded table is the **single source of truth** both `_locate_auto` and the tests consult, so `auto` runs the cheapest tier that can answer and `tiers_run` is a prefix of the planned ladder (`[0,1]`/`[1]` gated-pass, `[0,1,2]`/`[1,2]` escalated, `[0,2]`/`[2]` straight-to-Deep); `fast` runs the gate informationally and never climbs; `deep` is unchanged. A best-effort gate never blocks and never silently passes — a scoring failure routes exactly like a gate-fail — and confidence is keyed on terminal-tier + flags (never path tokens alone) so "nothing found" can never read as high-confidence (no-false-capability). Each invariant swap shipped atomically (the Wave-3 `deep` no-Tier-2 guards and the Wave-0 `auto` byte-identical lock were deleted in the *same* change that wired their successors, so the suite never holds an unspecified window), and `verify_method` rejects any unsupported value with a typed error on every construction path — the seam is pluggable in code but the config accepts only what actually functions.
+
+### Eval harness & SWE-bench measurement instrument (Wave 6a)
+
+- **Specs:** specs/0009-6a/, specs/0010-swebench-eval-dataset/
+- **Archive:** .speccraft/history-archive/history.md
+- Wave 6a landed `harpyja/eval/` — a **measurement-only / recommend-only** package that observes the real `mode=auto` `locate()` path through its public seam (an injected `LocateStack`; fakes for unit, `build_live_stack` for integration) and flips **no** `Settings` default (the B1 invariant — the flip stays a separate one-line follow-up so "measurement only, no behavior change" is literally true); the only `Settings` touch is the sweep building grid points via `dataclasses.replace` on `verify_threshold`/`verify_top_n`, never mutation. Eval-only knobs live on a dedicated frozen `EvalConfig` (`k_runs`/`proximity_window_lines`/`n_floor`/`catch_rate_bar`), **field-name-disjoint** from the production `Settings` (K is a runner loop count the SUT never reads). **ONE overlap oracle** (`_any_primary_overlap`: any cited span overlaps any expected span in the same file, touching ranges count) defines correctness for span-hit accuracy, gate catch-rate, AND gate false-escalation — no second notion can drift; the Tier-1 signal is captured independently of escalation (`CaseOutcome` carries both `tier1_citations` and `final_citations`). Gate metrics are scoped to the **point** subset only (broad queries bypass the gate and are excluded from both denominators; `escalation_rate` is a separate all-cases aggregate); an undefined gate metric serializes as explicit `null` paired with a zero count, never a false `0.0`. The recommendation is **variance-gated and recommend-only**: the incumbent `(0.6, 3)` is displaced only when a sweep point's advantage strictly exceeds the incumbent's run-to-run spread (`mean(A)-mean(B) > pstdev(B)` over K), else the incumbent is recorded *validated*, not guessed; artifacts write outside the indexed repo (`atomic_write_json` refuses inside `repo_path`) under a loud pinned schema (`validate_report`/`ReportSchemaError`), small-N runs self-flag `indicative_only`. Spec 0010 then gave the instrument **real data**: a SWE-bench Verified adapter using the standalone-localization protocol (the gold patch's pre-image `--- a/…` hunk spans as ground truth at `base_commit` — **no** Docker, patch-apply, or test-exec; the ~3-context-line inflation biases span-hit upward, recorded as a durable `span_inflation_tolerance`), patch-shape D-classification (`≤ POINT_SPAN_MAX_LINES=25` single-file ⇒ `point`; 38 point / 12 broad on the N=50 sample, clearing `N_FLOOR=30`), and the **D-route recorded evaluation intervention**: because production `classify_query` (issue prose) is uncorrelated with patch shape, the driver injects `case.classification` through the existing `LocateStack.classifier` seam so the gate genuinely fires, capturing the production label *before* the override, recording both labels + a `classifier_agreement_rate`, and flagging the OQ2 recommendation `oq2_low_confidence`/`deltas-only` below `AGREEMENT_FLOOR=0.5` (a relative ranking, never a calibration). A per-case-repo driver builds its own `LocateStack` per worktree and pools outcomes into the **unchanged** metrics/recommend layers; report schema bumps are additive last-with-defaults, centralized in `report.py` `_*_DEFAULTS` (the single anti-drift source). The honest live outcome: the instrument surfaced a **real Scout/FastContext defect** (`scout-degraded:backend-error` — FastContext's `format_citations` crashes on real-query output → `ScoutUnavailable` → Tier-0 degrade), so Scout was **non-functional on SWE-bench** and OQ2 **could not be calibrated regardless of N** — absolute numbers are contamination-caveated (SWE-bench is public), the contamination-robust **relative deltas** load-bearing, and **no `Settings` default was flipped**.
