@@ -277,3 +277,171 @@ def test_scout_stack_available_is_scout_scoped_not_deep():
     # not Deno). Port 9 (discard) is not served locally under test.
     assert scout_stack_available(endpoint="http://127.0.0.1:9/v1") is False
     assert isinstance(scout_stack_available(endpoint="http://127.0.0.1:9/v1"), bool)
+
+
+# ---- Spec 0023 (AC8): raw-arm provenance precondition ----------------------
+
+_RAW_ISSUE = (
+    "The retry backoff handler intermittently drops the final attempt when the queue "
+    "drains under load and the worker pool is saturated during a sudden burst of jobs.\n\n"
+    "Steps to reproduce: enqueue many jobs, saturate the workers, and observe that the "
+    "last retry is silently skipped instead of being scheduled after the backoff delay."
+)
+
+
+def _raw_case(case_id: str, *, spans) -> EvalCase:
+    return _case(case_id, spans=spans, query=_RAW_ISSUE)
+
+
+def test_is_raw_issue_true_for_multiparagraph_body():
+    from harpyja.eval.locate_probe import is_raw_issue
+
+    assert is_raw_issue(_RAW_ISSUE) is True
+
+
+def test_is_raw_issue_false_for_short_single_line():
+    from harpyja.eval.locate_probe import is_raw_issue
+
+    assert is_raw_issue("where is the retry logic?") is False
+
+
+def test_is_raw_issue_false_for_blank():
+    from harpyja.eval.locate_probe import is_raw_issue
+
+    assert is_raw_issue("   \n  ") is False
+
+
+# ---- Spec 0023 (AC3/AC7/AC8): paired reformulation probe -------------------
+
+
+def test_paired_probe_emits_per_case_rows():
+    from harpyja.eval.locate_probe import run_paired_reformulation_probe
+
+    # Two raw cases; scout is called twice per usable case (raw arm, distilled arm).
+    scout = _FakeScout(
+        [
+            ([], ScoutTally()),                            # c1 raw → EMPTY
+            ([CodeSpan("a.py", 100, 120)], ScoutTally()),  # c1 distilled → CORRECT
+            ([], ScoutTally()),                            # c2 raw → EMPTY
+            ([CodeSpan("b.py", 100, 120)], ScoutTally()),  # c2 distilled → CORRECT
+        ]
+    )
+    cases = [
+        _raw_case("r-1", spans=[("a.py", 100, 120)]),
+        _raw_case("r-2", spans=[("b.py", 100, 120)]),
+    ]
+    res = run_paired_reformulation_probe(
+        cases, stack=_FakeStack(scout), repo_path="/repo", window=50
+    )
+    assert res.usable_n == 2
+    assert len(res.paired_rows) == 2
+    assert res.paired_rows[0].raw_bucket is LocateBucket.EMPTY
+    assert res.paired_rows[0].distilled_bucket is LocateBucket.CORRECT
+
+
+def test_paired_probe_delta_file_accuracy_paired():
+    from harpyja.eval.locate_probe import run_paired_reformulation_probe
+
+    scout = _FakeScout(
+        [
+            ([], ScoutTally()),                            # raw → EMPTY (no file)
+            ([CodeSpan("a.py", 100, 120)], ScoutTally()),  # distilled → CORRECT (file found)
+        ]
+    )
+    res = run_paired_reformulation_probe(
+        [_raw_case("r-1", spans=[("a.py", 100, 120)])],
+        stack=_FakeStack(scout), repo_path="/repo", window=50,
+    )
+    # distillation found the file where raw did not → positive paired file-accuracy delta.
+    assert res.delta_file_accuracy == 1.0
+    assert res.delta_empty == 1.0
+
+
+def test_paired_probe_discordant_count_recorded():
+    from harpyja.eval.locate_probe import run_paired_reformulation_probe
+
+    scout = _FakeScout(
+        [([], ScoutTally()), ([CodeSpan("a.py", 100, 120)], ScoutTally())]
+    )
+    res = run_paired_reformulation_probe(
+        [_raw_case("r-1", spans=[("a.py", 100, 120)])],
+        stack=_FakeStack(scout), repo_path="/repo", window=50,
+    )
+    assert res.discordant_pairs == 1
+
+
+def test_paired_probe_excludes_non_raw_from_usable_n():
+    from harpyja.eval.locate_probe import run_paired_reformulation_probe
+
+    # One raw case (2 scout calls) + one terse case (excluded, 0 scout calls).
+    scout = _FakeScout(
+        [([], ScoutTally()), ([CodeSpan("a.py", 100, 120)], ScoutTally())]
+    )
+    cases = [
+        _raw_case("raw-1", spans=[("a.py", 100, 120)]),
+        _case("terse-1", spans=[("b.py", 1, 2)], query="fix the bug"),
+    ]
+    res = run_paired_reformulation_probe(
+        cases, stack=_FakeStack(scout), repo_path="/repo", window=50
+    )
+    assert res.usable_n == 1
+    assert "terse-1" in res.excluded_case_ids
+
+
+def test_paired_probe_usable_n_below_min_n_marks_inconclusive():
+    from harpyja.eval.benchmark_fit import (
+        PREREGISTERED_CONFIG,
+        Axis1Verdict,
+        InconclusiveReason,
+        aggregate_paired,
+        decide_axis1,
+    )
+    from harpyja.eval.locate_probe import run_paired_reformulation_probe
+
+    scout = _FakeScout(
+        [([], ScoutTally()), ([CodeSpan("a.py", 100, 120)], ScoutTally())]
+    )
+    res = run_paired_reformulation_probe(
+        [_raw_case("r-1", spans=[("a.py", 100, 120)])],
+        stack=_FakeStack(scout), repo_path="/repo", window=50,
+    )
+    assert res.usable_n < PREREGISTERED_CONFIG.min_n
+    verdict, reason = decide_axis1(
+        aggregate_paired(res.paired_rows), usable_n=res.usable_n
+    )
+    assert verdict is Axis1Verdict.INCONCLUSIVE
+    assert reason is InconclusiveReason.INSUFFICIENT_POWER
+
+
+# ---- Spec 0023 (AC7): extend, don't break the 0022 seam --------------------
+
+
+def test_reformulation_result_additive_fields_default():
+    from harpyja.eval.locate_probe import ReformulationResult
+
+    # The 0022 constructor shape still works; new fields default (no per-case pairs).
+    r = ReformulationResult(
+        n=1, raw_empty_rate=1.0, distilled_empty_rate=0.0, delta_empty=1.0
+    )
+    assert r.paired_rows == ()
+    assert r.delta_file_accuracy == 0.0
+    assert r.discordant_pairs == 0
+    assert r.llm_delta_empty is None
+    assert r.usable_n == 0
+    assert r.excluded_case_ids == ()
+
+
+def test_run_reformulation_probe_unchanged():
+    from harpyja.eval.locate_probe import run_reformulation_probe
+
+    scout = _FakeScout(
+        [([], ScoutTally()), ([CodeSpan("a.py", 100, 120)], ScoutTally())]
+    )
+    res = run_reformulation_probe(
+        [_case("r-1", spans=[("a.py", 100, 120)])],
+        stack=_FakeStack(scout), repo_path="/repo", window=50, distill=lambda q: "retry",
+    )
+    # the legacy aggregate-rate contract is intact.
+    assert res.raw_empty_rate == 1.0
+    assert res.distilled_empty_rate == 0.0
+    assert res.delta_empty == 1.0

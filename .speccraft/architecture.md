@@ -299,6 +299,44 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    distribution are operator-gated (see `specs/.archive/0022-tier-1/findings.md`).
    Report schema unchanged. See history.md 2026-07-05 (spec 0022).
 
+   **As of spec 0023** the package carries the **benchmark-fit discriminator** that
+   decides whether 0022's provisional `RETRIEVAL_FUNDAMENTAL` is a real capability wall
+   or a `BENCHMARK_UNREPRESENTATIVE` artifact — still measurement, not a runtime tier;
+   the SUT (`harpyja/scout/`, `harpyja/orchestrator/`) is byte-frozen and read-only.
+   `benchmark_fit.py` is **pure verdict machinery** (no SUT import, no I/O): an exact
+   two-sided McNemar from scratch (`math.comb`, no scipy; `mcnemar_exact_p` /
+   `mcnemar_rejects`, boundary-pinned 6/0 rejects, 5/0 not, 8/0 rejects, 7/1 not); a
+   frozen `PREREGISTERED_CONFIG` (`MIN_DISCORDANT_PAIRS=8` from exact-McNemar
+   reachability, `DELTA_EMPTY_BAND=0.20`, `min_n=12`, `alpha=0.05`); `PairedRow` +
+   `aggregate_paired` (within-case `delta_empty` / `delta_file_accuracy` + discordant
+   `(b,c)` FROM retained pairs, never a difference of aggregate rates); total
+   `decide_axis1` (Axis 1 = query shape) with a paired uncertainty gate and three named
+   non-overlapping `INCONCLUSIVE` triggers (`INSUFFICIENT_POWER` /
+   `DISTILLER_ARM_DISAGREEMENT` / `AXIS_SIGNAL_DISAGREEMENT`); `RepresentativenessRecord`
+   + `is_representative` (Axis 2); and total `compose_verdict` encoding a pre-registered
+   2×2 where Axis 2 can DOWNGRADE Axis 1's routing (`QUERY_SHAPE×¬representative` → build
+   a terse-query benchmark first, NOT a finder swap; `CAPABILITY×¬representative` → retire
+   SWE-bench) — the cell names the next spec. `distill.py` is a **dual distiller**:
+   `mechanical_distill` (PRIMARY, verdict-driving — a single case-agnostic, gold-blind
+   rule whose output tokens are a subset of the issue tokens and which STRIPS code
+   identifiers so it is structurally incapable of injecting gold vocabulary; every
+   stripped token recorded; pre-registered `MECHANICAL_RULE_HASH`) and
+   `llm_distill_guarded` (LABELED non-primary SENSITIVITY arm, an injected `Callable`
+   gated by a post-hoc token-subset hard reject `DistillRejected`; pre-registered
+   `LLM_PROMPT_HASH`; never decides). `locate_probe.py` is **extended, not rewritten**
+   (AC7): `ReformulationResult` gained `paired_rows` / `delta_file_accuracy` /
+   `discordant_pairs` / `llm_delta_empty` / `usable_n` / `excluded_case_ids` appended
+   last-with-defaults (0022 constructor + callers byte-compatible); new
+   `run_paired_reformulation_probe` (within-case paired A/B, per-case pairs retained) and
+   `is_raw_issue` (AC8 raw-arm provenance precondition — a non-multi-paragraph case is
+   excluded from `usable_n`, so a terse-fixture `delta≈0` cannot masquerade as
+   `CAPABILITY`). The instrument is unit-verified (+52 unit) and live-smoke green, but the
+   operator VERDICT is deliberately NOT yet emitted: the terse legacy fixtures give
+   `usable_n=0` by construction, so firing `decide_axis1` for real needs operator
+   SWE-bench long-issue cases (≥`min_n=12` usable, ≥8 discordant) — until then 0022's
+   `RETRIEVAL_FUNDAMENTAL` stands and `BENCHMARK_UNREPRESENTATIVE` is not-yet-excluded.
+   Report schema unchanged. See history.md 2026-07-05 (spec 0023).
+
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
 ## Key decisions

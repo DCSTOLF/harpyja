@@ -2,6 +2,102 @@
 
 Append-only. Newest first.
 
+## 2026-07-05 — **Spec 0023 (benchmark-fit) shipped the typed, two-axis, PRE-REGISTERED discriminator that decides whether 0022's provisional `RETRIEVAL_FUNDAMENTAL` is a real capability wall or a `BENCHMARK_UNREPRESENTATIVE` artifact — a within-case paired McNemar probe (Axis 1) × a structured representativeness record (Axis 2), verdict a PURE FUNCTION over a frozen config, dual-distiller honesty guard; unit-complete + live-smoke green but the operator VERDICT deliberately NOT yet emitted; SUT byte-frozen**
+
+**Spec:** specs/0023-benchmark-fit/
+**Decision:** Build the discriminator 0022 left operator-gated — the branch that decides
+whether Scout's empty-rate is a **localization capability wall** or an **artifact of
+SWE-bench's multi-paragraph issue prose** (nothing like Harpyja's terse-NL target) — as a
+pure **measurement/eval** diagnostic in the 0019/0020/0021/0022 measurement-not-construction
+lineage: the SUT (`harpyja/scout/`, `harpyja/orchestrator/`) stays **byte-frozen and
+read-only**, all code is additive under `harpyja/eval/`, and the deliverable is a typed,
+two-axis, pre-registered verdict machine (+ `findings.md`), NOT a Scout fix or the N=38 run.
+Cheap-before-expensive: this bounded probe is logically UPSTREAM of both the N=38
+confirmation and any finder swap — it decides which experiment is even correct before
+either is spent. Five durable points. (1) **The verdict is a PURE FUNCTION over a FROZEN,
+pre-registered config, so it cannot be steered after seeing the data — and its threshold is
+DERIVED FROM THE TEST'S OWN REACHABILITY ARITHMETIC, not a round guess.** `benchmark_fit.py`
+carries a `frozen=True` `PREREGISTERED_CONFIG` (`MIN_DISCORDANT_PAIRS=8`,
+`DELTA_EMPTY_BAND=0.20`, `min_n=12`, `alpha=0.05`) and the mechanical rule / LLM prompt are
+hashed before any run (`MECHANICAL_RULE_HASH`, `LLM_PROMPT_HASH`); `decide_axis1` /
+`compose_verdict` are **total functions with non-overlapping predicates** pinned by grid
+totality tests. `MIN_DISCORDANT_PAIRS=8` is not a round number: under H0 the discordant
+pairs are a sign test at p=0.5, so an exact two-sided McNemar can only clear α=0.05 once
+`n_discordant ≥ 6` (6/0→0.03125 rejects, 5/0→0.0625 fails); 8 buys one contrary pair of
+slack (8/0→0.0078, 7/1→0.070 still borderline → `INCONCLUSIVE`). **5 was wrong** (both
+reviewers, C2): it made `QUERY_SHAPE` almost unreachable — the small-N trap in reverse.
+(2) **Axis 1 is a WITHIN-CASE PAIRED A/B over a BINARY outcome, so its power lives in the
+McNemar DISCORDANT PAIRS — the effective sample size is the discordant count, not N.** Each
+case runs Scout on the **raw** multi-paragraph issue and on a **distilled terse query** for
+the *same* gold span (per-case difficulty cancels); `aggregate_paired` computes `delta_empty`
+/ `delta_file_accuracy` / the discordant `(b,c)` FROM retained `PairedRow`s, never a
+difference of aggregate rates (AC3). The exact McNemar is implemented from scratch
+(`math.comb`, no scipy). The honest consequence, forced out by review: a binary paired probe
+is NOT as cheap as the paired-continuous intuition suggested — reaching 8 flips may need
+~15–25 raw cases (still << N=38, Scout-only-cheap, but not "a handful"), and the config says
+so. (3) **The distiller is DUAL with ASYMMETRIC roles: the verdict-driving arm is made
+STRUCTURALLY INCAPABLE of the bias it is trusted against; the smart arm is a LABELED
+non-deciding SENSITIVITY check.** `mechanical_distill` (PRIMARY) is a single case-agnostic,
+gold-span-blind rule whose output tokens are a **subset of the raw-issue tokens**
+(extraction, never generation) that STRIPS code-identifier tokens (paths, dotted/CamelCase
+symbols, stack-trace frames, quoted error strings) so the query is natural-language-shaped
+(matching Harpyja's terse-NL target) — it therefore *cannot manufacture a false
+`QUERY_SHAPE`* by injecting gold vocabulary, and every stripped token is recorded per case
+for audit. `llm_distill_guarded` (LABELED, non-primary) is a more natural reformulation under
+a fixed prompt, gated by a post-hoc token-subset HARD REJECT (`DistillRejected`); it never
+decides — it only disambiguates the one case the mechanical arm cannot (a flat mechanical
+`delta`: CAPABILITY *or* the rule under-distilled). Both arms' per-case outputs go in the
+audit trail. (4) **Axis 2 (representativeness) is a STRUCTURED, pre-registered record that can
+DOWNGRADE Axis 1's routing through a fixed 2×2 — not an inert caveat.** `RepresentativenessRecord`
+(query-shape, repo-type, documentation-density, codebase-age, target-proxy-validity) yields a
+`representative: bool` via a threshold declared before the assessment (`false` iff *both*
+documentation-density=low AND target-proxy-validity=weak); `compose_verdict` encodes the
+pre-registered 2×2 total over `Axis1Verdict × bool`: `QUERY_SHAPE×representative` → add a
+reformulation layer; `QUERY_SHAPE×¬representative` → build a terse-query benchmark first,
+**NOT a finder swap**; `CAPABILITY×representative` → N=38 + finder-capability work;
+`CAPABILITY×¬representative` → retire SWE-bench as the yardstick; `INCONCLUSIVE` → hold. The
+cell NAMES the next spec. (5) **The raw arm's provenance is a PER-CASE PRECONDITION so an
+underpowered / degenerate-input run SELF-FLAGS rather than faking a null.** `is_raw_issue`
+(AC8) excludes any case whose query is not a genuine multi-paragraph issue body from
+`usable_n` and records it in `excluded_case_ids`, so a terse-fixture `delta≈0` **cannot
+masquerade as `CAPABILITY`**; `usable_n < min_n` forces `INCONCLUSIVE(INSUFFICIENT_POWER)`.
+`ReformulationResult` was EXTENDED, not rewritten (AC7): the six new fields append
+last-with-defaults so 0022's constructor and callers stay byte-compatible.
+**Why:** 0022 landed provisional `RETRIEVAL_FUNDAMENTAL` but **explicitly could not exclude
+`BENCHMARK_UNREPRESENTATIVE`** — its discriminator was operator-gated and `delta≈0` by
+construction on the terse legacy fixtures. Two expensive commitments hang off that unanswered
+branch (the N=38 SWE-bench run; a finder swap), both premature until we resolve *which
+experiment is correct*. SWE-bench was chosen for convenient patch-derived ground truth, not
+for representativeness of Harpyja's terse-query / undocumented-legacy target — so this is the
+eval discipline working one level up: questioning not the gate or the finder but whether the
+benchmark fits the tool's purpose. Better one cheap probe than swapping a 4B that may be
+perfectly adequate for the job it was built for.
+**Consequence — the discriminator shipped and is unit-verified + live-smoke green; the
+operator VERDICT is deliberately NOT emitted (gated on real long-issue cases). No SUT
+change.** Shipped TDD-complete: **+52 unit** (`test_benchmark_fit.py` ×30, `test_distill.py`
+×12, `test_locate_probe.py` +10), all green, ruff clean; 7 Scout-only integration tests PASS
+LIVE (~56s, served Q8 FastContext stack). **Live smoke — green but non-informative BY
+CONSTRUCTION:** the legacy fixtures are TERSE, so `is_raw_issue` excludes every one →
+`usable_n=0`, all cases in `excluded_case_ids`, air-gap held under `_deny_nonloopback_egress`
+— the AC8 guard working as designed (an underpowered run self-flags rather than faking a
+`CAPABILITY`); it does NOT exercise the discriminator on real long-issue text. **Recorded
+hashes:** `MECHANICAL_RULE_HASH=5a77d3ee…f3138`, `LLM_PROMPT_HASH=e7a54bab…a0079`. **Honest
+scope — never claim the benchmark-fit question is answered:** the instrument shipped and is
+live-verified; firing `decide_axis1` for real needs operator SWE-bench long-issue cases
+(≥`min_n=12` usable, ≥8 discordant) with `HARPYJA_REQUIRE_LIVE_STACK=1`. Until then 0022's
+provisional `RETRIEVAL_FUNDAMENTAL` stands and `BENCHMARK_UNREPRESENTATIVE` remains
+not-yet-excluded — exactly the state this instrument exists to resolve. **Named follow-ups
+carried forward:** (1) **the operator run** — fire `run_paired_reformulation_probe`
+(mechanical primary; LLM sensitivity optional) then `decide_axis1` + `is_representative` +
+`compose_verdict`; the 2×2 cell names the next spec, and a `QUERY_SHAPE`/¬representative
+outcome routes to a benchmark/query-layer spec, **NOT a finder swap**; (2) **OQ1** — decide
+before the live run whether to raise `MIN_DISCORDANT_PAIRS` from the reachability floor (8)
+to a formal target-power floor (~12–15), which raises the raw-case count; (3) **OQ2** —
+confirm whether `delta_file_accuracy` belongs in the primary Axis-1 rule (currently
+diagnostic + the axis-disagreement `INCONCLUSIVE` trigger). Standing carry-forwards unchanged
+(judge thinking-defense hardening, permanent ceiling calibration, permanent `lm_model`/Deep
+choice, Deep co-residency budget, Wave-2.1 substring/fuzzy matching).
+
 ## 2026-07-05 — **Spec 0022 (Tier-1) shipped the Scout locate-accuracy DIAGNOSTIC — a two-granularity (file vs span) projection over the frozen oracle routing to one of four typed findings; live-fixture-verified `RETRIEVAL_FUNDAMENTAL` (provisional), the real 38-case + reformulation-probe discriminator operator-gated; SUT byte-frozen**
 
 **Spec:** specs/0022-tier-1/

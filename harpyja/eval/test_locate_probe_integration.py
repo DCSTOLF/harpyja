@@ -18,6 +18,7 @@ from harpyja.eval.locate_probe import (
     build_scout_only_stack,
     require_live_stack,
     run_locate_probe,
+    run_paired_reformulation_probe,
     run_reformulation_probe,
     scout_stack_available,
 )
@@ -114,3 +115,56 @@ def test_locate_probe_no_nonloopback_egress(tmp_path):
             _live_cases(repo, cap=1), stack=stack, repo_path=repo, window=_WINDOW
         )
     assert res.distribution.n == 1
+
+
+# ---- Spec 0023 (AC1/AC8): live paired reformulation probe ------------------
+# NOTE: on the terse legacy fixtures the raw arm is NOT a real multi-paragraph issue,
+# so `is_raw_issue` excludes them and `usable_n` is honestly small (delta≈0 by
+# construction). These tests pin the instrument's SHAPE and air-gap end-to-end; the
+# real discriminator needs operator SWE-bench long-issue cases (see findings.md).
+
+
+@pytest.mark.integration
+def test_paired_reformulation_probe_records_both_arms(tmp_path):
+    from harpyja.eval.distill import mechanical_distill
+
+    _gate()
+    repo = _legacy_repo(tmp_path)
+    stack = build_scout_only_stack(_settings_live(), repo)
+    res = run_paired_reformulation_probe(
+        _live_cases(repo, cap=2),
+        stack=stack,
+        repo_path=repo,
+        window=_WINDOW,
+        mechanical=mechanical_distill,
+    )
+    # per-case pairs (AC3) — one row per USABLE case; deltas are bounded.
+    assert res.usable_n == len(res.paired_rows)
+    assert -1.0 <= res.delta_empty <= 1.0
+    assert -1.0 <= res.delta_file_accuracy <= 1.0
+    assert res.discordant_pairs >= 0
+
+
+@pytest.mark.integration
+def test_paired_probe_raw_provenance_and_usable_n(tmp_path):
+    _gate()
+    repo = _legacy_repo(tmp_path)
+    stack = build_scout_only_stack(_settings_live(), repo)
+    cases = _live_cases(repo, cap=2)
+    res = run_paired_reformulation_probe(
+        cases, stack=stack, repo_path=repo, window=_WINDOW
+    )
+    # every case is accounted for: usable + excluded == total (AC8).
+    assert res.usable_n + len(res.excluded_case_ids) == len(cases)
+
+
+@pytest.mark.integration
+def test_paired_probe_no_nonloopback_egress(tmp_path):
+    _gate()
+    repo = _legacy_repo(tmp_path)
+    stack = build_scout_only_stack(_settings_live(), repo)
+    with _deny_nonloopback_egress():
+        res = run_paired_reformulation_probe(
+            _live_cases(repo, cap=1), stack=stack, repo_path=repo, window=_WINDOW
+        )
+    assert res.usable_n + len(res.excluded_case_ids) == 1

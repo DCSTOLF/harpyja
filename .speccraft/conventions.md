@@ -378,6 +378,76 @@
   overturn it) recorded BEFORE the run, as a falsifiability guard against confirmation
   bias. (See `harpyja/eval/locate_accuracy.py` `score_distribution` / `LocateDistribution`
   `gap` / `decide_finding`, spec 0022 AC2/AC7.)
+- A **pre-registered decision config is a FROZEN object and the verdict is a TOTAL PURE
+  FUNCTION over it** — declared in code before the run so it cannot be steered post-hoc —
+  and each threshold is **derived from the test's own reachability arithmetic, not a round
+  guess**. The config is a `frozen=True` dataclass exposed as a single `PREREGISTERED_*`
+  constant, the rule/prompt inputs are **hashed before any live run**, and the decision
+  functions are total with **non-overlapping predicates** pinned by a grid totality test
+  (every input returns an enum member, never raises, never silently defaults; distinct
+  outcomes get **separately named** reasons). A threshold is justified by the test that
+  consumes it: `MIN_DISCORDANT_PAIRS=8` is the exact-McNemar reachability floor (under H0
+  the discordant pairs are a sign test at p=0.5, so α=0.05 is first clearable at
+  `n_discordant≥6`; 8 buys one contrary pair of slack) — a round `5` was wrong because it
+  made the positive verdict structurally unreachable (the small-N trap in reverse: every
+  run would default to `INCONCLUSIVE`). This is the successor to the 0022 pre-registered
+  *prior* (a recorded prose expectation): here the whole verdict is a frozen-config pure
+  function, not just its prior. (See `harpyja/eval/benchmark_fit.py` `PREREGISTERED_CONFIG`
+  / `decide_axis1` / `compose_verdict` / `MECHANICAL_RULE_HASH` / `LLM_PROMPT_HASH`,
+  spec 0023 AC4/AC6.)
+- A **within-case paired A/B over a BINARY outcome is a McNemar test, and its power lives
+  in the DISCORDANT PAIRS — the effective sample size is the discordant (flip) count, not
+  N.** When each case is its own control (run the SUT on arm A and arm B for the *same*
+  gold target so per-case difficulty cancels) and the outcome is binary (empty / not-empty),
+  compute deltas and the discordant `(b,c)` **from retained per-case `(case_id, a_bucket,
+  b_bucket)` pairs**, never as a difference of two independent aggregate rates; the paired
+  test is the exact two-sided McNemar (a sign test on the discordant pairs at p=0.5,
+  implementable from `math.comb` — no scipy). Size the case set by the discordant floor the
+  verdict needs, not by a raw-N intuition: a binary paired probe is **not** as cheap as the
+  paired-continuous intuition suggests (reaching 8 flips can need ~15–25 cases), and the
+  config states that honest cost rather than glossing it. (See `harpyja/eval/benchmark_fit.py`
+  `mcnemar_exact_p` / `PairedRow` / `aggregate_paired`, spec 0023 AC3/AC4/OQ1.)
+- A **verdict-driving instrument is made STRUCTURALLY INCAPABLE of the bias it is trusted
+  against; a smarter instrument is a LABELED, NON-DECIDING SENSITIVITY arm.** When a probe's
+  credibility rests on it *not* cheating (e.g. not injecting the answer's vocabulary), make
+  the PRIMARY arm structurally blind by construction — a single **case-agnostic**,
+  answer-blind rule whose output is a **subset of its input** (extraction, never generation),
+  so it *cannot* manufacture the favorable verdict — and record its full per-case output +
+  everything it discarded for audit. A more capable arm (an LLM reformulator) is admitted
+  only as a **labeled, non-primary sensitivity check** gated by a post-hoc same-property
+  **hard reject** (a subset-violating output is rejected, never passed through); it **never
+  decides** — it only disambiguates the one case the blind arm cannot (a flat primary delta:
+  real null *or* the blind rule was too crude). Structural blindness is *why* the primary
+  drives the verdict; the smart arm's agreement corroborates across a dumb and a smart
+  instrument, its disagreement is itself a named `INCONCLUSIVE` trigger. (See
+  `harpyja/eval/distill.py` `mechanical_distill` (subset + code-identifier strip, gold-blind)
+  vs `llm_distill_guarded` (injected `Callable`, `DistillRejected`), spec 0023 AC2.)
+- A **per-case INPUT-VALIDITY precondition on a measurement arm makes an underpowered /
+  degenerate-input run SELF-FLAG rather than fake a null** — the no-false-capability rule
+  applied to the *sample*, not just the metric. When a null result is only interpretable if
+  the input arm was genuinely exercised (a `delta≈0` means "capability wall" ONLY if the raw
+  arm actually carried the hard input), gate each case on a recorded precondition
+  (`is_raw_issue`: real multi-paragraph body, not a terse fixture), **exclude** failing cases
+  from the effective sample (`usable_n`) and record them (`excluded_case_ids`), and force the
+  power-starved verdict (`usable_n < min_n` → `INCONCLUSIVE(INSUFFICIENT_POWER)`). So a
+  by-construction null (terse fixtures → `delta≈0`) **cannot masquerade** as the real finding
+  it superficially resembles — the run reports `usable_n=0` and every case accounted-for
+  rather than a false `CAPABILITY`. This sharpens the 0020 "verify the null is real" rule
+  into a *structural* per-case guard, not a post-hoc spot-check. (See
+  `harpyja/eval/locate_probe.py` `is_raw_issue` / `usable_n` / `excluded_case_ids`,
+  spec 0023 AC8.)
+- A **two-axis verdict may let one axis DOWNGRADE the other's routing via a PRE-REGISTERED
+  N×M composition — a second axis is a qualifier, not an inert caveat.** Where the 0021
+  MECE rule keeps orthogonal axes as independent *reporting* dimensions, a decision can go
+  further: a **representativeness** axis (is the benchmark even the right yardstick?) can cap
+  or re-route a **capability** axis's conclusion, provided the full grid is fixed BEFORE the
+  run as a total function over `(axis1 × axis2)` — e.g. `QUERY_SHAPE×¬representative` routes
+  to *build a truer benchmark first*, **NOT** the finder swap that `QUERY_SHAPE×representative`
+  would imply; `CAPABILITY×¬representative` routes to *retire the benchmark*. The cell the run
+  lands in **names the next spec**. Encoded and totality-tested exactly like a single-axis
+  verdict (`compose_verdict` total over `Axis1Verdict × bool`), never applied as a
+  read-time judgment call. (See `harpyja/eval/benchmark_fit.py` `RepresentativenessRecord` /
+  `is_representative` / `compose_verdict`, spec 0023 AC5/AC6.)
 
 ## Logging
 

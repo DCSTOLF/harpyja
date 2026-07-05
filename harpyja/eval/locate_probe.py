@@ -184,11 +184,7 @@ class ProbeResult:
 
 def _run_scout_case(scout_engine: Any, case: EvalCase, repo_path: str):
     """Drive ONE case through Scout only (reset tally first, mirror the runner)."""
-    if hasattr(scout_engine, "last_tally"):
-        scout_engine.last_tally = None
-    spans = scout_engine.search(case.query, scope=repo_path)
-    tally = getattr(scout_engine, "last_tally", None)
-    return normalize_citations(spans, tally)
+    return _run_scout_query(scout_engine, case.query, repo_path)
 
 
 def run_locate_probe(
@@ -246,22 +242,43 @@ def _resolve_turns(turns_sink: list[int] | None) -> tuple[tuple[int, ...] | None
 
 @dataclass(frozen=True)
 class ReformulationResult:
-    """Raw-vs-distilled empty-rate delta over the probe cases (held OUT of baseline)."""
+    """Raw-vs-distilled reformulation probe result.
+
+    The 0022 fields (`n, raw_empty_rate, distilled_empty_rate, delta_empty`) are a
+    difference of AGGREGATE rates. Spec 0023 EXTENDS this additively (fields appended
+    last-with-defaults, so the 0022 constructor + callers are byte-compatible): the
+    paired path (`run_paired_reformulation_probe`) retains per-case pairs so
+    `delta_file_accuracy`, the discordant-pair count, the optional LLM sensitivity arm,
+    `usable_n`, and the excluded (non-raw) case ids are all recoverable — none of which
+    the aggregate-rate form can express.
+    """
 
     n: int
     raw_empty_rate: float
     distilled_empty_rate: float
     delta_empty: float
+    # --- spec 0023 additive fields (paired path) ---
+    paired_rows: tuple[Any, ...] = ()
+    delta_file_accuracy: float = 0.0
+    discordant_pairs: int = 0
+    llm_delta_empty: float | None = None
+    usable_n: int = 0
+    excluded_case_ids: tuple[str, ...] = ()
+
+
+def _run_scout_query(scout_engine: Any, query: str, repo_path: str):
+    """Drive ONE query through Scout only (reset tally first, mirror the runner)."""
+    if hasattr(scout_engine, "last_tally"):
+        scout_engine.last_tally = None
+    spans = scout_engine.search(query, scope=repo_path)
+    tally = getattr(scout_engine, "last_tally", None)
+    return normalize_citations(spans, tally)
 
 
 def _empty_rate(cases, scout_engine, repo_path, window, *, query_of) -> float:
     empties = 0
     for case in cases:
-        if hasattr(scout_engine, "last_tally"):
-            scout_engine.last_tally = None
-        spans = scout_engine.search(query_of(case), scope=repo_path)
-        tally = getattr(scout_engine, "last_tally", None)
-        norm = normalize_citations(spans, tally)
+        norm = _run_scout_query(scout_engine, query_of(case), repo_path)
         bucket, _ = classify_case(norm.effective, case.expected_spans, window=window)
         if bucket is LocateBucket.EMPTY:
             empties += 1
@@ -279,7 +296,8 @@ def run_reformulation_probe(
     """Compare Scout empty-rate on raw issue text vs a distilled one-line query.
 
     A DISCRIMINATOR probe (BENCHMARK_UNREPRESENTATIVE vs RETRIEVAL_FUNDAMENTAL), not a
-    baseline: its cases never enter `run_locate_probe`'s distribution.
+    baseline: its cases never enter `run_locate_probe`'s distribution. Kept for the
+    0022 aggregate-rate contract; the paired variant below is the spec-0023 successor.
     """
     scout_engine = stack.scout_engine
     raw = _empty_rate(cases, scout_engine, repo_path, window, query_of=lambda c: c.query)
@@ -291,6 +309,94 @@ def run_reformulation_probe(
         raw_empty_rate=raw,
         distilled_empty_rate=distilled,
         delta_empty=raw - distilled,
+    )
+
+
+# ---- Spec 0023 (AC8): raw-arm provenance precondition ----------------------
+
+
+def is_raw_issue(query: str) -> bool:
+    """Whether `query` is a genuine multi-paragraph issue body (not an already-terse
+    query). Guards the raw arm: a terse `query` would give `delta ≈ 0` BY CONSTRUCTION
+    and make a null uninterpretable. Provisional rule: ≥ 30 words across ≥ 2 non-empty
+    lines."""
+    text = query.strip()
+    if not text:
+        return False
+    words = text.split()
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    return len(words) >= 30 and len(lines) >= 2
+
+
+# ---- Spec 0023 (AC1/AC3/AC7): the paired reformulation probe ---------------
+
+
+def run_paired_reformulation_probe(
+    cases: Sequence[EvalCase],
+    *,
+    stack: Any,
+    repo_path: str,
+    window: int,
+    mechanical: Callable[[str], Any] | None = None,
+    llm: Callable[[str], str] | None = None,
+) -> ReformulationResult:
+    """The spec-0023 discriminator: a WITHIN-CASE paired A/B retaining per-case pairs.
+
+    For each case whose raw arm passes `is_raw_issue`, run Scout on (a) the raw issue
+    text and (b) the MECHANICAL distilled query (the primary, structurally-blind arm),
+    classify both through the frozen oracle, and retain a `PairedRow`. Non-raw cases are
+    excluded from `usable_n` (recorded in `excluded_case_ids`) so an underpowered legacy
+    run self-flags rather than faking `CAPABILITY`. When an `llm` arm is provided, its
+    guarded (subset-rejected) distillation is scored alongside as a labeled, non-primary
+    sensitivity signal (`llm_delta_empty`). Additive: no SUT change.
+    """
+    from harpyja.eval import benchmark_fit as bf
+    from harpyja.eval.distill import DistillRejected, llm_distill_guarded, mechanical_distill
+
+    mech = mechanical or mechanical_distill
+    scout_engine = stack.scout_engine
+    rows: list[Any] = []
+    llm_rows: list[Any] = []
+    excluded: list[str] = []
+
+    for case in cases:
+        if not is_raw_issue(case.query):
+            excluded.append(case.case_id)
+            continue
+        raw_norm = _run_scout_query(scout_engine, case.query, repo_path)
+        raw_bucket, _ = classify_case(raw_norm.effective, case.expected_spans, window=window)
+        dist_norm = _run_scout_query(scout_engine, mech(case.query).query, repo_path)
+        dist_bucket, _ = classify_case(
+            dist_norm.effective, case.expected_spans, window=window
+        )
+        rows.append(bf.PairedRow(case.case_id, raw_bucket, dist_bucket))
+        if llm is not None:
+            try:
+                lq = llm_distill_guarded(case.query, llm=llm).query
+            except DistillRejected:
+                continue
+            llm_norm = _run_scout_query(scout_engine, lq, repo_path)
+            lbucket, _ = classify_case(
+                llm_norm.effective, case.expected_spans, window=window
+            )
+            llm_rows.append(bf.PairedRow(case.case_id, raw_bucket, lbucket))
+
+    agg = bf.aggregate_paired(rows)
+    llm_delta = bf.aggregate_paired(llm_rows).delta_empty if llm_rows else None
+    raw_empty = sum(r.raw_bucket is LocateBucket.EMPTY for r in rows)
+    dist_empty = sum(r.distilled_bucket is LocateBucket.EMPTY for r in rows)
+    n = len(rows)
+    return ReformulationResult(
+        n=n,
+        raw_empty_rate=raw_empty / n if n else 0.0,
+        distilled_empty_rate=dist_empty / n if n else 0.0,
+        delta_empty=agg.delta_empty,
+        paired_rows=tuple(rows),
+        delta_file_accuracy=agg.delta_file_accuracy,
+        discordant_pairs=agg.discordant_pairs,
+        llm_delta_empty=llm_delta,
+        usable_n=n,
+        excluded_case_ids=tuple(excluded),
     )
 
 
