@@ -266,6 +266,16 @@
   the dispatcher with a **behavior snapshot**, not a source grep. (See
   `harpyja/eval/oq2_classify.py` `classify_g3_outcome` above the frozen
   `recommend_oq2` / `rank_sweep`, `test_recommend.py` P1/P2 locks, spec 0020 D1/D3/AC6.)
+  A projection may carry a **single deliberate, SCORED departure** from the frozen
+  oracle when the whole diagnostic axis depends on it — e.g. spec 0022 re-maps a
+  path-only right-file hit (`span_hit_kind == "file"`) to `RIGHT_FILE_WRONG_SPAN`
+  rather than the oracle's coarse primary-hit, because "found the file" vs "found the
+  span" IS the measurement. The departure lives ONLY in the additive eval classifier
+  (never in `metrics.py`), is named in the module docstring, and is double-guarded by
+  a `SUT_SURFACE` frozenset **allowlist** of the exact frozen public names the module
+  may touch + the frozen-oracle **behavior snapshot** — so a silent re-map into the
+  shared oracle cannot happen. (See `harpyja/eval/locate_accuracy.py` `SUT_SURFACE` /
+  `classify_case`, spec 0022 AC10.)
 - A **measurement spec closes on a recorded, SUT-observing typed outcome that names the
   next spec — skip-not-fail is never a close**, and a typed null (including an
   *unmeasurable* / DEFERRED metric with a zero-count denominator) is a **complete, valid
@@ -280,7 +290,15 @@
   verdict + measured sub-values + the close/hold cause + run provenance, so a STOP /
   BLOCKED verdict is reproducible. (See `harpyja/eval/oq2_protocol.py`
   `run_oq2_protocol`, `harpyja/eval/oq2_ledger.py` `LEDGER_SCHEMA_VERSION` `"0020/1"`,
-  spec 0020 D7/D8/AC2/AC11/AC12.)
+  spec 0020 D7/D8/AC2/AC11/AC12.) The two postures are deliberately SPLIT and NOT the
+  same answer: an integration test FILE stays skip-not-fail (a host missing
+  infrastructure this spec doesn't own must not red-fail CI), but the
+  DELIVERABLE-producing run fails LOUD — a `preflight` gate (`preflight_models_present`
+  behind `assert_local`) plus an opt-in strict switch (`require_live_stack` reading
+  `HARPYJA_REQUIRE_LIVE_STACK`, which converts the integration skip into a hard fail
+  for the closure run). Net: unrelated CI stays green; the run that produces the
+  finding cannot go green by skipping. (See `harpyja/eval/locate_probe.py`
+  `require_live_stack`, spec 0022 fail-posture.)
 - Before reporting a **null / undefined measurement, verify the null is real — not a
   harness artifact** — by spot-checking the oracle, the fixtures, and the SUT
   invocation directly, and separate a genuine **upstream** limit from a measurement bug
@@ -310,6 +328,16 @@
   internals** — and the split is labeled `"estimate"` while the total stays
   wall-clock-anchored. (See `harpyja/eval/escalation_microrun.py` `_wrap_timed` /
   `build_micro_result`, spec 0021 T0 / AC3, review C1.)
+  (c) A signal the frozen SUT **tracks internally but discards** (FastContext records
+  turns in a trajectory JSONL the frozen client `os.unlink`s in its `finally`) is
+  recovered through a **PUBLIC injection seam**, not a frozen-internals edit: an
+  eval-side factory passed to `build_scout_engine(..., agent_factory=…)` wraps the
+  REAL `make_fastcontext_agent` and reads the trajectory BEFORE cleanup fires,
+  surfacing `turns_used_source ∈ {"trajectory","unavailable"}` — a labeled source, an
+  honest `unavailable` fallback on the seamless path (Path B / unwired), never a
+  fabricated counter. Recovering a discarded signal via a public seam beats both a
+  frozen-internals edit and a guessed number. (See `harpyja/eval/locate_probe.py`
+  `counting_agent_factory` / `count_turns`, spec 0022 AC5.)
 - A recorded diagnostic **finding taxonomy is MECE**: when candidate outcome values are
   not mutually exclusive — one is an *explanation UNDER* another rather than an
   *alternative TO* it — split the finding into **orthogonal axes, one value per axis**,
@@ -327,6 +355,29 @@
   `classify_escalation` gained a `tier1_empty` parameter and the trigger test was corrected
   — a test asserting a false claim about the SUT is worse than none). (See
   `harpyja/eval/escalation.py` `WrongCitationFate`, spec 0021 AC4 / review C2.)
+- An **availability/skip predicate must be scoped to the tier it actually gates** — a
+  measurement of tier X must not reuse a sibling tier Y's availability check, or it
+  **false-skips a capable host** for a dependency X never needed (the mirror of a
+  false-skip masking absence). Spec 0022's Scout-only probe initially reused the
+  Deep-oriented `_live_stack_available` (which requires Deno — the Tier-2 WASM sandbox
+  — and the Deep model, both irrelevant to Scout) and skipped on a Scout-served,
+  Deno-absent host; the fix is an additive tier-scoped predicate
+  (`scout_stack_available` = fastcontext + `rg` + a reachable Scout endpoint, no Deno,
+  no Deep model). A gate that over-requires is as dishonest as one that under-requires.
+  (See `harpyja/eval/locate_probe.py` `scout_stack_available` vs the Deep-oriented
+  `_live_stack_available`, spec 0022.)
+- A diagnostic that must **route a failure to the right FIX kind scores at two
+  granularities and makes the GAP a first-class metric** — the gap IS the
+  discriminator, not a derived afterthought. Spec 0022 reports file-level accuracy
+  (found the right file) and span-level accuracy (found the right span) independently
+  and surfaces `gap = file − span` as a reported field: a large gap routes to a
+  **precision fix** (find files, miss spans), a low file-level routes to a
+  **capability/retrieval fix** (doesn't find the file), and the two are never
+  conflated into one accuracy number that hides which fix the data actually calls for.
+  Pair it with a **pre-registered prior** (the expected label + what distribution would
+  overturn it) recorded BEFORE the run, as a falsifiability guard against confirmation
+  bias. (See `harpyja/eval/locate_accuracy.py` `score_distribution` / `LocateDistribution`
+  `gap` / `decide_finding`, spec 0022 AC2/AC7.)
 
 ## Logging
 

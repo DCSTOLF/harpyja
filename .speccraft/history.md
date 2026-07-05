@@ -2,6 +2,91 @@
 
 Append-only. Newest first.
 
+## 2026-07-05 — **Spec 0022 (Tier-1) shipped the Scout locate-accuracy DIAGNOSTIC — a two-granularity (file vs span) projection over the frozen oracle routing to one of four typed findings; live-fixture-verified `RETRIEVAL_FUNDAMENTAL` (provisional), the real 38-case + reformulation-probe discriminator operator-gated; SUT byte-frozen**
+
+**Spec:** specs/0022-tier-1/
+**Decision:** Characterize the Scout Tier-1 locate failure that DEFERRED OQ2 in 0020
+(`correct_tier1_count = 0`) and that 0021 showed to be empty-dominant — precisely
+enough to name its FIX — as a pure **measurement/eval** diagnostic in the
+0019/0020/0021 measurement-not-construction lineage: the SUT (`harpyja/scout/`,
+`harpyja/orchestrator/` tiers/gate/matrix/judge) stays **FROZEN and read-only**, all
+code is additive under `harpyja/eval/` (`locate_accuracy.py`, `locate_probe.py`), and
+the deliverable is a RECORDED TYPED FINDING (`findings.md`), not a Scout fix. Five
+durable points. (1) **The taxonomy is a PROJECTION ABOVE the frozen oracle with ONE
+deliberate SCORED re-map, guarded by an allowlist + a behavior snapshot (reprising
+0020's `classify_g3_outcome`).** A 4-way MECE `LocateBucket` `{EMPTY, WRONG_FILE,
+RIGHT_FILE_WRONG_SPAN, CORRECT}` with strict precedence `CORRECT >
+RIGHT_FILE_WRONG_SPAN > WRONG_FILE > EMPTY` is computed over the byte-unchanged
+`metrics.span_hit_kind` / `span_hit_secondary`; the sole departure from the oracle —
+a path-only right-file hit (`span_hit_kind == "file"`) re-mapped to
+`RIGHT_FILE_WRONG_SPAN`, NOT the oracle's coarse primary-hit — is the whole diagnostic
+axis ("found the file" vs "found the span") and lives ONLY in the eval classifier
+(`metrics.py` untouched), locked by a `SUT_SURFACE` frozenset allowlist + a
+frozen-oracle input→output snapshot (0020 P2 precedent, a snapshot not a source grep).
+(2) **Two-granularity scoring with the gap first-class is the discriminator between a
+precision fix and a capability fix.** `score_distribution` reports file-level accuracy
+(`|CORRECT ∪ RIGHT_FILE_WRONG_SPAN| / n`), span-level accuracy (`|CORRECT| / n`), and
+`gap = file − span` as a first-class metric — a large gap is the PRECISION_FIXABLE
+signal, a low file-level is the RETRIEVAL_FUNDAMENTAL signal. `decide_finding` routes
+over PRE-DECLARED named bands to exactly one of `BENCHMARK_UNREPRESENTATIVE >
+PRECISION_FIXABLE > RETRIEVAL_FUNDAMENTAL > MIXED` (ordered, all true conditions
+recorded — 0020 pattern), each label naming the fix/next-spec it routes to. (3) **A
+discarded internal signal is recovered via a PUBLIC injection seam, LABELED, never
+fabricated (extends 0021's labeled-estimate rule).** Turns-used is not on
+`search`'s return and the frozen client `os.unlink`s the FastContext trajectory JSONL
+in its `finally`, so it is captured through the PUBLIC `build_scout_engine(...,
+agent_factory=…)` seam: `counting_agent_factory` wraps the REAL
+`make_fastcontext_agent` and `count_turns(trajectory)` reads it BEFORE cleanup fires —
+no SUT edit — surfacing `turns_used_source ∈ {"trajectory","unavailable"}`, a labeled
+gap on Path B / unwired, never a guessed counter. This corrected a planner
+overstatement ("turns genuinely not surfaced"): they ARE tracked, just discarded.
+(4) **Availability predicates must be TIER-SCOPED, and the fail-posture is SPLIT.** The
+Scout-only tests initially reused the Deep-oriented `_live_stack_available` (needs Deno
++ the Deep model — irrelevant to a Scout probe) and **false-skipped** a Scout-capable
+host; the additive `scout_stack_available()` (fastcontext + `rg` + a reachable Scout
+endpoint; no Deno) makes the 4 integration tests RUN LIVE. Separately, per the 0020
+"skip-not-fail is never a close" rule, the two postures are deliberately NOT the same
+answer: integration test FILES stay skip-not-fail (CI-safe) but the DELIVERABLE run
+fails loud (`require_live_stack` + `HARPYJA_REQUIRE_LIVE_STACK=1` + a `preflight`
+gate), so a skip can never masquerade as a completed measurement. (5) **Honesty —
+instrument shipped and live-fixture-verified ≠ the full operator measurement (0019/0020
+lineage).** The finding is **provisional `RETRIEVAL_FUNDAMENTAL`**, with
+`BENCHMARK_UNREPRESENTATIVE` NOT YET EXCLUDABLE: its discriminator (the reformulation
+probe on REAL multi-paragraph SWE-bench issue text) is operator-gated — on the terse
+fixture queries `delta_empty ≈ 0` by construction, which is not evidence about the real
+question — and the real 38-case SWE-bench distribution needs the per-case checkouts
+(the 0020 G2 operator setup), absent on this host.
+**Why:** OQ2 (0020) and everything it tried to calibrate — the gate, the judge, the
+escalation threshold — measure a signal Scout never produces; 0021 confirmed the
+bottleneck is upstream Scout locate-accuracy and flagged `wrong_tier1_count` /
+`span_hit_rate_primary` / `gate_catch_rate` CONTAMINATED. So this spec REGENERATES the
+distribution from scratch (`scout_engine.search` outputs via the frozen oracle, never
+0021's counts) and characterizes the failure's NATURE precisely enough to name the fix
+spec, without touching Scout. The pre-registered prior (0021 → `RETRIEVAL_FUNDAMENTAL`
+unless the probe fires) is recorded up front as a falsifiability guard against
+confirmation bias.
+**Consequence — the diagnostic instrument shipped and is live-fixture-verified; a
+provisional typed finding is recorded; the real operator measurement is a named
+follow-up. No SUT change.** Shipped TDD-complete: **835 → 883 unit pass** (+48,
+`test_locate_accuracy.py` ×33 + `test_locate_probe.py` ×15), ruff clean; 4 integration
+tests PASS LIVE (real Scout, ~44s). Live fixture smoke (N=5 legacy seed, real
+FastContext Q8 on Ollama): `CORRECT=1, EMPTY=4, F=0.20, S=0.20, gap=0.00,
+empty_rate=0.80`; `turns_used_source="trajectory"`, turns `(5,5,7,3,5)`. The gap ≈ 0
+in both the smoke and the carried-forward prior (finds a file → tends to hit the span;
+the dominant failure is empty / wrong-file) — the retrieval-fundamental signature, not
+precision-fixable; and the empty cases used only 3–5 of the available turns and emitted
+nothing → **early convergence to empty (a recall gap), NOT turn-exhaustion** (answers
+AC4). **Named follow-ups carried forward:** (1) **the operator SWE-bench 38-case run**
+(stand up the real repos, run `run_locate_probe` + the reformulation probe over the
+stratified 38 with `HARPYJA_REQUIRE_LIVE_STACK=1`) — settles `RETRIEVAL_FUNDAMENTAL` vs
+`BENCHMARK_UNREPRESENTATIVE`; (2) **the fix spec named by branch** — if
+`RETRIEVAL_FUNDAMENTAL`, a finder-capability spec (larger/different finder); if
+`BENCHMARK_UNREPRESENTATIVE`, a dataset/query-distill spec; (3) **`count_turns`
+trajectory-schema validation** against FastContext's documented format before trusting
+it beyond a labeled estimate. Standing carry-forwards unchanged (judge thinking-defense
+hardening, permanent ceiling calibration, permanent `lm_model`/Deep choice, Deep
+co-residency budget, Wave-2.1 substring/fuzzy matching).
+
 ## 2026-07-04 — **The 0020 `escalation_rate=0`-vs-3.3h anomaly is a recorded typed finding, not a bug: a projection-over-frozen-SUT diagnostic proves `accounting=CORRECT_NO_ESCALATION` and splits the wrong-citation fate on a second MECE axis — SUT frozen, no production change, and a metric-trust verdict gates the next spec** (spec 0021)
 
 **Spec:** specs/0021-escalation-rate-0/

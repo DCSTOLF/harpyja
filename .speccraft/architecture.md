@@ -265,6 +265,40 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `gate_catch_rate` are flagged CONTAMINATED for the next spec to regenerate. Report schema
    unchanged. See history.md 2026-07-04 (spec 0021).
 
+   **As of spec 0022** the package carries a **Scout locate-accuracy diagnostic**
+   (`locate_accuracy.py` + `locate_probe.py`) — still measurement, not a runtime tier;
+   the SUT (`harpyja/scout/`, `harpyja/orchestrator/`) is byte-frozen and read-only.
+   `locate_accuracy.py` is a **pure projection over the byte-frozen oracle**
+   (`metrics.span_hit_kind` / `span_hit_secondary`, untouched): `normalize_citations`
+   (reads spec-0012 `ScoutTally` recovery counts, never re-derives suffix recovery) →
+   `NormalizedCitations`; a 4-way MECE `LocateBucket` `{EMPTY, WRONG_FILE,
+   RIGHT_FILE_WRONG_SPAN, CORRECT}` with strict precedence `CORRECT >
+   RIGHT_FILE_WRONG_SPAN > WRONG_FILE > EMPTY` (`classify_case`), carrying the ONE
+   deliberate scored re-map (path-only right-file `span_hit_kind=="file"` →
+   `RIGHT_FILE_WRONG_SPAN`, NOT `CORRECT` — the file-vs-span diagnostic axis, eval-only,
+   guarded by a `SUT_SURFACE` allowlist + a frozen-oracle behavior snapshot);
+   `score_distribution` → `LocateDistribution` (file-level acc, span-level acc, and
+   first-class `gap = file − span`); and `decide_finding` — an ordered 4-branch rule
+   (`BENCHMARK_UNREPRESENTATIVE > PRECISION_FIXABLE > RETRIEVAL_FUNDAMENTAL > MIXED`)
+   over pre-declared named bands, all true conditions recorded (0020 pattern).
+   `locate_probe.py` is a **Scout-ONLY driver** (no gate/judge/Deep): `stratify_cases`
+   (repo × gold-span-size band), `run_locate_probe` (drives `scout_engine.search` only,
+   resets `last_tally` per case, REGENERATES the distribution — never inherits 0021's
+   contaminated counts), `run_reformulation_probe` (raw-vs-distilled empty-rate delta,
+   held OUT of the baseline), turns-used via the public `agent_factory` seam
+   (`count_turns` / `counting_agent_factory` reading FastContext's trajectory before the
+   frozen client's `os.unlink`, `turns_used_source ∈ {"trajectory","unavailable"}`), a
+   tier-scoped `scout_stack_available()` (fastcontext + `rg` + reachable Scout endpoint;
+   no Deno, fixing the Deep-oriented false-skip), and a split fail-posture
+   (`require_live_stack` + `HARPYJA_REQUIRE_LIVE_STACK`: integration skip-not-fail, the
+   deliverable run fails loud). The recorded typed finding
+   (`specs/0022-tier-1/findings.md`) is **provisional `RETRIEVAL_FUNDAMENTAL`**
+   (empty-dominant, gap ≈ 0 → recall/retrieval failure, not span precision); one branch,
+   `BENCHMARK_UNREPRESENTATIVE`, is NOT YET EXCLUDABLE because its reformulation-probe
+   discriminator (on real multi-paragraph SWE-bench issue text) and the full 38-case
+   distribution are operator-gated (see `specs/.archive/0022-tier-1/findings.md`).
+   Report schema unchanged. See history.md 2026-07-05 (spec 0022).
+
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
 ## Key decisions
