@@ -111,13 +111,32 @@ gate, in reverse.
 
 ## Named follow-ups
 
-1. **The operator SWE-bench run** (the real deliverable): stand up the SWE-bench repos,
-   run `run_locate_probe` + the reformulation probe over the stratified 38 with
-   `HARPYJA_REQUIRE_LIVE_STACK=1` (preflight fails loud if the stack is down). This
-   settles `RETRIEVAL_FUNDAMENTAL` vs `BENCHMARK_UNREPRESENTATIVE`.
-2. **The fix spec, named by branch:** if `RETRIEVAL_FUNDAMENTAL` → a finder-capability
-   spec (larger/different finder); if `BENCHMARK_UNREPRESENTATIVE` → a dataset/query
-   spec (distill-before-Scout, or a terse-query benchmark truer to Harpyja's target).
+1. **The operator SWE-bench run — TWO co-primary components, not one-plus-adjunct.**
+   Stand up the SWE-bench repos and run, with `HARPYJA_REQUIRE_LIVE_STACK=1` (preflight
+   fails loud if the stack is down):
+   - **(1a) the N=38 stratified distribution** (`run_locate_probe`) — confirms and sizes
+     the empty-dominance / `F` / `S` / `gap`; and
+   - **(1b) the reformulation probe on REAL multi-paragraph issue text**
+     (`run_reformulation_probe`) — the **discriminator**.
+
+   These are **co-primary**: neither alone decides the fix. **1a on its own confirms
+   `RETRIEVAL_FUNDAMENTAL`'s magnitude but CANNOT distinguish "the 4B can't localize"
+   from "the 4B can't parse a long GitHub issue" — only 1b can.** So the probe is not a
+   secondary nicety bundled onto the N=38 run; it is the **branch-selector** that decides
+   which fix spec (#2) is even the right one. Treating it as optional would let the N=38
+   empty-rate alone drive a finder swap — the exact mistake this spec exists to prevent.
+   Decision rule at the operator run: probe `delta_empty` materially positive →
+   `BENCHMARK_UNREPRESENTATIVE`; probe flat → `RETRIEVAL_FUNDAMENTAL`.
+2. **The fix spec, named by branch — and why the ordering is load-bearing.** If
+   `RETRIEVAL_FUNDAMENTAL` → a finder-capability spec (larger/different finder). If
+   `BENCHMARK_UNREPRESENTATIVE` → a dataset/query spec (distill-before-Scout, or a
+   terse-query benchmark truer to Harpyja's target), **NOT a finder swap**. The stakes:
+   SWE-bench is verbose GitHub-issue prose; Harpyja's founding target is a *terse*
+   legacy-codebase NL query. If the probe fires, a poor SWE-bench score is a
+   **benchmark-fit artifact**, and swapping out the 4B finder on that basis would
+   optimize for a distribution Harpyja's users do not have — **discarding a finder that
+   may be perfectly adequate for the terse-query job it was built for.** Getting 1b right
+   (co-primary, before #2 is chosen) is what stops that.
 3. **Trajectory turn-count schema validation:** `count_turns` assumes one JSONL record
    per turn; the live smoke produced plausible counts (3–7, within `max_turns`), but
    pin it against FastContext's documented trajectory schema before trusting it beyond a

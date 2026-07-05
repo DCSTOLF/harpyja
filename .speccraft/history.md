@@ -76,12 +76,20 @@ in both the smoke and the carried-forward prior (finds a file → tends to hit t
 the dominant failure is empty / wrong-file) — the retrieval-fundamental signature, not
 precision-fixable; and the empty cases used only 3–5 of the available turns and emitted
 nothing → **early convergence to empty (a recall gap), NOT turn-exhaustion** (answers
-AC4). **Named follow-ups carried forward:** (1) **the operator SWE-bench 38-case run**
-(stand up the real repos, run `run_locate_probe` + the reformulation probe over the
-stratified 38 with `HARPYJA_REQUIRE_LIVE_STACK=1`) — settles `RETRIEVAL_FUNDAMENTAL` vs
-`BENCHMARK_UNREPRESENTATIVE`; (2) **the fix spec named by branch** — if
-`RETRIEVAL_FUNDAMENTAL`, a finder-capability spec (larger/different finder); if
-`BENCHMARK_UNREPRESENTATIVE`, a dataset/query-distill spec; (3) **`count_turns`
+AC4). **Named follow-ups carried forward:** (1) **the operator SWE-bench run — with TWO
+CO-PRIMARY components, not one-plus-adjunct** (both with `HARPYJA_REQUIRE_LIVE_STACK=1`):
+(1a) the N=38 stratified distribution (`run_locate_probe`) sizes the empty-dominance,
+and (1b) the reformulation probe on REAL multi-paragraph issue text
+(`run_reformulation_probe`) is the DISCRIMINATOR — 1a alone confirms
+`RETRIEVAL_FUNDAMENTAL`'s magnitude but CANNOT distinguish "the 4B can't localize" from
+"the 4B can't parse a long issue"; only 1b can, so it is the branch-selector, never a
+secondary nicety (treating it as optional would let the N=38 empty-rate alone drive a
+finder swap — the exact mistake this spec exists to prevent). (2) **the fix spec named
+by branch** — if `RETRIEVAL_FUNDAMENTAL`, a finder-capability spec (larger/different
+finder); if `BENCHMARK_UNREPRESENTATIVE`, a dataset/query-distill spec, **NOT a finder
+swap** (a poor score on verbose GitHub-issue prose is a benchmark-fit artifact against
+Harpyja's terse-query target, and swapping the 4B on that basis discards a finder that
+may be perfectly adequate for the job it was built for). (3) **`count_turns`
 trajectory-schema validation** against FastContext's documented format before trusting
 it beyond a labeled estimate. Standing carry-forwards unchanged (judge thinking-defense
 hardening, permanent ceiling calibration, permanent `lm_model`/Deep choice, Deep
