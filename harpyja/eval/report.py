@@ -29,7 +29,21 @@ from pathlib import Path
 # fc_citation_recovered_* fields are RETIRED to always-zero (kept for schema stability,
 # never populated non-zero). The bump records that the measured thing changed; legacy
 # blocks still validate via _AGGREGATE_DEFAULTS.
-SCHEMA_VERSION = "0025/1"
+# Spec 0026 bumps 0025/1 -> 0026/1: additive run_metadata `representativeness_caveat`
+# (the terse-query eval set travels its scope with every result). Legacy blocks still
+# validate via _RUN_METADATA_DEFAULTS.
+SCHEMA_VERSION = "0026/1"
+
+# spec 0026 (AC7): the pinned scope caveat for the terse-query ranking instrument —
+# fixes the QUERY-SHAPE axis, NOT codebase-character (documented OSS, Python
+# monoculture). Mirrors CONTAMINATION_CAVEAT; travels in run_metadata so a strong
+# bake-off score can never be misread as real-world / legacy performance.
+REPRESENTATIVENESS_CAVEAT = (
+    "Terse-query eval set: fixes the QUERY-SHAPE axis only. It does NOT fix the "
+    "codebase-character axis — SWE-bench repos are documented OSS and Python-only (a "
+    "language monoculture). Valid for RELATIVE model ranking; a strong score does NOT "
+    "prove real-world legacy performance (the deferred Axis-2 problem)."
+)
 
 # Spec 0019 (D2): the gate-confound + A/B aggregate field names, declared ONCE here
 # so the recommend→report field set has a single anti-drift source (a drift-guard
@@ -69,6 +83,8 @@ _RUN_METADATA_FIELDS = (
     "degraded_dominated_threshold",
     # spec 0019 — additive: the gate-confound ceiling in effect (eval-only knob).
     "gate_false_escalation_ceiling",
+    # spec 0026 — additive: the terse-query eval set's representativeness scope caveat.
+    "representativeness_caveat",
 )
 _SETTINGS_SNAPSHOT_FIELDS = ("verify_method", "verify_threshold", "verify_top_n")
 _CASE_FIELDS = (
@@ -146,6 +162,7 @@ _RUN_METADATA_DEFAULTS = {
     "malformed_skipped_count": 0,
     "degraded_dominated_threshold": None,  # spec 0011 (eval-only knob in effect)
     "gate_false_escalation_ceiling": None,  # spec 0019 (eval-only knob in effect)
+    "representativeness_caveat": REPRESENTATIVENESS_CAVEAT,  # spec 0026 (pinned scope)
 }
 _CASE_DEFAULTS = {
     "production_gate_ran": None,

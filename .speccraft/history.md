@@ -2,6 +2,105 @@
 
 Append-only. Newest first.
 
+## 2026-07-06 — **Spec 0026 (eval) built the terse-query ranking INSTRUMENT — labels JOINED (never transcribed) by `case_id` from the sha256-pinned raw fixture, only the QUERY rewritten to Harpyja's terse shape; a version-gated loud loader lets additive-defaults (legacy) and reject-if-missing (terse guard) coexist; the leakage guard is an EXECUTABLE two-model blind protocol carried in a loud-validated provenance shape (state- not capability-independence, model-circularity named-not-closed, paired-ranking retained CO-PRIMARY as the model-independent floor); a frozen/hashed AC8 pilot power-gate STOPs before authoring the full set. INFRA COMPLETE but the instrument is NOT yet usable — the offline blind-authoring pilot (real queries) is the pending deliverable and the committed terse fixture is PLACEHOLDERS; suite 1010 pass, ruff clean; SUT byte-frozen**
+
+**Spec:** specs/0026-eval/
+**Decision:** Model selection for the explorer's driving LLM needs an eval set that
+resembles Harpyja's REAL target — terse NL queries — not SWE-bench's verbose issue
+prose (0020–0023 proved that distribution wrong; its only virtue was free
+patch-derived labels). This spec builds the smallest labeled set that can RANK
+candidate models — a deliberately small, paired, RELATIVE-ranking instrument, NOT an
+absolute benchmark — as a pure measurement/dataset harness in the 0019–0025
+measurement-not-construction lineage: the SUT (`harpyja/scout/`,
+`harpyja/orchestrator/`, `Settings`) stays **byte-frozen**, all code is additive under
+`harpyja/eval/`. **This unblocks the bake-off; it is NOT the bake-off.** Five durable
+points. (1) **The strategic bet: reuse the free label, rewrite only the query.** Keep
+the sha256-pinned, patch-derived `expected_spans` as ground truth (frozen at the
+audited network `convert` stage — no gold patch is committed, so nothing is
+re-derived; the sha256 pin IS the integrity guarantee, provenance
+`patch-derived-at-convert`) and pair each with a terse Harpyja-style query authored
+from the issue's INTENT. (2) **Labels JOINED, not copied — one integrity-pinned
+authority.** The terse fixture stores NO spans; `terse_dataset.load_terse_dataset`
+asserts `sha256(raw.jsonl) == provenance.raw_fixture_sha256` FIRST (refusing to join
+against an unverified source) and then joins `expected_spans` / `base_commit` /
+source-issue text by `case_id` from the pinned `swebench_verified.raw.jsonl`. So the
+raw fixture is the sole authority and there is literally no second transcription of a
+span; `base_commit` stays a raw-record key (review B2, exposed via `JoinMeta`, not
+promoted onto `EvalCase`). (3) **A version-gated loud loader resolves the
+additive-defaults-vs-reject-if-missing contradiction.** A NEW
+`dataset.DATASET_SCHEMA_VERSION = "0026/1"` (introduced, not bumped; distinct from
+`report.SCHEMA_VERSION`) gates `_parse_case`: a terse-tagged row MAY omit
+`expected_spans` (joined later) but MUST carry the leakage-guard provenance
+(`_parse_terse_guard`), while a legacy/seed row (no tag) loads unchanged with the guard
+fields defaulted — additive-defaults (backward-compat) and reject-if-missing (the terse
+guard) coexist in ONE loud loader. (4) **The leakage guard is an EXECUTABLE two-model
+blind protocol whose proof is carried in a loud-validated shape, with trust RELOCATED
+not eliminated.** Layer (a) is a near-vacuous code-identifier token tripwire recomputed
+against the JOINED source issue (a stored value is never trusted). Layer (b), the real
+guard, is a one-time OFFLINE operator/dev activity (same out-of-air-gap posture as
+0010's `convert`/`provision`): `terse_authoring.py` takes INJECTED author/verifier
+callables (separately-invoked model contexts via the operator's cross-model seam, NEVER
+the product `ModelGateway` — pinned by an ast import-absence guard that also proves no
+product runtime module imports the tool) — one model authors the query with the gold
+span WITHHELD, a separately-invoked verifier records a per-case verdict, and a `leaky`
+verdict routes to drop (never a silent keep). The load-bearing proof lives in the
+loud-validated `authoring_provenance.py` sidecar (`AUTHORING_SCHEMA_VERSION = "0026/1"`,
+per-case `AuthoringRecord` with validated verdict/outcome enums + hash-consistency +
+aggregate leaky/dropped counts), NEVER prose; pin (2) blindness is the OPERATIONAL
+`assert_author_input_blind` (the recorded author input contains none of the gold path
+or `path:line` citation). Labelled exactly **"executable + reviewable," NOT
+"structurally enforced"** (a determined leak could still pass). Three pins:
+independence is STATE-level (separate invocation), NOT CAPABILITY-level (recommend
+author≠verifier family; record model-under-test overlap); blindness verified real
+operationally; the verdict is DATA. **Named residual risk (not closed):** model
+CIRCULARITY — author, verifier, and subject models may share a training-distribution
+blind spot that is CORRELATED (does not cancel). Held by author≠verifier≠subject
+diversity plus a model-independent FLOOR retained **CO-PRIMARY** (not a mere backstop):
+because the instrument is RELATIVE, shared leakage inflates both arms and largely
+cancels in the within-case discordant comparison — the one defense that SURVIVES the
+circularity risk. (5) **A frozen/hashed AC8 pilot power-gate STOPs before authoring the
+full set.** `ac8_pilot.py`'s `PREREGISTERED_AC8_CONFIG` (frozen; two reference models
+`hf.co/Qwen/Qwen3-8B-GGUF:latest` vs `qwen3:4b-instruct`, `pilot_n=10`,
+`full_n_target=30`, `min_discordant_pairs` reusing the committed
+`PREREGISTERED_CONFIG.MIN_DISCORDANT_PAIRS = 8`) + `AC8_CONFIG_HASH`; a discordant
+localization flip is SIGNAL-BEARING only when the arms disagree on whether they LOCATED
+the target (an empty↔wrong-file flip is NOISE, excluded — guarding exactly 0023's
+near-zero floor); total pure `decide_ac8` projects the pilot signal-rate to full size
+and returns `UNDER_POWERED_STOP` below the floor.
+**Why:** the recurring project lesson — a guarantee that isn't structurally enforced
+silently becomes false — applied at the dataset layer: one integrity-pinned label
+source, validated provenance gated by a schema version, a leakage guard whose proof
+lives in a validated shape, and a representativeness caveat that travels with every
+result (`report.SCHEMA_VERSION 0025/1 → 0026/1`, pinned `representativeness_caveat`
+naming the Python language monoculture). The bake-off can rank models honestly only if
+the yardstick resembles the real target and its trust is relocated, not overclaimed.
+**Consequence — the INSTRUMENT shipped and is unit-complete; the SET is NOT authored
+and the instrument is NOT yet usable.** All unit ACs green (suite 1010 pass / 45
+integration deselected, ruff clean); AC1–AC5/AC7 unit-complete, AC6/AC8 unit-covered
+with fakes and the live run correctly `@pytest.mark.integration` (skip-not-fail on CI;
+deliverable run fails loud under `HARPYJA_REQUIRE_LIVE_STACK=1`). **The committed
+`swebench_verified.terse.jsonl` is five PLACEHOLDER cases** (`gold_withheld: false`,
+`query_provenance: "placeholder-pending-offline-authoring"`) — a unit-test JOIN target,
+not a real set. **The offline two-model blind-authoring pilot (real queries) is the
+REMAINING DELIVERABLE, not a formality**, delegated to an operator on the served
+loopback stack. When it fires, **AC8's likely `UNDER_POWERED_STOP` is a SCOPED FINDING,
+not a rerun-until-it-passes loop** — "these two general reference candidates under-power
+terse-query ranking at 0023's near-zero-localization floor," a valid typed close naming
+the finder-capability next step (`N38_PLUS_FINDER_CAPABILITY`), never a set authored to
+rank noise.
+**Deviation:** T19's sha256-hoist was DEFERRED — hoisting the 3-line `_sha256_file`
+into a shared helper would couple the lightweight loader to the heavy
+HuggingFace-`datasets`-importing `swebench_eval` for three lines; the one-oracle reuse
+pin (AC8's "located" predicate == `locate_accuracy`'s file-level credit buckets) was
+done instead and `terse_dataset` keeps its own local copy.
+**Named follow-ups carried forward:** the offline blind-authoring pilot (real queries +
+the live AC8 go/no-go run); the model bake-off itself (this builds its instrument); the
+finder-capability work (`N38_PLUS_FINDER_CAPABILITY`) from 0022/0023; the deferred
+Axis-2 problems (codebase-character AND the Python language monoculture — a
+legacy/undocumented and a non-Python eval); OQ2/threshold tuning; the Tier-0 symbol
+tool. Standing carry-forwards unchanged (judge thinking-defense, permanent ceiling
+calibration, Deep co-residency budget, Wave-2.1 substring/fuzzy).
+
 ## 2026-07-06 — **Spec 0025 (removal) DELETED the FastContext surface + dependency and made the native `ExplorerBackend` the SOLE Scout backend — one canonical `build_scout_engine` factory, the turns-used measurement MIGRATED onto a native `ScoutEngine.last_turns_used` seam before the `agent_factory=` seam was cut, `normalize.py` DISENTANGLED (suffix-recovery removed, shared tally core kept), report schema `0014/1 → 0025/1` with the recovery fields retired-to-zero; two behavior changes rode in (the isolated probe now floors a `ScoutUnavailable` degrade to EMPTY; the default gateway now pins `lm_model` so Scout stops 404-ing on Ollama); suite 985 pass / 23 skip, AC8 cutover LIVE-green**
 
 **Spec:** specs/0025-removal/

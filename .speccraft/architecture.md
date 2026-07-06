@@ -416,6 +416,50 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `RETRIEVAL_FUNDAMENTAL` stands and `BENCHMARK_UNREPRESENTATIVE` is not-yet-excluded.
    Report schema unchanged. See history.md 2026-07-05 (spec 0023).
 
+   **As of spec 0026** the package carries a **terse-query eval set + its
+   authoring/measurement harness** — still measurement, not a runtime tier; the SUT
+   (`harpyja/scout/`, `harpyja/orchestrator/`, `Settings`) is **byte-frozen** (this is a
+   dataset + authoring/measurement harness only, no Scout/gate/orchestrator change).
+   `dataset.py` gained a NEW `DATASET_SCHEMA_VERSION = "0026/1"` (introduced, not bumped;
+   distinct from `report.SCHEMA_VERSION`) and six additive last-with-defaults `EvalCase`
+   guard fields (`schema_version`, `label_provenance`, `query_provenance`,
+   `gold_withheld`, `leaked_tokens`, `classification_provenance`); `_parse_case`
+   version-gates the guard (`_parse_terse_guard`) so a terse-schema row MAY omit
+   `expected_spans` but MUST carry the leakage-guard provenance, while a legacy/seed row
+   (no tag) loads unchanged with defaults. `terse_dataset.py::load_terse_dataset` is the
+   **JOIN loader (AC1)**: it asserts `sha256(raw.jsonl) == provenance.raw_fixture_sha256`
+   BEFORE joining (`assert_raw_pin`, refusing an unverified source), then joins
+   `expected_spans` / `base_commit` / source-issue text by `case_id` from the pinned
+   `swebench_verified.raw.jsonl` (the sole authority — no span second-transcribed;
+   `base_commit` stays a raw-record key via `JoinMeta`, per review B2), stamps
+   `label_provenance = "patch-derived-at-convert"`, recomputes the near-vacuous
+   `compute_leaked_tokens` tripwire against the JOINED issue, and excludes
+   known-correct-span-only cases with a labeled `excluded_count` / `excluded_case_ids`;
+   `validate_terse_set_floor` cites the committed `benchmark_fit.PREREGISTERED_CONFIG`
+   (`min_n=12`, `MIN_DISCORDANT_PAIRS=8`) and a multi-repo requirement.
+   `authoring_provenance.py` is the **loud-validated audit sidecar** (`AuthoringRecord` /
+   `AuthoringArtifact`, `AUTHORING_SCHEMA_VERSION = "0026/1"`, validated verdict/outcome
+   enums + hash-consistency + aggregate leaky/dropped counts) with pin-(2) blindness as
+   the operational `assert_author_input_blind`. `terse_authoring.py` is the **OFFLINE
+   two-model blind-authoring tool** (out-of-air-gap operator/dev activity like
+   `convert`/`provision`): injected `author_invoke` / `verifier_invoke` callables — NOT
+   the product `ModelGateway`, ast-guarded as non-product — author the query with the
+   gold span withheld and route a `leaky` verdict to drop. `ac8_pilot.py` is the
+   **frozen/hashed pilot power-gate** (`PREREGISTERED_AC8_CONFIG` + `AC8_CONFIG_HASH`,
+   two reference models, `pilot_n=10`/`full_n_target=30`, `min_discordant_pairs` reusing
+   the committed floor; signal-bearing flip excludes empty↔wrong-file noise; total pure
+   `decide_ac8` → `Ac8Outcome ∈ {PROCEED, UNDER_POWERED_STOP}`). `terse_probe.py`
+   (`run_terse_locate_probe` / `run_ac8_pilot`) drives the terse set through the REAL
+   explorer via the UNCHANGED `run_locate_probe` / `score_distribution` (no forked
+   scoring; per-arm `dataclasses.replace(settings, lm_model=…)`; provisioning injected).
+   Report schema bumped `0025/1 → 0026/1` (additive `run_metadata.representativeness_caveat`,
+   pinned `REPRESENTATIVENESS_CAVEAT` naming the query-shape-only scope + the Python
+   language monoculture). **State: the INSTRUMENT is unit-complete but NOT yet usable —
+   the committed `swebench_verified.terse.jsonl` is PLACEHOLDERS; the offline
+   blind-authoring pilot (real queries) + the live AC8 go/no-go run are a delegated
+   operator deliverable, and a likely AC8 `UNDER_POWERED_STOP` is a scoped finding naming
+   the finder-capability next step.** See history.md 2026-07-06 (spec 0026).
+
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
 ## Key decisions

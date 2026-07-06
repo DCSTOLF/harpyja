@@ -202,11 +202,29 @@ def test_report_multi_repo_shape_validates():
 # --- spec 0014: Deep-degrade visibility — schema 0012/1 → 0013/1 (P6) ---------
 
 
-def test_report_schema_version_is_0025():
-    # spec 0025 bumps 0014/1 -> 0025/1: the fc_citation_recovered_* fields are retired
-    # to always-zero (suffix recovery removed). The bump records that the measured
-    # thing changed; the fields stay for schema stability (retire-to-zero, not remove).
-    assert SCHEMA_VERSION == "0025/1"
+def test_report_schema_version_is_0026():
+    # spec 0026 bumps 0025/1 -> 0026/1: the additive run_metadata
+    # `representativeness_caveat` field (terse-query eval set). Legacy blocks still
+    # validate via _RUN_METADATA_DEFAULTS.
+    assert SCHEMA_VERSION == "0026/1"
+
+
+def test_run_metadata_carries_representativeness_caveat():
+    # spec 0026 AC7: the caveat travels with every result as a pinned, validated field
+    # (mirroring contamination_caveat), so a win can't be misread as "works on legacy".
+    caveat = (
+        "Fixes the QUERY-SHAPE axis only; NOT codebase-character (documented OSS, "
+        "Python monoculture). Valid for RELATIVE ranking, not legacy performance."
+    )
+    rep = build_report(_run_metadata(representativeness_caveat=caveat), [_case()], _aggregate())
+    assert rep["run_metadata"]["representativeness_caveat"] == caveat
+
+
+def test_representativeness_caveat_defaults_for_legacy_block():
+    # An omitted-field (legacy-shaped) run_metadata still validates; the new field
+    # reads back as its default (a REPRESENTATIVENESS_CAVEAT constant or None).
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    assert "representativeness_caveat" in rep["run_metadata"]
 
 
 def test_recovered_citation_fields_retired_to_zero_with_defaults():

@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from harpyja.eval.dataset import DatasetError, EvalCase, load_dataset
+from harpyja.eval.dataset import (
+    DATASET_SCHEMA_VERSION,
+    DatasetError,
+    EvalCase,
+    load_dataset,
+)
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> Path:
@@ -102,3 +107,76 @@ def test_load_dataset_rejects_inverted_line_range(tmp_path):
     f = _write_jsonl(tmp_path / "bad.jsonl", [bad])
     with pytest.raises(DatasetError):
         load_dataset(f)
+
+
+# --- spec 0026: schema-version-gated terse guard fields (AC3/AC5) ---------------
+
+# A terse-schema (0026) row: tagged with schema_version, carries the guard fields,
+# and OMITS expected_spans (they are joined by case_id from the pinned raw fixture).
+_TERSE_ROW = {
+    "schema_version": DATASET_SCHEMA_VERSION,
+    "case_id": "astropy__astropy-12907",
+    "query": "nested compound models report wrong separability",
+    "repo": "astropy/astropy",
+    "classification": "point",
+    "gold_withheld": True,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent",
+}
+
+
+def test_dataset_schema_version_constant_exists():
+    # A NEW constant is introduced (there is none today); it is not report.SCHEMA_VERSION.
+    assert DATASET_SCHEMA_VERSION == "0026/1"
+
+
+def test_parse_case_terse_schema_requires_guard_fields(tmp_path):
+    bad = {k: v for k, v in _TERSE_ROW.items() if k != "query_provenance"}
+    f = _write_jsonl(tmp_path / "terse.jsonl", [bad])
+    with pytest.raises(DatasetError):
+        load_dataset(f)
+
+
+def test_parse_case_terse_schema_requires_gold_withheld(tmp_path):
+    bad = {k: v for k, v in _TERSE_ROW.items() if k != "gold_withheld"}
+    f = _write_jsonl(tmp_path / "terse.jsonl", [bad])
+    with pytest.raises(DatasetError):
+        load_dataset(f)
+
+
+def test_parse_case_terse_schema_omits_spans_ok(tmp_path):
+    # A terse row with NO expected_spans loads (spans are joined later); the guard
+    # fields come back populated, expected_spans defaults empty.
+    f = _write_jsonl(tmp_path / "terse.jsonl", [_TERSE_ROW])
+    cases = load_dataset(f)
+    assert len(cases) == 1
+    c = cases[0]
+    assert c.schema_version == DATASET_SCHEMA_VERSION
+    assert c.expected_spans == ()
+    assert c.gold_withheld is True
+    assert c.query_provenance == "model-authored-blind"
+    assert c.classification_provenance == "hand-labeled-by-intent"
+
+
+def test_legacy_row_without_version_still_requires_spans(tmp_path):
+    # The gate is version-scoped: a LEGACY row (no schema_version) with no spans
+    # still raises — only terse-schema rows may omit spans.
+    bad = {k: v for k, v in _VALID_ROW.items() if k != "expected_spans"}
+    f = _write_jsonl(tmp_path / "legacy.jsonl", [bad])
+    with pytest.raises(DatasetError):
+        load_dataset(f)
+
+
+def test_parse_case_legacy_no_version_tag_loads_with_defaults(tmp_path):
+    # An existing seed/legacy row loads unchanged; the new guard fields read back
+    # as their defaults (additive last-with-defaults, backward-compat).
+    f = _write_jsonl(tmp_path / "legacy.jsonl", [_VALID_ROW])
+    cases = load_dataset(f)
+    c = cases[0]
+    assert c.case_id == "c1"
+    assert c.schema_version is None
+    assert c.gold_withheld is False
+    assert c.query_provenance is None
+    assert c.leaked_tokens == ()
+    assert c.classification_provenance is None
+    assert c.label_provenance is None

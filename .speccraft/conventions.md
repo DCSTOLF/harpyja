@@ -518,6 +518,77 @@
   read-time judgment call. (See `harpyja/eval/benchmark_fit.py` `RepresentativenessRecord` /
   `is_representative` / `compose_verdict`, spec 0023 AC5/AC6.)
 
+- An **eval fixture JOINS its labels by key from a sha256-pinned source of truth — it
+  never transcribes them a second time.** When a labeled set reuses ground truth that
+  already lives in a committed, integrity-pinned artifact, the derived fixture stores
+  ONLY the new payload (here: the terse query + guard provenance) and references the
+  source by key (`case_id`); the loader asserts the source's sha256 pin FIRST — refusing
+  to join against an unverified source — and only then joins the label. A copied label
+  is a second transcription that can silently drift from the authority the pin protects;
+  a join keeps ONE authority. Side data the fixture needs but must not promote to a
+  validated record field (e.g. `base_commit`, resolved later via provisioning) rides a
+  separate join-meta shape, not the record. (See `harpyja/eval/terse_dataset.py`
+  `load_terse_dataset` / `assert_raw_pin` / `JoinMeta`, spec 0026 AC1.)
+- A **NEW schema-version tag can GATE strict validation so additive-defaults (legacy
+  compat) and reject-if-missing (a new guard) coexist in ONE loud loader** — resolving
+  the contradiction between "append fields last-with-defaults so old rows still read"
+  and "reject a new row missing a load-bearing field." Introduce a version constant
+  (introduced, not a bump; distinct from any report `SCHEMA_VERSION`); the loud parser
+  branches on it — a tagged (new-schema) row MUST carry the guard fields, an untagged
+  (legacy/seed) row loads unchanged with those fields defaulted. Both directions are
+  TDD'd in one loader call (the new row rejected-if-missing AND the legacy row
+  loads-with-defaults), because the parser is shared and a naive unconditional guard
+  breaks every existing fixture. (See `harpyja/eval/dataset.py` `DATASET_SCHEMA_VERSION`
+  / version-gated `_parse_case` / `_parse_terse_guard`, spec 0026 AC3/AC5.)
+- A **load-bearing guarantee whose mechanism is EXECUTABLE-BUT-NOT-STRUCTURAL carries
+  its proof in a loud-validated shape, NAMES its residual risk, RETAINS a
+  model-independent floor, and is labelled exactly "executable + reviewable" — never
+  "structurally enforced."** When the honesty crux of a measurement cannot be enforced
+  by construction (e.g. a two-model blind leakage protocol: one model authors a query
+  with the answer withheld, a separately-invoked verifier judges leakage), do NOT dress
+  it as a structural proof or a human honor-system attestation. (i) Carry the proof in a
+  LOUD-VALIDATED record (`author_model` / `verifier_model` / input hashes /
+  verdict∈{clean,leaky} / outcome∈{kept,reauthored,dropped} + aggregate null-provenance
+  counts), NEVER prose. (ii) Operationalize the "is-the-skip-actually-skipping" check as
+  a concrete assertion (`assert_author_input_blind`: the recorded author input contains
+  NONE of the withheld gold content), not a bare claim. (iii) Distinguish STATE-level
+  independence (separate invocation — real + checkable) from CAPABILITY-level (the
+  verifier catching every leak the author is prone to — NOT bought by separate
+  invocation), recommend author≠verifier family, and record overlap with any subject.
+  (iv) NAME the residual risk (model CIRCULARITY: author/verifier/subject sharing a
+  correlated blind spot that does not cancel), symmetric to the representativeness gap.
+  (v) RETAIN a model-independent floor CO-PRIMARY (paired within-case cancellation for a
+  relative instrument — the defense that survives the circularity), never demoted to a
+  backstop. The verdict is DATA (leaky → re-author/drop, counted), never a silent gate.
+  (See `harpyja/eval/authoring_provenance.py` `AuthoringRecord` /
+  `assert_author_input_blind`, `harpyja/eval/terse_authoring.py`, spec 0026 AC2.)
+- An **OFFLINE operator/dev authoring/generation tool may live IN the eval harness but
+  is AST-GUARDED as non-product** — the same out-of-air-gap posture as the 0010 network
+  `convert`/`provision` stages. Its model invocations are INJECTED callables (the
+  operator's cross-model seam), NEVER the product `ModelGateway`, and the boundary is
+  pinned by an ast import-absence guard (the module does not import the gateway, and no
+  `harpyja/server`|`harpyja/orchestrator`|`scout/wiring` runtime module imports the
+  tool) — the same executable-guard-over-grep discipline as the deletion-absence tests.
+  A dev-time generator that could quietly acquire a product dependency is exactly the
+  drift this prevents. (See `harpyja/eval/terse_authoring.py`
+  `test_authoring_module_is_not_product_runtime`, spec 0026 AC2 layer (b).)
+- A **pre-registered pilot POWER-GATE (frozen + hashed config) STOPs before spending the
+  full authoring/collection cost, and its flip-signal EXCLUDES noise flips.** Extends the
+  0023 "pre-registered decision config is a frozen object, the verdict a total pure
+  function" rule with a cost-ordering: when the full set is expensive to build and its
+  power is not assumed (a near-zero base rate makes flips noise), author a small pilot
+  first, run it through two pre-registered reference arms, project the SIGNAL-BEARING
+  discordant rate to full size, and emit a typed `UNDER_POWERED_STOP` below the committed
+  floor rather than building a set to rank noise. A discordant pair is SIGNAL-BEARING
+  ONLY when at least one arm is a genuine success (here: a correct localization — the
+  arms disagree on whether they LOCATED); a both-failed flip (empty↔wrong-file) is noise
+  and does not count. The STOP is a valid typed deliverable that NAMES the upstream next
+  step, not a rerun-until-it-passes loop; the frozen+hashed config is what makes it a
+  legitimate close rather than a tuned-until-favorable result, and its "located"
+  predicate reuses the scoring oracle's own success buckets (one-oracle reuse). (See
+  `harpyja/eval/ac8_pilot.py` `PREREGISTERED_AC8_CONFIG` / `is_signal_discordant` /
+  `decide_ac8` / `Ac8Outcome`, spec 0026 AC8.)
+
 ## Logging
 
 - Use the standard `logging` module. Never log secrets, repo source content, or full file contents at info level. Keep stdout clean on the stdio MCP transport (logs go to stderr).
