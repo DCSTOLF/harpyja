@@ -2,6 +2,60 @@
 
 Append-only. Newest first.
 
+## 2026-07-05 — **Spec 0023 OPERATOR RUN — fired the benchmark-fit reformulation probe on REAL SWE-bench long-issue text (FastContext-4B, no instrument change): formal `HOLD_INCONCLUSIVE`, but QUERY_SHAPE FALSIFIED and 0022's `RETRIEVAL_FUNDAMENTAL` corroborated → next spec is FINDER-CAPABILITY, not a reformulation/benchmark layer**
+
+**Artifact:** specs/.archive/0023-benchmark-fit/operator-run-findings.md (self-contained,
+with per-case tables). Raw run data machine-local under `eval_work/benchmark_fit_run/`
+(gitignored). This is the operator measurement 0023 named as follow-up #1; it runs the
+byte-frozen instrument via public seams only — **no `harpyja/` source written or modified**.
+**Decision:** Resolve whether 0022's provisional `RETRIEVAL_FUNDAMENTAL` is a real capability
+wall or a `BENCHMARK_UNREPRESENTATIVE`-via-query-shape artifact, by running the shipped
+discriminator on the 38 real `point` cases (all `is_raw_issue`-admitted, all worktrees
+present) with `HARPYJA_REQUIRE_LIVE_STACK=1`, air-gap held. The SUT is **FastContext-1.0-4B-RL-Q8**
+(`scout_model` default); qwen3:8b is ONLY the labeled LLM sensitivity *distiller* (it never
+retrieves). **The load-bearing precondition gate PASSED** (the "does green connect to the
+measurement" check): one real case run live → `is_raw_issue` admitted it (usable_n=1, NOT 0),
+both arms ran, the McNemar cell incremented — the instrument fires on real input, unlike the
+terse legacy fixtures (delta≈0 by construction). **Primary (mechanical) arm, stopped at the
+pre-registered floors** (`usable_n=14≥12`, `discordant=8≥8`; remaining cases cost 5–30 min
+each — psf__requests-1724 alone 1831s — so exhausting all 38 buys only marginal power,
+cheap-before-expensive): raw buckets `EMPTY×11, RIGHT_FILE_WRONG_SPAN×2, WRONG_FILE×1`
+(**79% empty, 0/14 span-CORRECT**); `delta_empty=+0.143` (BELOW the 0.20 band),
+`delta_file_accuracy=−0.071`, exact McNemar p=0.727 (does NOT reject) → **Axis-1 =
+INCONCLUSIVE(AXIS_SIGNAL_DISAGREEMENT)** — floors MET, a *substantive* trigger (empty-rate
+delta positive but file-accuracy delta negative: distillation shuffles empties into WRONG_FILE
+guesses without improving real localization), NOT insufficient power. **LLM sensitivity arm
+(qwen3:8b, non-primary):** 7/14 accepted, 7/14 hard-rejected by the subset guard; scored n=5,
+`llm_delta_empty=−0.20` — the SMART, identifier-RETAINING distiller ALSO fails to help
+FastContext (astropy-12907 raw=RIGHT_FILE→llm=EMPTY, same as mechanical), so the mechanical
+arm's identifier-stripping is **not** the confound — corroboration across a dumb AND a smart
+distiller closes the "mechanical rule too crude → truth is QUERY_SHAPE" escape hatch. **Axis-2:**
+`representative=True` by the pre-registered rule (doc_density=`high` on well-documented OSS, so
+the low∧weak AND-gate does not fire) — with a NOTED rule limitation: the threshold only flags
+*undocumented* weak-proxy benchmarks, so it under-detects SWE-bench's unrepresentativeness
+(SWE-bench is a weak proxy for the terse-NL/undocumented-legacy target yet documented OSS). **Composed
+2×2 → `HOLD_INCONCLUSIVE`.**
+**Why (substantive, beyond the formal gate):** (1) 0022's `RETRIEVAL_FUNDAMENTAL` is now
+corroborated on REAL multi-paragraph issue text (not the terse fixtures) — 79% empty, 0/14
+span-correct on the verbose issues themselves. (2) **QUERY_SHAPE is FALSIFIED:** terser queries
+do not materially cut emptiness (delta below band, McNemar n.s.) and do not improve right-file
+accuracy, across BOTH distillers. (3) The formal gate cannot certify CAPABILITY only because the
+finder's localization floor is so near-zero (0/14 correct, 2/14 right-file) that discordant pairs
+are empty↔wrong-file *noise* — which is what makes the two axes oppose at ±1-case magnitude; that
+inability is itself the strongest evidence the bottleneck is retrieval CAPABILITY, not query shape.
+**Consequence:** the reformulation escape is falsified → **the next spec is FINDER-CAPABILITY work
+(`N38_PLUS_FINDER_CAPABILITY`), NOT a reformulation/query layer and NOT a benchmark swap justified
+by query shape.** Enlarging N (exhausting the 38) would likely tip the *formal* gate
+INCONCLUSIVE→CAPABILITY but would not change the substantive conclusion (axis-disagreement is
+noise-level; distillation-doesn't-help is robust) — a cheap-vs-power call for the finder-capability
+spec. **Two operator lessons (recorded):** (a) a Scout-arm + LLM-distiller-arm must run in
+DECOUPLED phases (distill-all → score-all); alternating per case thrashes the single-GPU Ollama
+model-swap (a 120s timeout hit a cold load); (b) the operator callable must itself apply the
+pre-registered `LLM_PROMPT` — `llm_distill_guarded` passes raw `issue_text` to the callable by
+contract. **Standing carry-forwards unchanged** (OQ1 reachability-vs-power floor; OQ2 promote
+`delta_file_accuracy`; Axis-2 threshold refinement now added; judge thinking-defense; Deep
+co-residency budget; Wave-2.1 substring/fuzzy).
+
 ## 2026-07-05 — **Spec 0023 (benchmark-fit) shipped the typed, two-axis, PRE-REGISTERED discriminator that decides whether 0022's provisional `RETRIEVAL_FUNDAMENTAL` is a real capability wall or a `BENCHMARK_UNREPRESENTATIVE` artifact — a within-case paired McNemar probe (Axis 1) × a structured representativeness record (Axis 2), verdict a PURE FUNCTION over a frozen config, dual-distiller honesty guard; unit-complete + live-smoke green but the operator VERDICT deliberately NOT yet emitted; SUT byte-frozen**
 
 **Spec:** specs/0023-benchmark-fit/
