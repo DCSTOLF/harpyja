@@ -128,7 +128,11 @@ _TOOLS = [{"type": "function", "function": {"name": "grep", "parameters": {}}}]
 
 def test_complete_with_tools_returns_content_and_tool_calls():
     tool_calls = [
-        {"id": "c1", "type": "function", "function": {"name": "grep", "arguments": '{"pattern": "x"}'}}
+        {
+            "id": "c1",
+            "type": "function",
+            "function": {"name": "grep", "arguments": '{"pattern": "x"}'},
+        }
     ]
 
     def transport(url, payload):

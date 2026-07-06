@@ -22,7 +22,7 @@ agent ──"where is the retry/backoff logic for the payment gateway?"──▶
                                        ┌──────────────────────────────────┘
                                        ▼
                           Tier 0  deterministic (AST + ripgrep)
-                          Tier 1  Scout      (fast trained explorer)
+                          Tier 1  Scout      (native tool-calling explorer loop)
                           Tier 2  Deep        (recursive LM, on escalation)
                                                                           │
 agent ◀──  src/billing/gateway.py:212-241  ◀──────────────────────────────┘
@@ -49,29 +49,15 @@ brutally specialized subsystem that does one thing extremely well.
 - **It is not** an editor, a RAG chatbot, or a code generator. It never modifies your repository.
 - **It runs offline.** Everything — model, search, parsing — stays on the local machine. No telemetry,
   no external calls. Suitable for fully air-gapped environments and proprietary code that must stay proprietary.
-- **It fits a modest box.** The default profile targets an 8 GB local GPU using a 4B-class quantized model.
+- **It fits a modest box.** Everything runs against a local OpenAI-compatible endpoint (llama.cpp or
+  Ollama). The default model is `hf.co/Qwen/Qwen3-8B-GGUF:latest`, which serves both the Scout explorer loop
+  and the Deep tier; any OpenAI-compatible tool-calling model works and is swappable from the eval CLI
+  (`--scout-model` / `--deep-model`), `harpyja.toml`, or `HARPYJA_*`.
 
-  > ⚠️ **The 8 GB / Q4 footprint is not currently validated (2026-06, specs 0010–0012).** The
-  > *recommended* `FastContext-1.0-4B-RL-Q4_K_M` community model is **non-functional on real
-  > repositories** — it emits a `<final_answer>` on the toy fixture but **never converges on real
-  > codebases** (empty output: the classic "passes tests, fails in production"). The only Scout config
-  > validated on real repos is the **Q8 conversion** (~2× the memory of Q4, ~5 GB resident),
-  > which **OOMs `mode=auto` on a 16 GB machine** (co-loading Scout + the Deep model + the Deno/Pyodide
-  > sandbox). **The documented hardware floor needs re-characterizing for the Q8 working config**; until
-  > then treat "8 GB / 4B" as the *aspirational* target, not a validated minimum.
-  >
-  > **Defaults (spec 0016 / B1 fix):** the default `scout_model` is the *served* Q8 tag
-  > `hf.co/dstolf/FastContext-1.0-4B-RL-Q8_0-GGUF:latest` (the old recommended-Q4 tag was not
-  > served by Ollama → HTTP 404 on every call). The default Deep model (`lm_model`) is provisionally
-  > `hf.co/Qwen/Qwen3-8B-GGUF:latest` ("for now"). Override either from the eval CLI with
-  > `--scout-model` / `--deep-model` (`run`/`sweep`), or via `harpyja.toml` / `HARPYJA_*`.
-  >
-  > **Verification-gate judge (spec 0018 / B2 fix):** `verify_method` defaults to `instruct_model`, which
-  > scores citation relevance with `lm_model` (an in-distribution instruct model) instead of reusing the
-  > `scout_model` finder as a scorer — the finder was out-of-distribution and false-rejected correct
-  > citations. NB this makes `lm_model` a second consumer (Deep **and** the gate judge). The retained
-  > `scout_model` method is still selectable (non-default). This fixes the judging *mechanism* only;
-  > tuning `verify_threshold` for the new score distribution is deferred to the OQ2 re-run.
+  > ⚠️ **Footprint not yet validated.** An 8B-class model co-loaded with the Deep model and the Deno/Pyodide
+  > sandbox under `mode=auto` exceeds a small GPU, so treat "8 GB" as an *aspirational* target rather than a
+  > validated minimum. The verification-gate judge scores citations with `lm_model` by default
+  > (`verify_method=instruct_model`), keeping the finder and the scorer as separate concerns.
 
 ## How it works
 
@@ -80,18 +66,23 @@ Harpyja is a three-tier locator with cost-based escalation:
 | Tier | Engine | Role | Speed |
 |------|--------|------|-------|
 | **0** | Tree-sitter symbol index + ripgrep | Deterministic prefilter and exact-symbol lookups | instant |
-| **1** | **Scout** — a thin wrapper around Microsoft **FastContext** (read-only `Read`/`Glob`/`Grep` exploration) | The default. Handles most "where is X" queries | fast |
+| **1** | **Scout** — a native tool-calling explorer loop (read-only `grep`/`glob`/`read_span` → `submit_citations`) | The default. Handles most "where is X" queries | fast |
 | **2** | **Deep** — a Recursive Language Model (`dspy.RLM`) over bounded host tools | Escalation path for broad/trace/audit queries | slower, thorough |
 
 The **Orchestrator** runs the cheapest tier that can answer, verifies the result by reading the cited lines
 back, and only escalates when verification fails or the query shape demands it. See
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full design and [`SPEC.md`](./SPEC.md) for the contracts.
 
-Tier 1 **uses Microsoft [FastContext](https://github.com/DCSTOLF/fastcontext) directly** — Harpyja wraps it
-as a pinned dependency, not a reimplementation. Tier 2 **reimplements the `dspy.RLM` approach** demonstrated by
+Tier 1 **Scout is a native explorer loop Harpyja owns end-to-end**: a general tool-calling model driven over
+three read-only tools (`grep`/`glob`/`read_span`) to a `submit_citations` result, behind a stable, swappable
+backend seam. Tier 2 **reimplements the `dspy.RLM` approach** demonstrated by
 [megacode](https://github.com/mitkox/megacode), which serves only as reference and inspiration (not a
 dependency). Around both, Harpyja adds the language-agnostic indexing, symbol layer, routing, verification,
 and MCP surface that turn them into a reusable locator.
+
+> **Note:** Earlier versions ran Scout on Microsoft FastContext (a fine-tuned 4B finder wrapped as a pinned
+> dependency); it was retired when its upstream model became unobtainable, and replaced by the self-contained
+> explorer loop above — no external finder dependency, model-agnostic over whatever the local endpoint serves.
 
 ## MCP tools
 
@@ -115,9 +106,8 @@ goes blind on an unknown file type.
 - [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`) on `PATH`
 - [Deno](https://deno.land) (the `dspy.RLM` sandbox runs on Deno/Pyodide WASM — installed once, runs locally)
 - A local OpenAI-compatible model endpoint: **llama.cpp** (`llama-server`) **or Ollama**
-- Optional: a CUDA/Metal GPU (the default profile *targets* 8 GB; see the validation caveat above —
-  the real-repo-working Q8 Scout config is ~5 GB resident and `mode=auto` co-loads the Deep model + WASM
-  sandbox on top, so 8 GB is not a validated minimum yet)
+- Optional: a CUDA/Metal GPU (the default profile *targets* a modest local GPU; an 8B-class model serving
+  Scout + Deep with the WASM sandbox co-loaded under `mode=auto` means 8 GB is not a validated minimum yet)
 
 ## Install
 
@@ -201,9 +191,9 @@ degrades instead of hanging).
 Early. The tiers are designed to land incrementally — see [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md).
 Harpyja stays useful at every wave: even Wave 1 (deterministic AST + ripgrep, no model) is a working locator.
 
-> **Note:** FastContext is a very new research release and its API/weights may shift. Harpyja pins versions
-> and isolates the integration behind an adapter so the Scout tier can be swapped without touching the rest.
+> **Note:** The Scout tier sits behind a stable backend seam, so its finder model or runtime can be swapped
+> without touching the orchestrator, verification gate, or the rest of the stack.
 
 ## License
 
-MIT. Builds on MIT/permissively-licensed upstreams (FastContext, DSPy, tree-sitter, ripgrep).
+MIT. Builds on MIT/permissively-licensed upstreams (DSPy, tree-sitter, ripgrep).

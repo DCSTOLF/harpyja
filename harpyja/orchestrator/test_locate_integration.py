@@ -43,7 +43,6 @@ def _endpoint_reachable(api_base: str, timeout: float = 0.25) -> bool:
 def _live_stack_available() -> bool:
     try:
         import dspy  # noqa: F401
-        import fastcontext  # noqa: F401
     except ImportError:
         return False
     if shutil.which("deno") is None or shutil.which("rg") is None:

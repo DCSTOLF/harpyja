@@ -59,9 +59,13 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    extraction: `classify.KNOWN_LANGUAGES == indexer.SYMBOL_LANGUAGES`
    (`index/test_routing.py`), so a language is never routed ahead of its rules.
    Remaining symbol follow-up: **Wave-2.1 substring/fuzzy matching**.
-5. `harpyja/scout/` — Tier 1 finder. **As of spec 0024 the production backend is the
-   native `ExplorerBackend` (below); the FastContext adapter described here remains
-   in-tree but OFF the production path, pending a dedicated cleanup spec.** Live as of
+5. `harpyja/scout/` — Tier 1 finder. **As of spec 0025 the native `ExplorerBackend`
+   (below) is the SOLE Scout backend and FastContext is FULLY REMOVED from the tree and
+   the lockfile — `fastcontext.py`/`client.py`/`tools.py` deleted, `build_scout_engine` is
+   the single canonical factory over `ExplorerBackend` (the parallel
+   `build_explorer_scout_engine` is gone), and the explorer runs on `lm_model` via the
+   wiring-pinned gateway. The FastContext description below (Wave 3/4, specs 0007/0011/0012)
+   is retained as HISTORY, not current code.** Live as of
    Wave 3: `ScoutBackend`
    Protocol (`run(query, seed) -> list[CodeSpan]`) + `ScoutEngine` (self-seeds its own
    Tier-0 lookup **before** the backend, behind the shared `Locator` `.search` seam) +
@@ -155,6 +159,35 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    factory, so the backend swap and the deferred FastContext deletion do not entangle in
    one diff. Live-green: both integration tests pass against Qwen3-8B on loopback Ollama
    (~28s, zero non-loopback egress). See history.md 2026-07-06 (spec 0024).
+
+   **As of spec 0025 the parallel-factory deviation is CLOSED and FastContext is fully
+   removed.** `build_scout_engine` is now the SINGLE production Scout factory and constructs
+   `ExplorerBackend` (`build_explorer_scout_engine` deleted, body folded in); its default
+   gateway pins `settings.lm_model` (not `ModelGateway.model`'s `"local"`, which 404s on
+   Ollama's tag-routed API), so the explorer runs on `lm_model` (default Qwen3-8B — the SAME
+   model as Deep). Deleted: `fastcontext.py`, `client.py` (the 0007 env-injection apparatus
+   `_SCOUT_ENV_LOCK`/`_managed_fc_env`/`_run_coro_on_worker_thread`, the 0011 `citation=False`
+   `<final_answer>` grammar + `parse_final_answer`), `tools.py` (a SECOND-ORDER orphan — its
+   `build_tool_whitelist` was FC's whitelist), the FC error causes
+   `FASTCONTEXT_MISSING`/`CLI_MISSING`, the FC-only Settings fields
+   `scout_max_tokens`/`scout_temperature`/`scout_reasoning_effort`, and the `fastcontext` git
+   dependency (pyproject + uv.lock). The turns-used measurement was MIGRATED off the
+   FastContext trajectory scrape onto a native per-run seam:
+   `LoopResult.turns_used` → `ExplorerBackend.last_turns_used` (set on submit AND both
+   exhaustion-degrade paths, reset per run) → `ScoutEngine.last_turns_used` (getattr-guarded),
+   and the 0022 diagnostic repointed BEFORE the `agent_factory=` seam was cut. `normalize.py`
+   was DISENTANGLED: only the FC-era suffix-recovery (`_recover_suffix` / `MIN_TAIL_SEGMENTS`,
+   spec 0012) is removed; the shared `normalize_spans` / `normalize_spans_with_tally` /
+   `ScoutTally` / `last_tally` core is KEPT (still feeds `runner`, `locate_probe`, and the
+   0022 `locate_accuracy` diagnostic), recovered counts now structurally zero. `scout_model`
+   is KEPT as the served Verification-Gate A/B baseline (`verify_method="scout_model"`, 0018),
+   scoped OUT of the FC-removal. Report schema bumped `0014/1 → 0025/1`
+   (`fc_citation_recovered_*` retired-to-zero; the `fc_citation_{spanned,filelevel,dropped}`
+   shape-tally fields kept, now populated by the EXPLORER — a `fc_`-prefix naming debt recorded
+   as backend-neutral). Executable absence guards `test_fastcontext_absent.py` +
+   `test_packaging.py` rot-false on reintroduction. Suite 985 pass / 23 skip, ruff clean; the
+   AC8 cutover proof passed LIVE end-to-end through the explorer (Qwen3-8B on loopback Ollama,
+   zero non-loopback egress). See history.md 2026-07-06 (spec 0025).
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -408,8 +441,10 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
 - Tier 1 (Scout) is live and additive on the Tier-0 floor. **As of spec 0024 the
   production Tier-1 backend is the native `ExplorerBackend` (a general tool-calling
   model over three read-only tools to a `submit_citations` terminal action), which
-  RETIRED and replaced the FastContext adapter described below; the FastContext code
-  remains in-tree but off the production path — see history.md 2026-07-06 (spec 0024).**
+  RETIRED and replaced the FastContext adapter described below; as of spec 0025
+  FastContext is FULLY REMOVED (single canonical `build_scout_engine` factory over
+  `ExplorerBackend`, running on `lm_model`) and the FastContext description below is
+  history only — see history.md 2026-07-06 (spec 0025).**
   **As of Wave 5 (spec 0008)
   `mode=auto` climbs** (the Wave-3 "auto byte-identical / zero Gateway calls" statement
   is **superseded**): a point query runs seed → Scout → gate → maybe Deep, and the gate

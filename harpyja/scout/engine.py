@@ -62,12 +62,20 @@ class ScoutEngine:
         self._file_set = file_set
         # Spec 0011: the shape tally of the most recent search (None until run).
         self.last_tally: ScoutTally | None = None
+        # Spec 0025 (AC3): the backend's per-run turns-USED count, surfaced for the
+        # eval turns diagnostic. getattr-guarded — backends without the seam yield
+        # None. None until the first search.
+        self.last_turns_used: int | None = None
 
     def search(self, pattern: str, scope: str | None = None) -> list[CodeSpan]:
         # Seed FIRST (its precondition errors must propagate before the backend).
         seed = self._seed_fn(pattern)
         hints = seed[: self._settings.scout_seed_top_n]
+        self.last_turns_used = None  # reset per search
         raw = self._backend.run(pattern, hints)
+        # Surface the backend's native turns-used count (getattr-guarded for backends
+        # that lack the seam — e.g. Tier-0 fakes).
+        self.last_turns_used = getattr(self._backend, "last_turns_used", None)
         # Shape distribution of the model's emitted refs (before drop), so the
         # bare-path frequency is faithful to what the model produced.
         spanned = sum(1 for s in raw if not s.is_file_level)

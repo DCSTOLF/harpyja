@@ -202,9 +202,27 @@ def test_report_multi_repo_shape_validates():
 # --- spec 0014: Deep-degrade visibility — schema 0012/1 → 0013/1 (P6) ---------
 
 
-def test_report_schema_version_is_0014():
-    # spec 0019 bumps additively 0013/1 -> 0014/1 (gate-confound + ceiling + A/B twins).
-    assert SCHEMA_VERSION == "0014/1"
+def test_report_schema_version_is_0025():
+    # spec 0025 bumps 0014/1 -> 0025/1: the fc_citation_recovered_* fields are retired
+    # to always-zero (suffix recovery removed). The bump records that the measured
+    # thing changed; the fields stay for schema stability (retire-to-zero, not remove).
+    assert SCHEMA_VERSION == "0025/1"
+
+
+def test_recovered_citation_fields_retired_to_zero_with_defaults():
+    # Spec 0025 (AC7): the recovered_* fields default to 0 and a real run never
+    # populates them non-zero (the runner hardcodes 0). The shape-tally fields stay.
+    from harpyja.eval.report import _AGGREGATE_DEFAULTS
+
+    assert _AGGREGATE_DEFAULTS["fc_citation_recovered_spanned_count"] == 0
+    assert _AGGREGATE_DEFAULTS["fc_citation_recovered_filelevel_count"] == 0
+    # the shape-tally fields remain first-class defaults (still describe the explorer).
+    for k in (
+        "fc_citation_spanned_count",
+        "fc_citation_filelevel_count",
+        "fc_citation_dropped_count",
+    ):
+        assert k in _AGGREGATE_DEFAULTS
 
 
 def test_deep_degrade_fields_present_with_defaults():

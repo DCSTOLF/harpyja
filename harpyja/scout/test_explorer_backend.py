@@ -215,6 +215,75 @@ def test_tool_schemas_match_the_built_tool_surface_single_source(tmp_path):
     assert schema_names == tool_names | {SUBMIT_TOOL}
 
 
+# --- Turns-used native seam (T3/T4, AC3) ---
+#
+# Spec 0025 migrates the 0022 turns-used diagnostic OFF the FastContext trajectory
+# scrape (`count_turns`) and ONTO the explorer's native per-run count. The loop
+# already computes `LoopResult.turns_used`; the backend surfaces it as a public
+# per-run seam `last_turns_used`, mirroring `ScoutEngine.last_tally`. `turns_used`
+# is the count of model iterations CONSUMED (not the `scout_max_turns` cap).
+
+
+def test_backend_exposes_last_turns_used(tmp_path):
+    # grep then submit == 2 model iterations consumed.
+    _file(tmp_path, "real.py", n=50)
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="needle")]},
+        {"content": "", "tool_calls": [_tc(
+            "submit_citations",
+            citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])]},
+    )
+    backend = _backend(tmp_path, model_call=model, search=_FakeSearch([CodeSpan("real.py", 1, 1)]))
+    backend.run("q", [])
+    assert backend.last_turns_used == 2
+
+
+def test_last_turns_used_counts_consumed_iterations_not_the_cap(tmp_path):
+    # A submit on the first iteration consumes exactly one turn — NOT scout_max_turns.
+    _file(tmp_path, "a.py")
+    model = _scripted({"content": "", "tool_calls": [_tc("submit_citations",
+                       citations=[{"path": "a.py"}])]})
+    backend = ExplorerBackend(
+        gateway=ModelGateway(api_base="http://127.0.0.1:11434/v1"),
+        repo_path=str(tmp_path), settings=Settings(scout_max_turns=12),
+        manifest=[], search_engine=_FakeSearch(), model_call=model,
+    )
+    backend.run("q", [])
+    assert backend.last_turns_used == 1  # consumed, not the cap of 12
+
+
+def test_last_turns_used_reset_per_run(tmp_path):
+    _file(tmp_path, "real.py", n=50)
+    span = _FakeSearch([CodeSpan("real.py", 1, 1)])
+    two_turn = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="n")]},
+        {"content": "", "tool_calls": [_tc("submit_citations",
+                       citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])]},
+    )
+    backend = _backend(tmp_path, model_call=two_turn, search=span)
+    backend.run("q", [])
+    assert backend.last_turns_used == 2
+    # A fresh single-turn run resets to 1, not accumulate to 3.
+    backend._model_call = _scripted({"content": "", "tool_calls": [_tc(
+        "submit_citations", citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])]})
+    backend.run("q", [])
+    assert backend.last_turns_used == 1
+
+
+def test_last_turns_used_set_on_turn_exhaustion_degrade(tmp_path):
+    # The seam must be populated even on the degrade path it exists to preserve —
+    # else the migrated 0022 measurement regresses on exhausted runs.
+    model = _scripted({"content": "", "tool_calls": [_tc("grep", pattern="x")]})  # never submits
+    backend = ExplorerBackend(
+        gateway=ModelGateway(api_base="http://127.0.0.1:11434/v1"),
+        repo_path=str(tmp_path), settings=Settings(scout_max_turns=3),
+        manifest=[], search_engine=_FakeSearch([CodeSpan("a.py", 1, 1)]), model_call=model,
+    )
+    with pytest.raises(ScoutUnavailable):
+        backend.run("q", [])
+    assert backend.last_turns_used == 3  # the exhausted turn count is recorded
+
+
 def test_degrade_rate_is_first_class_reported_field(tmp_path):
     _file(tmp_path, "a.py")
     empty = _scripted({"content": "", "tool_calls": [_tc("submit_citations", citations=[])]})

@@ -146,8 +146,11 @@ def test_settings_lm_model_default():
 
 
 def test_settings_defaults_drop_unserved_tags():
-    # Spec 0016 (AC6): drift guard by FIELD-DEFAULT INTROSPECTION, never a text grep —
-    # so docstrings, comments, and historical fixtures cannot trip a false positive.
+    # Spec 0016/0025 (AC6): drift guard by FIELD-DEFAULT INTROSPECTION, never a text
+    # grep — so docstrings, comments, and historical fixtures cannot trip a false
+    # positive. The property the guard ENFORCES is "no field default names an
+    # UNSERVED/unobtainable tag" — NOT "no default is FastContext-branded" (which would
+    # contradict the kept, served `scout_model` gate baseline below).
     import dataclasses
 
     default_values = {
@@ -155,15 +158,29 @@ def test_settings_defaults_drop_unserved_tags():
         for f in dataclasses.fields(Settings)
     }
     assert _OLD_UNSERVED_SCOUT not in default_values.values()
-    assert default_values["scout_model"] == _FC_GGUF
+    assert default_values["scout_model"] == _FC_GGUF  # served → allowed
     assert default_values["lm_model"] != "local"
 
 
-def test_settings_scout_fc_param_defaults():
-    s = Settings()
-    assert s.scout_max_tokens == 1024
-    assert s.scout_temperature == "0"
-    assert s.scout_reasoning_effort == "none"
+def test_scout_model_preserved_as_served_gate_baseline():
+    # Spec 0025 (AC6): the FastContext BACKEND is removed, but `scout_model` is a
+    # SEPARATE consumer — the Verification Gate A/B baseline (verify_method=
+    # "scout_model", spec 0018). Its default is a FastContext-lineage tag, but a SERVED
+    # one, so the baseline still resolves. It is scoped OUT of the FC-removal: the
+    # cutover must not sweep it away with the FC_* plumbing.
+    import dataclasses
+
+    from harpyja.config.settings import _VERIFY_METHODS
+
+    field_names = {f.name for f in dataclasses.fields(Settings)}
+    assert "scout_model" in field_names  # NOT removed by the FC cleanup
+    assert Settings().scout_model == _FC_GGUF  # served default retained
+    assert "scout_model" in _VERIFY_METHODS  # still a live gate baseline
+
+
+# Spec 0025: the FC-only Scout knobs (scout_max_tokens/scout_temperature/
+# scout_reasoning_effort) were removed with the FastContext adapter — their absence is
+# pinned by test_fastcontext_absent.test_fc_only_scout_settings_fields_removed.
 
 
 def test_settings_scout_model_precedence(tmp_path, monkeypatch):

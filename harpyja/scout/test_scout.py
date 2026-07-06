@@ -1,8 +1,8 @@
-"""RED (tasks 11/13/15/17): Scout backend + engine (Tier 1).
+"""Scout backend + engine (Tier 1).
 
-Drives the self-seeding `ScoutEngine`, its normalization of backend output, the
-exact FastContext tool whitelist, and the `FastContextBackend` delegation — all
-against a fake backend / injected client, with no live model.
+Drives the self-seeding `ScoutEngine`, its normalization of backend output, and the
+tool whitelist — against a fake backend, with no live model. (Spec 0025 retired the
+FastContext adapter; the explorer backend is exercised in `test_explorer_backend.py`.)
 """
 
 import pytest
@@ -91,47 +91,10 @@ def test_scout_engine_normalizes_hostile_output(tmp_path):
     assert [(c.path, c.start_line, c.end_line) for c in out] == [("real.py", 1, 2)]
 
 
-# --- task 15: exact tool whitelist ---
-
-
-def test_build_tool_whitelist_exact_set():
-    from harpyja.scout.tools import build_tool_whitelist
-
-    client = object()
-    read, glob, grep = object(), object(), object()
-    tools = build_tool_whitelist(client, read=read, glob=glob, grep=grep)
-    assert set(tools) == {"read", "glob", "grep", "model"}
-    assert tools["model"] is client
-    assert tools["read"] is read and tools["glob"] is glob and tools["grep"] is grep
-
-
-# --- task 17: FastContextBackend delegates to an injected client ---
-
-
-def test_fastcontext_backend_delegates_to_injected_client():
-    from harpyja.scout.fastcontext import FastContextBackend
-
-    seen = {}
-
-    def fake_client(query, seed, tools):
-        seen["query"] = query
-        seen["seed"] = list(seed)
-        seen["tools"] = tools
-        return [CodeSpan(path="x.py", start_line=1, end_line=1)]
-
-    backend = FastContextBackend(
-        client=fake_client,
-        model_client=object(),
-        read=object(),
-        glob=object(),
-        grep=object(),
-    )
-    seed = [CodeSpan(path="seed.py", start_line=2, end_line=2)]
-    out = backend.run("find auth", seed)
-    assert seen["query"] == "find auth"
-    assert seen["seed"] == seed
-    assert set(seen["tools"]) == {"read", "glob", "grep", "model"}
-    assert out == [CodeSpan(path="x.py", start_line=1, end_line=1)]
+# Spec 0025: the FastContext tool whitelist (`build_tool_whitelist`) and the
+# `FastContextBackend` delegation test were removed with the retired adapter. The
+# explorer backend + its `build_explorer_tools` suite are covered in
+# `test_explorer_backend.py` / `test_explorer_tools.py`.
 
 
 # --- Spec 0011 (citation-shape): the Scout result carries the shape tally (AC17) ---
@@ -168,20 +131,20 @@ def _flask_repo(tmp_path):
     return tmp_path, frozenset({"src/flask/blueprints.py"})
 
 
-def test_scout_tally_carries_recovered_counts(tmp_path):
-    # AC4: an out-of-repo cite whose suffix recovers is kept and counted in the
-    # recovered_* tally split by shape (file-level here).
+def test_scout_engine_out_of_repo_cite_drops_no_recovery(tmp_path):
+    # Spec 0025: suffix recovery is REMOVED — the same out-of-repo cite that used to
+    # recover at the engine seam now honestly DROPS, even with a file_set present.
+    # The tally is still carried; recovered_* read zero.
     repo, fs = _flask_repo(tmp_path)
     backend = _RecordingBackend(
         [CodeSpan("/pallets/flask/src/flask/blueprints.py", None, None)]
     )
     engine = ScoutEngine(backend, _seed_of(), Settings(), str(repo), file_set=fs)
     out = engine.search("q")
-    assert [c.path for c in out] == ["src/flask/blueprints.py"]
+    assert out == []
     t = engine.last_tally
-    assert (t.recovered_filelevel, t.recovered_spanned, t.dropped) == (1, 0, 0)
-    # AC5 support: the engine tally also carries the recovered file-level PATHS.
-    assert t.recovered_filelevel_paths == ("src/flask/blueprints.py",)
+    assert (t.recovered_filelevel, t.recovered_spanned, t.dropped) == (0, 0, 1)
+    assert t.recovered_filelevel_paths == ()
 
 
 def test_scout_engine_no_file_set_means_no_recovery(tmp_path):
@@ -195,3 +158,61 @@ def test_scout_engine_no_file_set_means_no_recovery(tmp_path):
     assert out == []
     t = engine.last_tally
     assert (t.recovered_filelevel, t.recovered_spanned, t.dropped) == (0, 0, 1)
+
+
+# --- Spec 0025 (T3/T4, AC3): the engine surfaces the backend's turns-used seam ---
+
+
+class _TurnsBackend:
+    """A fake backend that exposes the explorer's per-run `last_turns_used` seam."""
+
+    def __init__(self, turns, returns=None):
+        self._turns = turns
+        self.returns = returns or []
+        self.last_turns_used = None
+
+    def run(self, query, seed):
+        self.last_turns_used = self._turns
+        return list(self.returns)
+
+
+def test_scout_engine_surfaces_last_turns_used(tmp_path):
+    backend = _TurnsBackend(4)
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(tmp_path))
+    engine.search("q")
+    assert engine.last_turns_used == 4
+
+
+def test_scout_engine_last_turns_used_reset_per_search(tmp_path):
+    backend = _TurnsBackend(4)
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(tmp_path))
+    engine.search("q")
+    backend._turns = 1
+    engine.search("q2")
+    assert engine.last_turns_used == 1  # reset per call, not sticky
+
+
+def test_scout_engine_last_turns_used_none_for_backend_without_seam(tmp_path):
+    # getattr-guarded: a backend lacking the seam yields None, never AttributeError.
+    backend = _RecordingBackend()
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(tmp_path))
+    engine.search("q")
+    assert engine.last_turns_used is None
+
+
+# --- Spec 0025 (T7/T8, AC5): last_tally survives suffix-recovery removal ---
+
+
+def test_last_tally_still_populated_after_recovery_removed(tmp_path):
+    # The shared shape-tally is KEPT (its live consumers — runner, locate_probe, the
+    # 0022 locate-accuracy diagnostic — still read it); only recovery is removed, so
+    # the recovered_* counts read zero.
+    (tmp_path / "real.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
+    backend = _RecordingBackend([CodeSpan("real.py", 1, 2)])
+    engine = ScoutEngine(backend, _seed_of(), Settings(), str(tmp_path))
+    out = engine.search("q")
+    assert [(c.path, c.start_line, c.end_line) for c in out] == [("real.py", 1, 2)]
+    t = engine.last_tally
+    assert t is not None
+    assert (t.spanned, t.dropped) == (1, 0)
+    assert (t.recovered_spanned, t.recovered_filelevel) == (0, 0)

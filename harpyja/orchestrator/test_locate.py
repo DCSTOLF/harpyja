@@ -1007,20 +1007,19 @@ def test_locate_auto_not_verifiable_carries_marker_without_deep(tmp_path):
     assert result.citations and result.citations[0].is_file_level
 
 
-def test_locate_auto_recovered_filelevel_inherits_no_line_range_floor(tmp_path):
-    # Spec 0012 AC3(f): a recovered file-level Scout citation — the model emitted an
-    # out-of-repo path that suffix-recovery rewrote to a real in-repo file, with NO
-    # line range — inherits the spec-0011 no-line-range floor: gate read-back is
-    # skipped and the result is NEVER high confidence. Recovery cannot smuggle in a
-    # verified/high-confidence pass. Driven through a real ScoutEngine so the
-    # recovery actually fires (not a hand-built file-level span).
+def test_locate_auto_filelevel_inherits_no_line_range_floor(tmp_path):
+    # Spec 0011 (floor kept post-0025): a file-level Scout citation with NO line range
+    # inherits the no-line-range floor — gate read-back is skipped and the result is
+    # NEVER high confidence. A bare-path citation cannot smuggle in a verified pass.
+    # Driven through a real ScoutEngine with an in-repo file-level span (spec 0025
+    # removed suffix recovery, so the explorer submits a real path directly).
     from harpyja.scout.engine import ScoutEngine
 
     _write(tmp_path, "src/flask/blueprints.py", "needle here\n")
 
     class _Backend:
         def run(self, query, hints):
-            return [CodeSpan("/pallets/flask/src/flask/blueprints.py", None, None)]
+            return [CodeSpan("src/flask/blueprints.py", None, None)]
 
     scout = ScoutEngine(
         _Backend(), lambda q: [], Settings(), str(tmp_path),
@@ -1032,9 +1031,9 @@ def test_locate_auto_recovered_filelevel_inherits_no_line_range_floor(tmp_path):
         engine=FakeEngine([]),
         scout_engine=scout,
         deep_engine=None,
-        gate=_gate(0.9),  # would pass a lined span; a recovered file-level one is skipped
+        gate=_gate(0.9),  # would pass a lined span; a file-level one is skipped
     )
-    assert scout.last_tally.recovered_filelevel == 1  # recovery actually fired
+    assert scout.last_tally.filelevel == 1  # the model emitted a bare-path citation
     assert result.citations and result.citations[0].path == "src/flask/blueprints.py"
     assert result.citations[0].is_file_level
     assert GATE_SKIPPED_NO_LINE_RANGE in (result.notes or "")

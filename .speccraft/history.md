@@ -2,6 +2,84 @@
 
 Append-only. Newest first.
 
+## 2026-07-06 — **Spec 0025 (removal) DELETED the FastContext surface + dependency and made the native `ExplorerBackend` the SOLE Scout backend — one canonical `build_scout_engine` factory, the turns-used measurement MIGRATED onto a native `ScoutEngine.last_turns_used` seam before the `agent_factory=` seam was cut, `normalize.py` DISENTANGLED (suffix-recovery removed, shared tally core kept), report schema `0014/1 → 0025/1` with the recovery fields retired-to-zero; two behavior changes rode in (the isolated probe now floors a `ScoutUnavailable` degrade to EMPTY; the default gateway now pins `lm_model` so Scout stops 404-ing on Ollama); suite 985 pass / 23 skip, AC8 cutover LIVE-green**
+
+**Spec:** specs/0025-removal/
+**Decision:** Close the parallel-factory deviation 0024 left open — FastContext's
+upstream 4B was retracted and is unobtainable (an unmaintainable dependency,
+independent of the 0020–0023 localization finding), and two Scout paths is two
+things to keep honest — by removing FastContext ENTIRELY and making the explorer
+the sole Scout backend. This had to land BEFORE the representative-eval + model
+bake-off, or the bake-off would benchmark through a backend that isn't the real
+one. A staged deletion, not a redesign: the explorer loop, the
+`ScoutBackend`/`ScoutEngine`/`Locator` boundary, the gate, matrix, and orchestrator
+are untouched — callers are repointed and dead code is deleted behind executable
+absence guards. Five durable points. (1) **One canonical factory.**
+`build_scout_engine` is the SINGLE production Scout factory and constructs
+`ExplorerBackend`; the parallel `build_explorer_scout_engine` is deleted (body
+folded in). (2) **Migrate-before-delete for a capability-carrying seam.** The
+`agent_factory=` seam carried a LIVE measurement — the 0022 turns-used diagnostic,
+which scraped FastContext's trajectory JSONL via `count_turns` /
+`counting_agent_factory`. `scout_max_turns` is the loop *cap* (a budget), NOT the
+turns-*used* count, so a native per-run seam was created: `LoopResult.turns_used` →
+`ExplorerBackend.last_turns_used` (set on submit AND both exhaustion-degrade paths,
+reset per run) → `ScoutEngine.last_turns_used` (getattr-guarded). The diagnostic was
+repointed and proven green (`turns_used_source` now `"explorer"`/`"unavailable"`)
+BEFORE the `agent_factory=` seam was cut — a migration, not a dead-seam delete.
+(3) **Disentangle a mixed module, don't symbol-delete it.** `normalize.py` mixed
+FC-era code with a shared core: only the suffix-recovery (`_recover_suffix` /
+`MIN_TAIL_SEGMENTS`, spec 0012) is removed; the shared `normalize_spans` /
+`normalize_spans_with_tally` / `ScoutTally` / `last_tally` core is KEPT (it is the
+live `ScoutEngine` shape-tally feeding `runner`, `locate_probe`, and the 0022
+`locate_accuracy` diagnostic — NOT FastContext-only), and the explorer's citation
+path was proven to resolve with recovery gone (its submitted paths come from real
+tool output). Recovered counts are structurally zero. (4) **Executable absence
+guards over point-in-time greps.** New `test_fastcontext_absent.py` (AST-based
+import-absence + public-name assertions — `fastcontext` / `client` / `tools`
+modules, the FC error causes `FASTCONTEXT_MISSING`/`CLI_MISSING`, the FC-only
+Settings fields) and `test_packaging.py` (the `pyproject.toml` / `[tool.uv.sources]`
+`fastcontext` declaration) rot-false when a deleted symbol reappears, where a prose
+grep goes stale. FC-only Settings (`scout_max_tokens`/`scout_temperature`/
+`scout_reasoning_effort`) removed; `scout_model` KEPT as the served Verification-Gate
+A/B baseline (`verify_method="scout_model"`, 0018), explicitly scoped OUT of the
+FC-removal drift guard (which asserts "no default names an *unserved* tag," NOT "no
+default is FC-branded" — that would contradict the kept served baseline).
+(5) **Report schema `0014/1 → 0025/1`.** `fc_citation_recovered_{spanned,filelevel}`
+are retired-to-zero (kept for schema stability, no longer sourced from `ScoutTally`);
+the shape-tally `fc_citation_{spanned,filelevel,dropped}` STAY populated — now by the
+explorer. Legacy blocks still validate via `_AGGREGATE_DEFAULTS`.
+**Why:** an unmaintainable retracted dependency is unshippable regardless of
+retrieval quality, and the bake-off must measure through the real backend — so the
+explorer had to become the ONLY Scout path first.
+**Two behavior changes (flagged, not buried):** (a) **The isolated eval probe now
+floors a typed `ScoutUnavailable` to EMPTY, not a crash (T18) — a genuine semantic
+change, not a test fix.** The FastContext backend returned honest-empty on failure,
+but the explorer RAISES on turn/wall-clock exhaustion (or model-unreachable); the
+probe runs Scout in isolation (no orchestrator degrade wrapper), so `_run_scout_query`
+had to learn the explorer's degrade taxonomy — it records the degrade as the same
+"no usable citation" floor the orchestrator would produce. (b) **The default
+`build_scout_engine` gateway now pins `settings.lm_model` (T17) — a
+production-correctness fix, distinct from the pure cutover.** The prior default used
+`ModelGateway.model`'s `"local"`, which 404s on Ollama's tag-routed API, so the
+production Scout path would have failed on Ollama; pinning `lm_model` (default
+Qwen3-8B) is the AC8 "thread the model tag through the wiring" resolution — and means
+the explorer now runs on `lm_model`, the SAME model as Deep.
+**Deviation / discoveries:** `scout/tools.py` was a SECOND-ORDER orphan — its
+`build_tool_whitelist` was FastContext's tool whitelist, orphaned BY the primary
+deletion (only its own test referenced it after) — removed because leaving it is the
+silently-orphaned case; a deletion spec must RE-SCAN for newly-orphaned code after the
+primary deletion. Naming debt RECORDED, not fixed: the kept `fc_citation_*` shape-tally
+fields are now populated by the explorer, so the `fc_` prefix is a misnomer — treat
+them as backend-neutral (or rename with a future bump). The `test_gateway.py` E501 fix
+is housekeeping.
+**Consequence:** Tier 1 is now the native explorer loop, full stop — FastContext is
+gone from the tree and the lockfile. Result: full suite **985 passed / 23 skipped**,
+ruff clean; the AC8 cutover proof passed LIVE end-to-end through the explorer on
+Qwen3-8B / loopback Ollama, zero non-loopback egress. The parallel-factory deviation
+from 0024 is closed. **Named follow-ups (unchanged):** the representative eval set;
+the model bake-off (OQ1/OQ3 budget tuning); the Tier-0 symbol tool; the finder-capability
+work (`N38_PLUS_FINDER_CAPABILITY`) from 0023's operator run.
+
 ## 2026-07-06 — **Spec 0024-v2 (Scout v2) RETIRED the FastContext Tier-1 backend and REPLACED it with a self-contained native `ExplorerBackend` Harpyja owns end-to-end — a general OpenAI-compatible tool-calling model driven over exactly three read-only tools (grep/glob/read_span) to a tool-call-native `submit_citations` terminal action, behind the UNCHANGED `ScoutBackend` seam; bounded loop + citation-preserving truncation + air-gap-before-loop, four typed degrade causes; unit-complete AND live-green (Qwen3-8B, ~28s, zero non-loopback egress); FastContext adapter LEFT in-tree off the production path pending a dedicated cleanup**
 
 **Spec:** specs/0024-v2/

@@ -6,20 +6,18 @@ or Deep (the 0021 ladder was inert anyway, and Scout is the cost driver) — the
 projects each case through the frozen-oracle taxonomy (`locate_accuracy`) to
 regenerate the distribution from scratch (NOT inheriting 0021's contaminated counts).
 
-Turns-used honesty (AC5): Scout does not surface turns on `search`'s return nor on
-`ScoutTally`, and the client unlinks its trajectory JSONL before any caller sees it.
-We recover it through the PUBLIC `agent_factory` injection seam
-(`build_scout_engine(..., agent_factory=…)`, Path A): `counting_agent_factory` wraps
-the REAL `make_fastcontext_agent`, and inside `run()` counts the trajectory steps
-BEFORE the frozen client's cleanup fires. The count is a labeled estimate
-(`turns_used_source == "trajectory"`) read from FastContext's trajectory *format*;
-Path B (CLI) and unwired runs are honestly `"unavailable"` — never a fabricated
-counter.
+Turns-used honesty (spec 0025 migration): the explorer counts turns-used natively
+(`LoopResult.turns_used`), surfaced per-run as `ScoutEngine.last_turns_used`. The
+probe reads that native seam per case (`turns_used_source == "explorer"`) — no
+trajectory scraping, no `agent_factory` injection. A backend that surfaces no count
+(the seam stays `None`) is honestly `"unavailable"`, never a fabricated counter.
+This replaces the retired FastContext trajectory-scrape (`count_turns` /
+`counting_agent_factory`), which read step records from FastContext's trajectory
+JSONL before the client's cleanup fired.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import socket
@@ -67,73 +65,7 @@ def stratify_cases(cases: Sequence[EvalCase]) -> dict[tuple[str, str], list[Eval
     return strata
 
 
-# ---- turns-used (AC5): trajectory step-count via the agent_factory seam ------
-
-def count_turns(trajectory_path: str) -> int | None:
-    """Count agent steps in a FastContext trajectory JSONL (one record per turn).
-
-    Returns the number of JSON-object records; ``None`` if the file is absent or any
-    record is malformed — a labeled gap, never a guessed number. The one-record-per-
-    turn rule is FastContext's trajectory format assumption, validated live and stated
-    in findings.
-    """
-    try:
-        with open(trajectory_path, encoding="utf-8") as fh:
-            lines = [ln for ln in fh if ln.strip()]
-    except OSError:
-        return None
-    turns = 0
-    for ln in lines:
-        try:
-            json.loads(ln)
-        except json.JSONDecodeError:
-            return None
-        turns += 1
-    return turns
-
-
-AgentFactory = Callable[..., Any]
-
-
-def counting_agent_factory(
-    turns_sink: list[int], *, inner_factory: AgentFactory | None = None
-) -> AgentFactory:
-    """A `build_scout_engine(agent_factory=…)` factory that wraps the REAL agent and
-    records turns-used from the trajectory BEFORE the frozen client cleans it up.
-
-    ``inner_factory`` defaults to the real ``make_fastcontext_agent`` (lazy-imported);
-    tests inject a stub. The wrapper measures real behavior — it only observes.
-    """
-
-    def _factory(*, work_dir: str, trajectory_file: str) -> Any:
-        if inner_factory is None:
-            from fastcontext.agent.agent_factory import make_fastcontext_agent
-
-            inner = make_fastcontext_agent(work_dir=work_dir, trajectory_file=trajectory_file)
-        else:
-            inner = inner_factory(work_dir=work_dir, trajectory_file=trajectory_file)
-        return _CountingAgent(inner, trajectory_file, turns_sink)
-
-    return _factory
-
-
-class _CountingAgent:
-    """Delegates to the real agent, then reads the trajectory turn count into a sink."""
-
-    def __init__(self, inner: Any, trajectory_file: str, turns_sink: list[int]) -> None:
-        self._inner = inner
-        self._trajectory_file = trajectory_file
-        self._turns_sink = turns_sink
-
-    async def run(self, prompt: str, *args: Any, **kwargs: Any) -> Any:
-        answer = await self._inner.run(prompt, *args, **kwargs)
-        turns = count_turns(self._trajectory_file)
-        if turns is not None:
-            self._turns_sink.append(turns)
-        return answer
-
-
-# ---- live Scout-only stack (AC4/AC5) ---------------------------------------
+# ---- live Scout-only stack (AC4) -------------------------------------------
 
 @dataclass(frozen=True)
 class ScoutOnlyStack:
@@ -142,17 +74,16 @@ class ScoutOnlyStack:
     scout_engine: Any
 
 
-def build_scout_only_stack(settings, repo_path: str, *, turns_sink: list[int] | None = None):
-    """Build a Scout-ONLY stack via the public `build_scout_engine` seam.
+def build_scout_only_stack(settings, repo_path: str):
+    """Build a Scout-ONLY stack via the canonical `build_scout_engine` (explorer) seam.
 
-    When ``turns_sink`` is given, a `counting_agent_factory` is injected so turns-used
-    is recovered from the trajectory (Path A). No gate/judge/Deep is constructed — the
-    probe measures Scout in isolation. Additive: no SUT change.
+    No gate/judge/Deep is constructed — the probe measures Scout in isolation. Turns-used
+    is read from the explorer's native `ScoutEngine.last_turns_used` seam per case (spec
+    0025), not scraped from a trajectory. Additive: no SUT change.
     """
     from harpyja.scout.wiring import build_scout_engine
 
-    agent_factory = counting_agent_factory(turns_sink) if turns_sink is not None else None
-    scout_engine = build_scout_engine(settings, repo_path, agent_factory=agent_factory)
+    scout_engine = build_scout_engine(settings, repo_path)
     return ScoutOnlyStack(scout_engine=scout_engine)
 
 
@@ -193,20 +124,24 @@ def run_locate_probe(
     stack: Any,
     repo_path: str,
     window: int,
-    turns_sink: list[int] | None = None,
 ) -> ProbeResult:
     """Drive `cases` through Scout in isolation and regenerate the distribution.
 
-    No gate/judge/Deep is touched. `turns_sink` (populated by a wired
-    `counting_agent_factory`) supplies turns-used; absent/empty → `"unavailable"`.
+    No gate/judge/Deep is touched. Per-case turns-used is read from the explorer's
+    native `ScoutEngine.last_turns_used` seam (spec 0025); a backend that surfaces no
+    count → `"unavailable"`.
     """
     scout_engine = stack.scout_engine
     rows: list[CaseRow] = []
     classified: list[ClassifiedCase] = []
     rec_spanned = 0
     rec_filelevel = 0
+    turns: list[int] = []
     for case in cases:
         norm = _run_scout_case(scout_engine, case, repo_path)
+        used = getattr(scout_engine, "last_turns_used", None)
+        if used is not None:
+            turns.append(used)
         bucket, flags = classify_case(norm.effective, case.expected_spans, window=window)
         classified.append((bucket, flags, norm.normalization_dropped))
         rec_spanned += norm.recovered_spanned
@@ -221,7 +156,7 @@ def run_locate_probe(
                 normalization_dropped=norm.normalization_dropped,
             )
         )
-    turns_used, source = _resolve_turns(turns_sink)
+    turns_used, source = _resolve_turns(turns)
     return ProbeResult(
         distribution=score_distribution(classified),
         rows=tuple(rows),
@@ -232,9 +167,9 @@ def run_locate_probe(
     )
 
 
-def _resolve_turns(turns_sink: list[int] | None) -> tuple[tuple[int, ...] | None, str]:
-    if turns_sink:
-        return tuple(turns_sink), "trajectory"
+def _resolve_turns(turns: list[int]) -> tuple[tuple[int, ...] | None, str]:
+    if turns:
+        return tuple(turns), "explorer"
     return None, "unavailable"
 
 
@@ -267,10 +202,22 @@ class ReformulationResult:
 
 
 def _run_scout_query(scout_engine: Any, query: str, repo_path: str):
-    """Drive ONE query through Scout only (reset tally first, mirror the runner)."""
+    """Drive ONE query through Scout only (reset tally first, mirror the runner).
+
+    Spec 0025: the probe runs Scout in ISOLATION, so a typed `ScoutUnavailable` degrade
+    (the explorer exhausting its turn/wall-clock budget, or the model going unreachable)
+    is recorded as an EMPTY localization for the case — the same "no usable citation"
+    outcome the orchestrator would floor to — never propagated as a crash. This is what
+    keeps the eval harness running end-to-end through the explorer's degrade taxonomy.
+    """
+    from harpyja.scout.errors import ScoutUnavailable
+
     if hasattr(scout_engine, "last_tally"):
         scout_engine.last_tally = None
-    spans = scout_engine.search(query, scope=repo_path)
+    try:
+        spans = scout_engine.search(query, scope=repo_path)
+    except ScoutUnavailable:
+        return normalize_citations([], None)
     tally = getattr(scout_engine, "last_tally", None)
     return normalize_citations(spans, tally)
 
@@ -419,15 +366,13 @@ def _endpoint_reachable(api_base: str, timeout: float = 0.25) -> bool:
 def scout_stack_available(settings: Any = None, *, endpoint: str | None = None) -> bool:
     """Scout-ONLY availability — NARROWER than the Deep-oriented `_live_stack_available`.
 
-    A Scout probe needs only: `fastcontext` importable, `rg` on PATH, and a reachable
-    loopback endpoint serving the Scout model. It does NOT need Deno or the Deep driver
-    model (those are Tier-2). Reusing the Deep gate would FALSE-skip a Scout-capable
-    host (the exact over-gating found on the 0022 live run: Deno absent, Scout served).
+    A Scout probe needs only `rg` on PATH and a reachable loopback endpoint serving a
+    tool-calling model (spec 0025: the explorer replaces FastContext, so the retired
+    `fastcontext` package is no longer a precondition). It does NOT need Deno or the
+    Deep driver model (those are Tier-2). Reusing the Deep gate would FALSE-skip a
+    Scout-capable host (the exact over-gating found on the 0022 live run: Deno absent,
+    Scout served).
     """
-    try:
-        import fastcontext  # noqa: F401
-    except ImportError:
-        return False
     if shutil.which("rg") is None:
         return False
     base = endpoint or (getattr(settings, "lm_api_base", None) if settings else None)

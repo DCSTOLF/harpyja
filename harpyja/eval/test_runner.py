@@ -391,9 +391,12 @@ def test_runner_aggregates_fc_citation_shape_counts(tmp_path):
     assert agg["fc_citation_dropped_count"] == 3
 
 
-def test_runner_aggregates_recovered_counts(tmp_path):
-    # Spec 0012 AC4: the per-case ScoutTally recovered_* counts are summed into the
-    # report's fc_citation_recovered_* aggregate fields.
+def test_runner_retires_recovered_counts_to_zero(tmp_path):
+    # Spec 0025 (AC7): suffix recovery is removed, so the recovered_* report fields are
+    # RETIRED to always-zero — the runner no longer sources them from the ScoutTally.
+    # Even a tally carrying (stale, hypothetical) non-zero recovered counts emits 0,
+    # proving the retirement is independent of the tally. The shape-tally fields
+    # (spanned/filelevel/dropped) STAY populated (asserted above).
     art = tmp_path / "art"
     art.mkdir()
     scout = _TallyScout(
@@ -405,8 +408,8 @@ def test_runner_aggregates_recovered_counts(tmp_path):
         [_point()], Settings(), EvalConfig(), repo_path=str(tmp_path / "repo"), stack=stack
     )
     agg = rep["aggregate"]
-    assert agg["fc_citation_recovered_spanned_count"] == 2
-    assert agg["fc_citation_recovered_filelevel_count"] == 3
+    assert agg["fc_citation_recovered_spanned_count"] == 0
+    assert agg["fc_citation_recovered_filelevel_count"] == 0
 
 
 def test_runner_serializes_file_level_citation_lines_as_null(tmp_path):

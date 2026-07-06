@@ -144,10 +144,10 @@ def test_driver_pools_two_distinct_repo_cases_into_schema(tmp_path):
     validate_report(report)
 
 
-def test_run_swebench_carries_recovered_counts(tmp_path):
-    # Spec 0012 AC4: the per-case swebench driver pools recovered_* through the same
-    # aggregate_outcomes, so the driver's report carries them — not only the
-    # single-repo runner.
+def test_run_swebench_retires_recovered_counts_to_zero(tmp_path):
+    # Spec 0025 (AC7): suffix recovery removed — the swebench driver's report retires
+    # the recovered_* fields to always-zero (same aggregate path as the single-repo
+    # runner), even when a tally carries non-zero recovered counts.
     _setart(tmp_path)
     scout = _TallyScout(
         [_span("net.py", 12, 18)],
@@ -160,8 +160,8 @@ def test_run_swebench_carries_recovered_counts(tmp_path):
         production_classifier=lambda q: "point",
     )
     agg = report["aggregate"]
-    assert agg["fc_citation_recovered_spanned_count"] == 1
-    assert agg["fc_citation_recovered_filelevel_count"] == 2
+    assert agg["fc_citation_recovered_spanned_count"] == 0
+    assert agg["fc_citation_recovered_filelevel_count"] == 0
 
 
 def test_driver_writes_outside_every_case_repo(tmp_path):

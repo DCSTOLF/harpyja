@@ -25,7 +25,11 @@ from pathlib import Path
 # still validate because build_report default-populates the new fields).
 # Spec 0019 bumps 0013/1 -> 0014/1: gate-confound outcome + ceiling + instruct/scout
 # A/B false-escalation twins (all additive, appended last-with-defaults).
-SCHEMA_VERSION = "0014/1"
+# Spec 0025 bumps 0014/1 -> 0025/1: FastContext suffix recovery is removed, so the
+# fc_citation_recovered_* fields are RETIRED to always-zero (kept for schema stability,
+# never populated non-zero). The bump records that the measured thing changed; legacy
+# blocks still validate via _AGGREGATE_DEFAULTS.
+SCHEMA_VERSION = "0025/1"
 
 # Spec 0019 (D2): the gate-confound + A/B aggregate field names, declared ONCE here
 # so the recommend→report field set has a single anti-drift source (a drift-guard

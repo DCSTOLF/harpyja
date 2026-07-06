@@ -1,15 +1,15 @@
 """Spec 0022 (AC4/AC5/AC6) — Scout-only locate probe: unit layer.
 
 Deterministic, no live stack. Pins: case stratification (repo × gold-span-size band),
-per-case `last_tally` reset, distribution assembly, the honest turns-used capture
-(`count_turns` from a trajectory fixture + `counting_agent_factory` reading it before
-cleanup, labeled `trajectory` vs `unavailable`), the reformulation-probe empty-rate
+per-case `last_tally` reset, distribution assembly, the turns-used capture from the
+explorer's native `last_turns_used` seam (spec 0025; labeled `explorer` vs
+`unavailable`, replacing the retired FastContext trajectory scrape), tolerance of a
+`ScoutUnavailable` degrade as an empty localization, the reformulation-probe empty-rate
 delta with probe cases held OUT of the baseline, and the `require_live_stack` gate.
 """
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 
 from harpyja.eval.dataset import EvalCase, ExpectedSpan
@@ -32,10 +32,14 @@ class _FakeScout:
     """A scout_engine stand-in: scripted (spans, tally) per search; tracks last_tally
     at each search entry so we can prove the probe resets it per case."""
 
-    def __init__(self, script):
+    def __init__(self, script, turns=None):
         self._script = list(script)
         self._i = 0
         self.last_tally: ScoutTally | None = None
+        # Spec 0025: the explorer's native per-run turns-used seam (None unless a
+        # `turns` script is supplied), the migration target for the 0022 diagnostic.
+        self.last_turns_used: int | None = None
+        self._turns = list(turns) if turns is not None else None
         self.seen_at_entry: list[ScoutTally | None] = []
         self.queries: list[str] = []
 
@@ -43,6 +47,8 @@ class _FakeScout:
         self.seen_at_entry.append(self.last_tally)
         self.queries.append(pattern)
         spans, tally = self._script[self._i]
+        if self._turns is not None:
+            self.last_turns_used = self._turns[self._i]
         self._i += 1
         self.last_tally = tally
         return list(spans)
@@ -117,10 +123,14 @@ def test_run_locate_probe_collects_citations_tally_and_builds_distribution():
     assert res.rows[0].case_id == "r-1" and res.rows[0].bucket is LocateBucket.CORRECT
 
 
-def test_run_locate_probe_turns_unavailable_without_sink():
+# ---- AC3 (spec 0025): turns-used migrated onto the explorer's native seam ----
+
+def test_run_locate_probe_turns_unavailable_without_native_seam():
+    # A scout engine that surfaces no turns-used (last_turns_used stays None) →
+    # honest "unavailable", never a fabricated counter.
     from harpyja.eval.locate_probe import run_locate_probe
 
-    scout = _FakeScout([([CodeSpan("a.py", 1, 2)], ScoutTally())])
+    scout = _FakeScout([([CodeSpan("a.py", 1, 2)], ScoutTally())])  # no turns script
     res = run_locate_probe(
         [_case("r-1", spans=[("a.py", 1, 2)])],
         stack=_FakeStack(scout), repo_path="/repo", window=50,
@@ -129,80 +139,70 @@ def test_run_locate_probe_turns_unavailable_without_sink():
     assert res.turns_used_source == "unavailable"
 
 
-def test_run_locate_probe_turns_from_sink_labeled_trajectory():
+def test_run_locate_probe_turns_from_native_seam_labeled_explorer():
+    # Per-case turns come from the explorer's native `last_turns_used` — no sink, no
+    # agent_factory — and are labeled "explorer".
     from harpyja.eval.locate_probe import run_locate_probe
 
     scout = _FakeScout(
-        [([CodeSpan("a.py", 1, 2)], ScoutTally()), ([CodeSpan("b.py", 1, 2)], ScoutTally())]
+        [([CodeSpan("a.py", 1, 2)], ScoutTally()), ([CodeSpan("b.py", 1, 2)], ScoutTally())],
+        turns=[3, 5],
     )
-    sink: list[int] = [3, 5]  # as if a counting_agent_factory appended per case
     cases = [_case("r-1", spans=[("a.py", 1, 2)]), _case("r-2", spans=[("b.py", 1, 2)])]
-    res = run_locate_probe(
-        cases, stack=_FakeStack(scout), repo_path="/repo", window=50, turns_sink=sink
-    )
+    res = run_locate_probe(cases, stack=_FakeStack(scout), repo_path="/repo", window=50)
     assert res.turns_used == (3, 5)
-    assert res.turns_used_source == "trajectory"
+    assert res.turns_used_source == "explorer"
 
 
-# ---- AC5: honest turns-used capture ----------------------------------------
+def test_run_locate_probe_tolerates_scout_degrade_as_empty():
+    # Spec 0025: the probe runs Scout in ISOLATION (no orchestrator degrade wrapper),
+    # so a ScoutUnavailable degrade (e.g. the explorer exhausting its turn budget) must
+    # be recorded as an EMPTY localization for that case — never propagated as a crash.
+    # This is what lets the eval harness run end-to-end through the explorer (AC5).
+    from harpyja.eval.locate_probe import run_locate_probe
+    from harpyja.scout.errors import ScoutUnavailable
 
-def test_count_turns_from_trajectory_counts_steps(tmp_path):
-    from harpyja.eval.locate_probe import count_turns
+    class _DegradingScout:
+        last_tally = None
+        last_turns_used = 7  # turns were consumed before the degrade
 
-    traj = tmp_path / "t.jsonl"
-    traj.write_text('{"step": 1}\n{"step": 2}\n{"step": 3}\n\n')  # blank line ignored
-    assert count_turns(str(traj)) == 3
+        def search(self, pattern, scope=None):
+            raise ScoutUnavailable("loop-turns-exhausted")
 
-
-def test_count_turns_none_on_absent_or_malformed(tmp_path):
-    from harpyja.eval.locate_probe import count_turns
-
-    assert count_turns(str(tmp_path / "nope.jsonl")) is None
-    bad = tmp_path / "bad.jsonl"
-    bad.write_text("{not json\n")
-    assert count_turns(str(bad)) is None
-
-
-def test_counting_agent_factory_wraps_real_and_reads_trajectory_before_cleanup(tmp_path):
-    from harpyja.eval.locate_probe import counting_agent_factory
-
-    traj = tmp_path / "traj.jsonl"
-
-    class _StubInner:
-        async def run(self, prompt, max_turns=4, citation=False):
-            # the REAL agent would write its trajectory here during the run.
-            traj.write_text('{"step": 1}\n{"step": 2}\n')
-            return "answer-spans"
-
-    def _stub_inner_factory(*, work_dir, trajectory_file):
-        return _StubInner()
-
-    sink: list[int] = []
-    factory = counting_agent_factory(sink, inner_factory=_stub_inner_factory)
-    agent = factory(work_dir=str(tmp_path), trajectory_file=str(traj))
-    answer = asyncio.run(agent.run("q", max_turns=4, citation=False))
-    # inner's return is preserved AND the turn count was read from the trajectory.
-    assert answer == "answer-spans"
-    assert sink == [2]
+    cases = [_case("r-1", spans=[("a.py", 1, 2)])]
+    res = run_locate_probe(cases, stack=_FakeStack(_DegradingScout()), repo_path="/repo", window=50)
+    assert res.distribution.n == 1
+    assert res.distribution.counts[LocateBucket.EMPTY] == 1
+    assert len(res.rows) == 1
 
 
-def test_turns_used_source_labels_trajectory_vs_unavailable(tmp_path):
-    # When the trajectory is missing/unreadable, the wrapper records nothing rather
-    # than fabricating a count (0021 honesty).
-    from harpyja.eval.locate_probe import counting_agent_factory
+def test_build_scout_only_stack_wires_no_agent_factory(tmp_path):
+    # The stack builder no longer injects a counting agent_factory; it builds the
+    # canonical explorer stack directly.
+    import inspect
 
-    class _StubInnerNoTraj:
-        async def run(self, prompt, max_turns=4, citation=False):
-            return "ans"  # writes NO trajectory
+    from harpyja.eval.locate_probe import build_scout_only_stack
 
-    def _factory(*, work_dir, trajectory_file):
-        return _StubInnerNoTraj()
+    sig = inspect.signature(build_scout_only_stack)
+    assert "turns_sink" not in sig.parameters
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    from harpyja.config.settings import Settings
 
-    sink: list[int] = []
-    factory = counting_agent_factory(sink, inner_factory=_factory)
-    agent = factory(work_dir=str(tmp_path), trajectory_file=str(tmp_path / "absent.jsonl"))
-    asyncio.run(agent.run("q"))
-    assert sink == []  # no fabricated turn count
+    stack = build_scout_only_stack(Settings(), str(tmp_path))
+    assert stack.scout_engine is not None
+
+
+def test_trajectory_turns_machinery_removed():
+    # Executable absence guard: the FastContext trajectory-scrape turns machinery is
+    # gone once the diagnostic reads the native seam.
+    import harpyja.eval.locate_probe as lp
+
+    for name in ("count_turns", "counting_agent_factory", "_CountingAgent"):
+        assert not hasattr(lp, name), f"{name} should be removed"
+    # run_locate_probe no longer accepts a turns_sink.
+    import inspect
+
+    assert "turns_sink" not in inspect.signature(lp.run_locate_probe).parameters
 
 
 # ---- AC6: reformulation probe (labeled non-primary) ------------------------

@@ -144,6 +144,12 @@ class ExplorerBackend:
         # a clean run — including an honest-empty submission — does not.
         self.run_count = 0
         self.degrade_count = 0
+        # Spec 0025 (AC3): the per-run turns-USED count (model iterations consumed,
+        # NOT the scout_max_turns cap), surfaced so the eval turns diagnostic reads
+        # the explorer's native count instead of scraping a FastContext trajectory.
+        # None until the first run; populated on submit AND on the exhaustion degrade
+        # paths (whichever produced a LoopResult).
+        self.last_turns_used: int | None = None
 
     @property
     def degrade_rate(self) -> float:
@@ -164,6 +170,7 @@ class ExplorerBackend:
         self._gateway.assert_local()
 
         self.run_count += 1
+        self.last_turns_used = None  # reset per run
         try:
             return self._run_loop(query)
         except ScoutUnavailable:
@@ -198,6 +205,11 @@ class ExplorerBackend:
             raise ScoutUnavailable(errors.MODEL_UNREACHABLE) from err
         except Exception as err:  # noqa: BLE001 - any loop/model crash → typed degrade
             raise ScoutUnavailable(errors.BACKEND_ERROR) from err
+
+        # Record the native turns-USED count on every terminal path that produced a
+        # LoopResult (submit and both exhaustion outcomes) — before any degrade raise,
+        # so the migrated 0022 measurement survives exhausted runs too.
+        self.last_turns_used = result.turns_used
 
         if result.outcome == SUBMITTED:
             # Honest-empty (a well-formed empty submission) returns [] — NOT a degrade.

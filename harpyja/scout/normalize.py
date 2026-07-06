@@ -15,46 +15,10 @@ from harpyja.server.types import CodeSpan
 
 logger = logging.getLogger(__name__)
 
-# Spec 0012: a recovered suffix must carry at least this many segments — a bare
-# basename (1 segment) is never recovered (the specificity floor).
-MIN_TAIL_SEGMENTS = 2
-
 
 def _line_count(path: Path) -> int:
     with open(path, encoding="utf-8", errors="replace") as fh:
         return sum(1 for _ in fh)
-
-
-def _recover_suffix(
-    cited_path: str, file_set: frozenset[str], top_level: frozenset[str]
-) -> str | None:
-    """Spec 0012: recover an out-of-repo cited path by its longest unique suffix.
-
-    The model hallucinates a leading root (e.g. ``/pallets/flask/...``) onto an
-    otherwise-real repo path. For ``k`` from the full length down to
-    ``MIN_TAIL_SEGMENTS``, take the last ``k`` segments as ``tail`` and match it
-    against the manifest ``file_set`` (segment-aligned: ``p == tail`` or ``p`` ends
-    with ``"/" + tail``). Recovery requires (a) the tail's **head** is a known
-    top-level manifest entry — a fabricated mid-tree suffix is rejected — and (b)
-    **exactly one** match at the longest such ``k``. Ambiguous (>1) → drop, never a
-    silent pick and never a fall-back to a shorter, less specific tail. Returns the
-    repo-relative manifest path, or ``None`` to drop. No filesystem access here; the
-    caller re-validates the returned path with repo-confine + ``is_file``.
-    """
-    if not file_set:
-        return None
-    segs = [s for s in cited_path.replace("\\", "/").split("/") if s not in ("", ".", "..")]
-    for k in range(len(segs), MIN_TAIL_SEGMENTS - 1, -1):
-        tail_segs = segs[len(segs) - k :]
-        if tail_segs[0] not in top_level:
-            continue  # leading-segment guard: tail must be anchored at a top-level entry
-        tail = "/".join(tail_segs)
-        matches = [p for p in file_set if p == tail or p.endswith("/" + tail)]
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            return None  # ambiguous at the most specific tail → honest drop
-    return None
 
 
 def normalize_spans_with_tally(
@@ -76,21 +40,17 @@ def normalize_spans_with_tally(
     ever emits lined spans — is unaffected. A **half-``None``** span (one line set,
     one absent) is not a sanctioned shape and is dropped (AC23).
 
-    Spec 0012: when a path does not resolve to a real in-repo file, attempt bounded
-    suffix recovery against ``file_set`` (the indexed manifest's repo-relative paths)
-    **before** dropping — see :func:`_recover_suffix`. A recovered path re-enters the
-    normal repo-confine + ``is_file`` (+ clamp) validation, so recovery composes with,
-    never bypasses, 0011's checks. ``file_set`` absent/empty ⇒ no recovery (graceful
-    degrade to the 0011 drop). ``recovered_spanned`` / ``recovered_filelevel`` count
-    the kept-by-recovery refs by shape (the file-level kind skips the gate read-back,
-    so the two are tracked separately).
+    Spec 0025: the FastContext-era suffix recovery (0012) is REMOVED — the explorer
+    submits paths chosen from real tool output, so a path that does not resolve to a
+    real in-repo file is dropped outright (the 0011 behavior). ``file_set`` and
+    ``recovered_paths_out`` are retained for signature/side-channel stability but are
+    now inert; ``recovered_spanned`` / ``recovered_filelevel`` are structurally zero.
 
     Every ref discarded by a validation gate is **counted** (``dropped``, no silent
     coverage) and logged; dedup-skips and the ``max_citations`` budget cut are not
     drops.
     """
     root = Path(repo_root).resolve()
-    top_level = frozenset(p.split("/")[0] for p in file_set) if file_set else frozenset()
     seen: set[tuple[str, int | None, int | None]] = set()
     out: list[CodeSpan] = []
     dropped = 0
@@ -112,26 +72,11 @@ def normalize_spans_with_tally(
         except ValueError:
             in_repo = False
 
-        recovered = False
         if not in_repo:
-            # Spec 0012: try suffix recovery before dropping.
-            rec = _recover_suffix(span.path, file_set or frozenset(), top_level)
-            if rec is None:
-                dropped += 1
-                logger.info("scout normalize dropped unrecoverable out-of-repo ref: %s", span.path)
-                continue
-            resolved = (root / rec).resolve()
-            try:
-                rel = resolved.relative_to(root)
-            except ValueError:
-                dropped += 1
-                continue
-            if not resolved.is_file():  # defensive: stale manifest entry
-                dropped += 1
-                logger.info("scout normalize dropped stale recovered ref: %s", rec)
-                continue
-            recovered = True
-            logger.info("scout normalize recovered %s -> %s", span.path, rec)
+            # Spec 0025: no suffix recovery — an out-of-repo/nonexistent ref drops.
+            dropped += 1
+            logger.info("scout normalize dropped out-of-repo ref: %s", span.path)
+            continue
 
         if span.is_file_level:
             # File-level: no line range to validate/clamp — repo-confine + is_file
@@ -150,10 +95,6 @@ def normalize_spans_with_tally(
                     kind=span.kind,
                 )
             )
-            if recovered:
-                recovered_filelevel += 1
-                if recovered_paths_out is not None:
-                    recovered_paths_out.append(str(rel))
         else:
             # Line range must be 1-based, non-inverted, and within the file.
             if span.start_line < 1 or span.end_line < span.start_line:
@@ -184,11 +125,12 @@ def normalize_spans_with_tally(
                     kind=span.kind,
                 )
             )
-            if recovered:
-                recovered_spanned += 1
         if len(out) >= max_citations:
             break
 
+    # Spec 0025: recovery removed → recovered_spanned/recovered_filelevel are always 0
+    # and recovered_paths_out is never populated. Both are retained for return-arity /
+    # signature / side-channel stability (see the docstring).
     return out, dropped, recovered_spanned, recovered_filelevel
 
 

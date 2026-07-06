@@ -22,7 +22,7 @@ import pytest
 from harpyja.config.settings import Settings
 from harpyja.gateway.gateway import ModelGateway
 from harpyja.scout.errors import ScoutUnavailable
-from harpyja.scout.wiring import build_explorer_scout_engine
+from harpyja.scout.wiring import build_scout_engine
 from harpyja.server.types import CodeSpan
 
 _LOOPBACK = "http://127.0.0.1:11434/v1"
@@ -88,7 +88,7 @@ def _live_engine(repo: str):
         allow_remote=False,
         timeout_s=settings.lm_http_timeout_s,
     )
-    return build_explorer_scout_engine(settings, repo, gateway=gateway)
+    return build_scout_engine(settings, repo, gateway=gateway)
 
 
 @pytest.mark.integration

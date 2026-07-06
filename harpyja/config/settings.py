@@ -79,19 +79,16 @@ class Settings:
     deep_token_ceiling: int = 32000
     deep_wall_clock_ms: int = 60000
 
-    # Spec 0007 — Scout's FastContext fine-tune + FC_* knobs (additive, last).
-    # `scout_model` is Scout-specific and distinct from Deep's `lm_model`; it maps
-    # to FC_MODEL. The rest map to FC_MAX_TOKENS / FC_TEMPERATURE /
-    # FC_REASONING_EFFORT (kept as strings — they become env values verbatim).
-    # Spec 0016 (B1 fix): flipped from the UNSERVED mitkox RL-Q4 tag (404 on every
-    # Scout call) to the served dstolf Q8 RL tag. NB: `scout_model` also backs the
-    # Verification Gate (`verify_method="scout_model"`), so this changes which served
-    # model the gate scores with — broken→served plumbing, distinct from the B2
-    # gate-judging-logic problem.
+    # `scout_model` is Scout-specific and distinct from Deep's `lm_model`. Spec 0025
+    # RETIRED the FastContext backend, but `scout_model` is KEPT: it is a SEPARATE
+    # consumer — the Verification Gate A/B baseline (`verify_method="scout_model"`,
+    # spec 0018). Its default is a FastContext-lineage tag, but a SERVED local Ollama
+    # model (spec 0016 flipped it off the unserved mitkox RL-Q4 tag onto the served
+    # dstolf Q8 RL tag), so the gate baseline still resolves. The FC-only knobs
+    # (`scout_max_tokens`/`scout_temperature`/`scout_reasoning_effort`, which mapped to
+    # FC_MAX_TOKENS / FC_TEMPERATURE / FC_REASONING_EFFORT) were removed with the FC
+    # adapter — the explorer does not use them.
     scout_model: str = "hf.co/dstolf/FastContext-1.0-4B-RL-Q8_0-GGUF:latest"
-    scout_max_tokens: int = 1024
-    scout_temperature: str = "0"
-    scout_reasoning_effort: str = "none"
 
     # Spec 0024 (v2 explorer loop) — the native explorer-loop budgets. ALL are
     # PROVISIONAL and flagged for tuning in the later model bake-off (OQ1/OQ3);

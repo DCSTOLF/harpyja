@@ -18,11 +18,6 @@ from __future__ import annotations
 CONNECTION_REFUSED = "connection-refused"
 NO_ENDPOINT_CONFIGURED = "no-endpoint-configured"
 BACKEND_ERROR = "backend-error"
-# Spec 0007 — the default-client install/discovery causes. `fastcontext-missing`
-# is terminal only when no CLI fallback is wired; `cli-missing` when the package
-# is absent AND `fastcontext` is not on PATH (the four-way split stays distinct).
-FASTCONTEXT_MISSING = "fastcontext-missing"
-CLI_MISSING = "cli-missing"
 # Spec 0024 (v2 explorer loop) — the native-loop degrade causes. Each is a distinct
 # terminal state of the explorer loop; all route to the Tier-0 floor via the
 # unchanged orchestrator degrade path. `model-unreachable` is the transport/OS

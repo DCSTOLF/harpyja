@@ -121,6 +121,45 @@
   `index/test_routing.py`); until a slice ships, its inputs stay on the honest
   degraded path (null-language / ripgrep-only), never silent zero.
 
+## Deletions & migrations
+
+- A **deletion is pinned by an EXECUTABLE import-absence / public-name guard, never a
+  point-in-time grep** — a test that ROTS FALSE when a deleted symbol reappears, not a
+  prose note that silently goes stale. Assert the module raises `ModuleNotFoundError`,
+  the deleted public names no longer resolve, and (via `ast`, not a text scan) the
+  surviving modules no longer import the removed package — so a reintroduction fails a
+  test instead of quietly landing. A packaging deletion gets the same teeth: parse the
+  real `pyproject.toml` / lockfile and assert the dropped dependency is absent, so a
+  clean `uv sync` cannot pull it back. (See `harpyja/scout/test_fastcontext_absent.py`,
+  `harpyja/test_packaging.py`, spec 0025 AC4/AC9.)
+- **Migrate before you delete a capability-carrying seam.** When the thing being removed
+  also carries a still-needed capability — e.g. the `agent_factory=` seam the 0022
+  turns-used diagnostic read through — it is a MIGRATION, not a dead-seam delete: surface
+  an equivalent PUBLIC per-run seam on the survivor (`LoopResult.turns_used` →
+  `ExplorerBackend.last_turns_used` → `ScoutEngine.last_turns_used`, mirroring the
+  `last_tally` side-channel), prove it equivalent, repoint the consumer onto it and get it
+  GREEN, and only THEN cut the old seam. Distinguish a *cap/budget* from a *used/measured*
+  reading (`scout_max_turns` is the loop cap, not the turns-consumed count) — removing the
+  measurement seam because a same-named budget exists would silently regress the metric.
+  (See spec 0025 AC3.)
+- **Disentangle a mixed module; don't symbol-delete it.** When a module mixes retired code
+  with a shared core (`normalize.py`: the FC-era suffix-recovery `_recover_suffix` /
+  `MIN_TAIL_SEGMENTS` embedded inside the shared `normalize_spans_with_tally` / `ScoutTally`
+  / `last_tally` core that EVERY backend and three live eval consumers run through), remove
+  ONLY the retired remainder and KEEP the shared core, and PROVE the survivor path still
+  resolves without it (a pre-delete consumer inventory + a post-delete import-absence guard,
+  two-sided). Ripping the whole path because part of it was dead would strand the live
+  consumers. A retired-but-kept computation collapses to a structural constant (recovered
+  counts → 0) rather than a signature change. (See `harpyja/scout/normalize.py`, spec 0025
+  AC5.)
+- **Re-scan for SECOND-ORDER orphans after the primary deletion — the enumerated surface is
+  not the whole surface.** A deletion can orphan code that was NOT on the deletion list: once
+  FastContext was removed, `scout/tools.py::build_tool_whitelist` (FC's read/glob/grep/model
+  whitelist) had only its own test as a consumer. Leaving it is exactly the silently-orphaned
+  case a cutover is meant to prevent — a deletion spec must re-scan for newly-unreferenced
+  code and remove it in the same change, not stop at the named surface. (See the
+  `scout/tools.py` removal, spec 0025.)
+
 ## Tests
 
 - pytest. Test files are `test_*.py`, kept next to the package under test unless a top-level `tests/` root is added later (no test root configured yet).
@@ -243,6 +282,19 @@
   new field is declared. Bump `SCHEMA_VERSION`. (See `harpyja/eval/report.py`
   `_RUN_METADATA_DEFAULTS` / `_CASE_DEFAULTS` / `_AGGREGATE_DEFAULTS`, `_with_defaults`,
   `SCHEMA_VERSION` `0009-6a/1` → `0010/1`.)
+- When the **measured backend changes and a field no longer describes anything, RETIRE it
+  to always-zero with a `SCHEMA_VERSION` bump — keep the field for schema stability, stop
+  populating it, and let the bump record that the measured thing changed** (the honest
+  default, adopted unless a downstream consumer reads the field expecting non-zero, in which
+  case remove-with-bump). A field that STAYS populated but whose backend-specific NAME has
+  become a misnomer is documented as **backend-neutral**, not silently misread: the kept
+  `fc_citation_{spanned,filelevel,dropped}` shape-tally fields are now populated by the
+  explorer, so the `fc_` prefix reads as FastContext-specific but is backend-neutral going
+  forward — record the naming debt (rename with a future bump, or treat the prefix as
+  neutral) so a later reader does not mistake the data for FastContext-only. The retired
+  `fc_citation_recovered_*` fields default 0 and legacy blocks keep validating via
+  `_AGGREGATE_DEFAULTS`. (See `harpyja/eval/report.py` `SCHEMA_VERSION` `0014/1` → `0025/1`,
+  spec 0025 AC7.)
 - An **evaluation intervention** — injecting a non-production *input* through a
   sanctioned seam to make a behavior measurable (e.g. forcing routing via
   `LocateStack.classifier` so the gate fires), with **no** SUT code changed — must be
@@ -370,6 +422,19 @@
   no Deep model). A gate that over-requires is as dishonest as one that under-requires.
   (See `harpyja/eval/locate_probe.py` `scout_stack_available` vs the Deep-oriented
   `_live_stack_available`, spec 0022.)
+- An **isolated eval probe that drives a tier OUTSIDE the production wrapper must tolerate
+  the SUT's typed degrade taxonomy — record a degrade as the honest floor outcome, never a
+  crash.** When a probe runs a tier directly (Scout only, no orchestrator), it does not get
+  the production degrade wrapper that floors a typed failure, so it must catch the tier's
+  own typed error and record the same "no usable citation" outcome the orchestrator would
+  (an EMPTY localization) — not propagate the raise and abort the run. This is load-bearing
+  when a backend swap CHANGES the failure posture: the FastContext backend returned
+  honest-empty on failure, but the explorer RAISES on turn/wall-clock exhaustion and
+  model-unreachable, so the isolated probe had to learn the explorer's `ScoutUnavailable`
+  taxonomy to keep the harness running end-to-end. Recording the degrade as the floor is
+  the SUT-faithful outcome, never a fabricated citation. (See `harpyja/eval/locate_probe.py`
+  `_run_scout_query` catching `ScoutUnavailable` → `normalize_citations([], None)`,
+  spec 0025 AC5/AC8.)
 - A diagnostic that must **route a failure to the right FIX kind scores at two
   granularities and makes the GAP a first-class metric** — the gap IS the
   discriminator, not a derived afterthought. Spec 0022 reports file-level accuracy

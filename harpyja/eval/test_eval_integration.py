@@ -26,7 +26,7 @@ from harpyja.eval.report import validate_report
 _LOOPBACK = "http://127.0.0.1:11434/v1"
 _DEEP_MODEL = "qwen2.5-coder:3b"
 _NEEDS_STACK = (
-    "requires FastContext + dspy + Deno + rg + a live endpoint with the Deep driver model"
+    "requires dspy + Deno + rg + a live endpoint with the Deep driver model"
 )
 _FIXTURE = Path(__file__).parent / "fixtures" / "legacy"
 
@@ -44,7 +44,6 @@ def _endpoint_reachable(api_base: str, timeout: float = 0.25) -> bool:
 def _live_stack_available() -> bool:
     try:
         import dspy  # noqa: F401
-        import fastcontext  # noqa: F401
     except ImportError:
         return False
     if shutil.which("deno") is None or shutil.which("rg") is None:

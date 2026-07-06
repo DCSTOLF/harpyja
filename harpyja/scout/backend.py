@@ -1,9 +1,10 @@
 """The Scout backend boundary (Tier 1).
 
 `ScoutBackend` is the narrow, swappable seam between Harpyja and whatever runs
-the exploratory model loop (FastContext is the first impl). Keeping it a Protocol
-means tests inject a fake with no live model, and the FastContext package/version
-question stays isolated behind this one interface.
+the exploratory model loop (`ExplorerBackend`, the native grep/glob/read +
+`submit_citations` loop, is the impl as of spec 0025). Keeping it a Protocol means
+tests inject a fake with no live model, and the model/runtime question stays
+isolated behind this one interface.
 """
 
 from __future__ import annotations
