@@ -342,3 +342,41 @@ def test_http_timeout_coerces_float_from_env_beats_toml(tmp_path, monkeypatch):
     s = load_settings(config_path=toml, repo_path=tmp_path)
     assert s.lm_http_timeout_s == 2.5
     assert isinstance(s.lm_http_timeout_s, float)
+
+
+# --- Spec 0024 (v2 explorer loop): new Scout loop budgets (T1/T2, AC4/AC5/AC2) ---
+
+
+def test_scout_loop_budgets_present_with_provisional_defaults():
+    # The explorer loop's turn/time/self-recovery/glob budgets are first-class
+    # Settings fields (provisional, flagged for the bake-off — OQ1/OQ3).
+    s = Settings()
+    assert s.scout_max_turns == 12
+    assert s.scout_wall_clock_s == 300.0
+    assert s.scout_loop_repeat_n == 2
+    assert s.scout_history_char_cap == 60000
+    assert s.scout_glob_max_paths == 400
+
+
+def test_scout_wall_clock_exceeds_per_call_http_timeout():
+    # The whole-loop wall-clock ceiling must sit strictly ABOVE the per-call HTTP
+    # timeout floor — turns and time are distinct budgets (AC4). A single slow call
+    # (bounded by lm_http_timeout_s) must be able to complete before the loop ceiling.
+    s = Settings()
+    assert s.scout_wall_clock_s > s.lm_http_timeout_s
+
+
+def test_scout_loop_budgets_coerce_from_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_SCOUT_MAX_TURNS", "20")
+    monkeypatch.setenv("HARPYJA_SCOUT_WALL_CLOCK_S", "450.5")
+    monkeypatch.setenv("HARPYJA_SCOUT_LOOP_REPEAT_N", "3")
+    monkeypatch.setenv("HARPYJA_SCOUT_HISTORY_CHAR_CAP", "80000")
+    monkeypatch.setenv("HARPYJA_SCOUT_GLOB_MAX_PATHS", "250")
+    s = load_settings(repo_path=tmp_path)
+    assert s.scout_max_turns == 20
+    assert isinstance(s.scout_max_turns, int)
+    assert s.scout_wall_clock_s == 450.5
+    assert isinstance(s.scout_wall_clock_s, float)
+    assert s.scout_loop_repeat_n == 3
+    assert s.scout_history_char_cap == 80000
+    assert s.scout_glob_max_paths == 250

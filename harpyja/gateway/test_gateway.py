@@ -121,6 +121,56 @@ def test_gateway_complete_rejects_resolved_non_loopback():
         )
 
 
+# --- Spec 0024 (v2 explorer loop): tool-calling completion (T9/T10, AC7) ---
+
+_TOOLS = [{"type": "function", "function": {"name": "grep", "parameters": {}}}]
+
+
+def test_complete_with_tools_returns_content_and_tool_calls():
+    tool_calls = [
+        {"id": "c1", "type": "function", "function": {"name": "grep", "arguments": '{"pattern": "x"}'}}
+    ]
+
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "", "tool_calls": tool_calls}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["tool_calls"] == tool_calls
+    assert out["content"] == ""
+
+
+def test_complete_with_tools_handles_message_without_tool_calls():
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["content"] == "done"
+    assert out["tool_calls"] == []
+
+
+def test_complete_with_tools_posts_tools_in_payload():
+    calls = []
+
+    def transport(url, payload):
+        calls.append(payload)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert calls[0]["tools"] == _TOOLS
+
+
+def test_complete_with_tools_asserts_local_before_transport():
+    def transport(url, payload):  # pragma: no cover - must never run
+        raise AssertionError("transport called for a non-loopback endpoint")
+
+    gw = ModelGateway(api_base="http://8.8.8.8:11434/v1")
+    with pytest.raises(AirGapError):
+        gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+
+
 # --- Spec 0017 (B3): gateway HTTP timeout (AC2, AC3, AC7) ---
 
 import json  # noqa: E402

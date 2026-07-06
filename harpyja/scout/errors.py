@@ -23,6 +23,14 @@ BACKEND_ERROR = "backend-error"
 # is absent AND `fastcontext` is not on PATH (the four-way split stays distinct).
 FASTCONTEXT_MISSING = "fastcontext-missing"
 CLI_MISSING = "cli-missing"
+# Spec 0024 (v2 explorer loop) — the native-loop degrade causes. Each is a distinct
+# terminal state of the explorer loop; all route to the Tier-0 floor via the
+# unchanged orchestrator degrade path. `model-unreachable` is the transport/OS
+# failure reaching the local endpoint; the two `loop-*-exhausted` causes distinguish
+# a turn-cap stop from a wall-clock-ceiling stop (both with no citation).
+MODEL_UNREACHABLE = "model-unreachable"
+LOOP_TURNS_EXHAUSTED = "loop-turns-exhausted"
+LOOP_WALLCLOCK_EXHAUSTED = "loop-wallclock-exhausted"
 
 
 class ScoutUnavailable(RuntimeError):

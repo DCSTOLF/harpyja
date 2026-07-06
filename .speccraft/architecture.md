@@ -59,7 +59,10 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    extraction: `classify.KNOWN_LANGUAGES == indexer.SYMBOL_LANGUAGES`
    (`index/test_routing.py`), so a language is never routed ahead of its rules.
    Remaining symbol follow-up: **Wave-2.1 substring/fuzzy matching**.
-5. `harpyja/scout/` — FastContext adapter (Tier 1). Live as of Wave 3: `ScoutBackend`
+5. `harpyja/scout/` — Tier 1 finder. **As of spec 0024 the production backend is the
+   native `ExplorerBackend` (below); the FastContext adapter described here remains
+   in-tree but OFF the production path, pending a dedicated cleanup spec.** Live as of
+   Wave 3: `ScoutBackend`
    Protocol (`run(query, seed) -> list[CodeSpan]`) + `ScoutEngine` (self-seeds its own
    Tier-0 lookup **before** the backend, behind the shared `Locator` `.search` seam) +
    `normalize_spans` (drops/clamps untrusted `<final_answer>` output to the Scout budgets)
@@ -114,6 +117,44 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `recovered_paths_out` out-param. `build_scout_engine` loads the set via
    `read_manifest(art_dir)` and threads it as `ScoutEngine(file_set=…)`; `ScoutTally`
    gained `recovered_spanned` / `recovered_filelevel` / `recovered_filelevel_paths`.
+
+   **As of spec 0024 the FastContext backend is RETIRED and REPLACED by the
+   self-contained native `ExplorerBackend`, behind the byte-unchanged `ScoutBackend`/
+   `ScoutEngine`/`Locator` seam** (orchestrator, gate, matrix, formatter, `engine.py`,
+   `normalize.py` all untouched). A general OpenAI-compatible tool-calling model is
+   driven over a bounded read-only loop to a citation list: `context_map.build_context_map`
+   renders a pre-model filtered tree from the manifest (no file bytes; the
+   vendor/test/generated exclusion is a DISPLAY concern only, tool scope unaffected);
+   `explorer_tools.build_explorer_tools` returns EXACTLY three `confine_path`-guarded,
+   Settings-bounded, read-only navigation closures `{grep, glob, read_span}` mirroring
+   `deep/host_tools.build_host_tools` — `grep`/`glob` share the SAME `symbols.ripgrep.RipgrepEngine`
+   the Deep `search` tool wraps (one bounded rg source of truth), `read_span` reuses
+   `server.tools.read_snippet`, `glob` normalizes to file-level `CodeSpan`s bounded by
+   `scout_glob_max_paths`; `explorer_loop.run_explorer_loop` runs one tool call/turn
+   capped by `scout_max_turns` AND a distinct whole-loop `scout_wall_clock_s` ceiling,
+   with deterministic self-recovery (loop-detection on an exact
+   `(tool_name, normalized_args)` repeat over `scout_loop_repeat_n` no-new-span turns;
+   citation-preserving truncation past `scout_history_char_cap` that drops only stale
+   chatter and re-injects a compact dropped-span index — never converting a real find
+   to honest-empty); the loop ends via `submit.submit_citations`, a tool-call-native
+   terminal action with a STRICT arg schema (`SubmitCitationsSchemaError` on
+   unknown/extra/diagnosis-shaped fields — the enforceable locator-not-diagnoser guard)
+   normalized via the unchanged `normalize_spans` to `source_tier=1` (this REPLACES the
+   0011/0012 `<final_answer>` text-grammar parse path). Model I/O goes through the NEW
+   `ModelGateway.complete_with_tools`; `ExplorerBackend` calls `gateway.assert_local()`
+   once before the loop starts (air-gap before any I/O), and the gateway asserts loopback
+   before its transport. Degradable terminal states carry four distinct
+   `ScoutUnavailable` causes — `model-unreachable` / `loop-turns-exhausted` /
+   `loop-wallclock-exhausted` / reused `backend-error` — routed to the Tier-0 floor
+   (a well-formed empty submission is honest-empty, never a raise; `AirGapError` /
+   `RipgrepMissingError` propagate as floors), with the degrade rate a first-class
+   reported field. `wiring.build_explorer_scout_engine` is the NEW production
+   `scout_factory` (ExplorerBackend over the loopback gateway + shared `RipgrepEngine`
+   + context map + explorer tools + the five provisional loop budgets); the FastContext
+   `build_scout_engine` factory and its eval callers are left byte-untouched — a PARALLEL
+   factory, so the backend swap and the deferred FastContext deletion do not entangle in
+   one diff. Live-green: both integration tests pass against Qwen3-8B on loopback Ollama
+   (~28s, zero non-loopback egress). See history.md 2026-07-06 (spec 0024).
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -148,6 +189,11 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    forever**, and the Verification Gate turns that raise into a graceful, timeout-named degrade
    (`gate.py` branches `TimeoutError`/`socket.timeout`/`URLError` to a distinct WARNING, no
    schema change). See history.md 2026-07-01 (spec 0017).
+   As of spec 0024 a second gateway method, `ModelGateway.complete_with_tools(messages,
+   tools, *, transport, resolver, **params)`, returns `{content, tool_calls}` from
+   `choices[0].message` for tool-calling models (the Scout explorer loop) — same single
+   outbound abstraction, `assert_local` asserted BEFORE the transport, injectable
+   transport exactly like `complete`.
 8. `harpyja/config/` — settings load/merge, profiles.
 9. `harpyja/eval/` — **measurement harness, not a runtime tier** (a request never
    touches it). Live as of Wave 6a (spec 0009-6a): observes the real `mode=auto`
@@ -359,7 +405,12 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   search/locate only (not `index`); a missing/erroring parser, by contrast, degrades
   gracefully (`grammar-missing` / `parse-error`) — symbols are an enhancement, not a
   precondition. See history.md 2026-06-26.
-- Tier 1 (Scout) is live and additive on the Tier-0 floor. **As of Wave 5 (spec 0008)
+- Tier 1 (Scout) is live and additive on the Tier-0 floor. **As of spec 0024 the
+  production Tier-1 backend is the native `ExplorerBackend` (a general tool-calling
+  model over three read-only tools to a `submit_citations` terminal action), which
+  RETIRED and replaced the FastContext adapter described below; the FastContext code
+  remains in-tree but off the production path — see history.md 2026-07-06 (spec 0024).**
+  **As of Wave 5 (spec 0008)
   `mode=auto` climbs** (the Wave-3 "auto byte-identical / zero Gateway calls" statement
   is **superseded**): a point query runs seed → Scout → gate → maybe Deep, and the gate
   decides whether Tier-2 is spent (gated-pass `[0,1]`/`[1]`, escalated

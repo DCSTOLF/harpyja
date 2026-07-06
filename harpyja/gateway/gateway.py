@@ -157,3 +157,37 @@ class ModelGateway:
         payload: dict[str, Any] = {"model": self.model, "messages": list(messages), **params}
         response = send(url, payload)
         return response["choices"][0]["message"]["content"]
+
+    def complete_with_tools(
+        self,
+        messages: Sequence[dict[str, Any]],
+        tools: Sequence[dict[str, Any]],
+        *,
+        transport: Transport | None = None,
+        resolver: Resolver | None = None,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """Run a tool-calling chat completion; return ``{content, tool_calls}``.
+
+        Spec 0024: the explorer loop needs the model's ``tool_calls`` back, not
+        just message content. Like :meth:`complete`, ``assert_local`` runs BEFORE
+        the transport is touched, so a non-loopback endpoint raises
+        :class:`AirGapError` and nothing is ever sent — the gateway stays the one
+        outbound caller and the single air-gap enforcement point. ``tool_calls`` is
+        normalized to a list (``[]`` when the model returned a plain message).
+        """
+        self.assert_local(resolver=resolver)
+        send = transport or functools.partial(_default_transport, timeout_s=self.timeout_s)
+        url = urljoin(self.api_base.rstrip("/") + "/", "chat/completions")
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": list(messages),
+            "tools": list(tools),
+            **params,
+        }
+        response = send(url, payload)
+        message = response["choices"][0]["message"]
+        return {
+            "content": message.get("content") or "",
+            "tool_calls": message.get("tool_calls") or [],
+        }

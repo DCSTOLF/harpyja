@@ -83,3 +83,57 @@ def test_build_scout_engine_threads_http_timeout(tmp_path, monkeypatch):
         Settings(lm_http_timeout_s=7.5), str(tmp_path), agent_factory=lambda **kw: None
     )
     assert captured.get("timeout_s") == 7.5
+
+
+# --- Spec 0024 (v2): the native explorer-loop production factory (T19/T20, AC1) ---
+#
+# Deviation from the plan's "swap in place": `build_scout_engine` (FastContext) is
+# LEFT INTACT — its only caller is the eval harness driving the old SUT, and the
+# spec defers FastContext removal to a dedicated cleanup so the two aren't
+# entangled. `build_explorer_scout_engine` is the NEW production factory that wires
+# `ExplorerBackend` behind the unchanged `ScoutEngine`/DI seam.
+
+
+def test_build_explorer_scout_engine_wires_explorer_backend(tmp_path):
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    from harpyja.gateway.gateway import ModelGateway
+    from harpyja.scout.engine import ScoutEngine
+    from harpyja.scout.explorer_backend import ExplorerBackend
+    from harpyja.scout.wiring import build_explorer_scout_engine
+    from harpyja.symbols.ripgrep import RipgrepEngine
+
+    engine = build_explorer_scout_engine(Settings(), str(tmp_path))
+    assert isinstance(engine, ScoutEngine)
+    assert isinstance(engine._backend, ExplorerBackend)
+    # The backend's search tool is the SHARED RipgrepEngine (spec invariant B), and
+    # its gateway is the loopback ModelGateway — no model touched at build time.
+    assert isinstance(engine._backend._search_engine, RipgrepEngine)
+    assert isinstance(engine._backend._gateway, ModelGateway)
+
+
+def test_build_explorer_scout_engine_threads_loop_budgets_and_manifest(tmp_path):
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    from harpyja.scout.wiring import build_explorer_scout_engine
+
+    settings = Settings(scout_max_turns=17)
+    engine = build_explorer_scout_engine(settings, str(tmp_path))
+    # Loop budgets reach the backend, and the manifest is threaded for the context map.
+    assert engine._backend._settings.scout_max_turns == 17
+    assert any(e.path == "auth.py" for e in engine._backend._manifest)
+    assert engine._file_set is not None and "auth.py" in engine._file_set
+
+
+def test_build_explorer_scout_engine_threads_http_timeout(tmp_path, monkeypatch):
+    (tmp_path / "auth.py").write_text("def handler():\n    return 1\n", encoding="utf-8")
+    import harpyja.scout.wiring as wiring
+    from harpyja.gateway.gateway import ModelGateway as _RealGateway
+
+    captured: dict = {}
+
+    def _spy(**kwargs):
+        captured.update(kwargs)
+        return _RealGateway(**kwargs)
+
+    monkeypatch.setattr(wiring, "ModelGateway", _spy)
+    wiring.build_explorer_scout_engine(Settings(lm_http_timeout_s=7.5), str(tmp_path))
+    assert captured.get("timeout_s") == 7.5

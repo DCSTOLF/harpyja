@@ -93,6 +93,32 @@ class Settings:
     scout_temperature: str = "0"
     scout_reasoning_effort: str = "none"
 
+    # Spec 0024 (v2 explorer loop) — the native explorer-loop budgets. ALL are
+    # PROVISIONAL and flagged for tuning in the later model bake-off (OQ1/OQ3);
+    # they are one-line tunes, never a code fork.
+    # `scout_max_turns` — the loop's turn cap. A general (non-fine-tuned) tool-
+    # calling model needs more turns to localize than the retired FastContext
+    # finder's `_DEFAULT_MAX_TURNS=6`, so this starts higher (OQ1).
+    scout_max_turns: int = 12
+    # `scout_wall_clock_s` — the WHOLE-LOOP wall-clock ceiling (AC4). Distinct from
+    # and strictly above `lm_http_timeout_s` (the per-CALL floor): one slow turn is
+    # bounded by the HTTP timeout, and this ceiling stops a sequence of slow turns
+    # (or a wedged model) from running unbounded. Turns ≠ time for a general model.
+    scout_wall_clock_s: float = 300.0
+    # `scout_loop_repeat_n` — loop-detection sensitivity (AC5): an exact
+    # (tool_name, normalized_args) call repeated for this many consecutive turns
+    # WITHOUT adding new spans to history triggers a corrective injection (OQ3).
+    scout_loop_repeat_n: int = 2
+    # `scout_history_char_cap` — the context-management bloat threshold (AC5):
+    # history exceeding this character budget triggers citation-preserving
+    # truncation (stale navigational chatter only; citable observations survive
+    # via a re-injected dropped-span index) (OQ3).
+    scout_history_char_cap: int = 60000
+    # `scout_glob_max_paths` — the `glob` navigation tool's output bound (AC2),
+    # parallel to `search_max_matches` for `grep`; glob returns file records so it
+    # is bounded independently.
+    scout_glob_max_paths: int = 400
+
     # Spec 0008 (Wave 5) — Verification Gate (additive, appended last).
     # `verify_method` selects the scoring backend; `verify_threshold` is the pass
     # cutoff on a normalized [0,1] score and `verify_top_n` bounds how many ranked

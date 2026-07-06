@@ -23,6 +23,7 @@ from harpyja.index.indexer import index_repo
 from harpyja.index.manifest import read_manifest
 from harpyja.scout.client import AgentFactory, CliRunner, DefaultFastContextClient
 from harpyja.scout.engine import ScoutEngine
+from harpyja.scout.explorer_backend import ExplorerBackend
 from harpyja.scout.fastcontext import FastContextBackend
 from harpyja.symbols.engine_identity import engine_identity
 from harpyja.symbols.ripgrep import RipgrepEngine
@@ -73,3 +74,52 @@ def build_scout_engine(
         grep=None,
     )
     return ScoutEngine(backend, seed_fn, settings, repo_path, file_set=file_set)
+
+
+def build_explorer_scout_engine(
+    settings: Settings,
+    repo_path: str,
+    *,
+    model_call: object | None = None,
+    gateway: ModelGateway | None = None,
+) -> ScoutEngine:
+    """Assemble a live `ScoutEngine` backed by the native explorer loop (spec 0024).
+
+    The NEW production `scout_factory`: it wires `ExplorerBackend` behind the same
+    unchanged `ScoutEngine`/DI seam the FastContext factory uses. Deliberately does
+    NOT touch `build_scout_engine` (whose only remaining caller is the eval harness
+    driving the retired SUT) — FastContext deletion is a separate, later cleanup so
+    the two changes are not entangled in one diff.
+
+    - `gateway` is the single outbound abstraction, loopback-enforced and carrying
+      the spec-0017 HTTP timeout; the air-gap is asserted inside `ExplorerBackend`
+      before any model I/O.
+    - `search_engine` is the SHARED `RipgrepEngine` (spec invariant B — one bounded
+      ripgrep source of truth, the same engine Tier-0 and Deep's `search` use).
+    - the manifest entries feed the pre-model context map (no file bytes); the
+      repo-relative file set is threaded for `ScoutEngine`'s suffix recovery.
+    - `model_call` is an optional injected fake for tests; production leaves it
+      `None` so the loop drives the gateway's tool-calling completion.
+    """
+    art_dir = resolve_artifact_dir(repo_path, settings)
+    index_repo(repo_path, settings, artifact_dir=art_dir)  # ensure the index exists
+    manifest = read_manifest(art_dir)
+    file_set = frozenset(e.path for e in manifest)
+
+    gw = gateway or ModelGateway(
+        api_base=settings.lm_api_base,
+        allow_remote=settings.allow_remote,
+        timeout_s=settings.lm_http_timeout_s,
+    )
+    ripgrep = RipgrepEngine(settings)
+    backend = ExplorerBackend(
+        gateway=gw,
+        repo_path=repo_path,
+        settings=settings,
+        manifest=manifest,
+        search_engine=ripgrep,
+        model_call=model_call,
+    )
+    # The explorer loop self-explores from the context map + tools, so no Tier-0
+    # warm seed is threaded (a no-op seed_fn keeps the ScoutEngine contract).
+    return ScoutEngine(backend, lambda _q: [], settings, repo_path, file_set=file_set)

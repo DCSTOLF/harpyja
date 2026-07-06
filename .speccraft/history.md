@@ -2,6 +2,88 @@
 
 Append-only. Newest first.
 
+## 2026-07-06 — **Spec 0024-v2 (Scout v2) RETIRED the FastContext Tier-1 backend and REPLACED it with a self-contained native `ExplorerBackend` Harpyja owns end-to-end — a general OpenAI-compatible tool-calling model driven over exactly three read-only tools (grep/glob/read_span) to a tool-call-native `submit_citations` terminal action, behind the UNCHANGED `ScoutBackend` seam; bounded loop + citation-preserving truncation + air-gap-before-loop, four typed degrade causes; unit-complete AND live-green (Qwen3-8B, ~28s, zero non-loopback egress); FastContext adapter LEFT in-tree off the production path pending a dedicated cleanup**
+
+**Spec:** specs/0024-v2/
+**Decision:** Retire the FastContext-backed Scout — the upstream 4B model was
+retracted and is unobtainable, its only surviving artifacts lossy/broken
+quantizations (an unshippable dependency, independent of the 0020–0023
+localization-quality finding) — and replace it with a native explorer loop behind
+the byte-unchanged `ScoutBackend`/`ScoutEngine`/`Locator` seam (the orchestrator,
+gate, matrix, formatter, `engine.py`, `normalize.py`, Locator boundary all
+untouched; unit tests keep driving fakes). Construction, not measurement: a new
+`ExplorerBackend` assembles four new modules over the existing machinery and swaps
+in via a NEW production factory. Load-bearing points. (1) **Scout stays a locator,
+not a diagnoser, and that guard is now ENFORCEABLE in the type, not a soft check.**
+The loop ends by calling a dedicated `submit_citations` terminal tool with
+STRUCTURED citation args validated under a STRICT schema (unknown/extra/
+diagnosis-shaped fields → `SubmitCitationsSchemaError`), normalized via the
+unchanged `normalize_spans` to repo-confined, clamped `source_tier=1` CodeSpans —
+malformed/out-of-repo/over-budget refs dropped, empty an honest-empty `[]`. This
+resolves OQ2: it REPLACES the inherited 0011/0012 `<final_answer>` text-grammar
+parse path — structured args over regexing prose, killing the exact text-parsing
+fragility class behind three of the FastContext era's worst bugs; a
+diagnosis-shaped field failing schema is the enforceable form of the
+locator-not-diagnoser boundary. (2) **Untrusted-caller boundary, mirroring the
+Deep host tools.** `build_explorer_tools` returns EXACTLY `{grep, glob, read_span}`
+— each `confine_path`-guarded, Settings-bounded, READ-ONLY closures, no
+shell/write/terminal; the count is asserted so a weak model cannot motivate
+tool-suite creep (a weak-model result is a finding, not a bug). `grep`/`glob`
+share ONE bounded `RipgrepEngine` with the Deep `search` host tool (invariant B —
+single source of truth for bounds and repo-confinement, never a second drifting rg
+surface); `read_span` reuses `server.tools.read_snippet`; `glob` normalizes to
+file-level `CodeSpan` records. The pre-model context map is built from the manifest
+(filtered tree, no file bytes), and its vendor/test/generated exclusion is a
+DISPLAY concern ONLY — an excluded test/vendor file stays reachable via the tools
+(map-filter ≠ tool-scope filter). (3) **Bounded loop + self-recovery.** One tool
+call/turn, raw output appended, capped at `scout_max_turns` AND a distinct
+whole-loop `scout_wall_clock_s` ceiling (turns ≠ time for a general model; the
+gateway `lm_http_timeout_s` is the per-CALL floor, the ceiling stops one slow turn
+wedging the run). Two deterministic recoveries: loop-detection on an exact
+`(tool_name, normalized_args)` repeat over `scout_loop_repeat_n` consecutive
+no-new-span turns → corrective injection; and CITATION-PRESERVING truncation past
+`scout_history_char_cap` — it drops ONLY stale navigational chatter, NEVER a
+`read_span`/`grep` observation whose location could still be cited, re-injecting a
+compact dropped-span index if recency-capping forces dropping the raw text. The
+binding invariant — truncation must never convert a real find into honest-empty —
+is proved by the negative (AC5 preservation case), not merely that truncation
+fires. (4) **Air-gap in the one helper, before any I/O.** A NEW
+`ModelGateway.complete_with_tools` (returning `{content, tool_calls}` from
+`choices[0].message`) routes through `assert_local` BEFORE the transport, and
+`ExplorerBackend` calls `assert_local()` once before the loop starts — a
+non-loopback endpoint raises `AirGapError` and the loop never starts. The gateway
+stays the only outbound caller; AC10 OBSERVES zero non-loopback egress via the
+shared `_deny_nonloopback_egress` harness from the 0007/0014 air-gap tests. (5)
+**Typed degrade UNCHANGED in posture, extended in vocabulary.** Four distinct
+stable causes — `MODEL_UNREACHABLE`, `LOOP_TURNS_EXHAUSTED`,
+`LOOP_WALLCLOCK_EXHAUSTED`, and reused `BACKEND_ERROR` — each a terminal loop state
+routed to the Tier-0 floor; a well-formed empty `submit_citations` is honest-empty
+(never a raise); `AirGapError`/`RipgrepMissingError` propagate as floors; degrade
+rate stays a first-class reported field (the "every floor reports its rate"
+convention). Five NEW provisional `Settings` budgets (`scout_max_turns=12`,
+`scout_wall_clock_s=300.0`, `scout_loop_repeat_n=2`, `scout_history_char_cap=60000`,
+`scout_glob_max_paths=400`), each docstring-justified and FLAGGED for the bake-off
+(OQ1/OQ3) — a general model needs more turns than FastContext's old `=6`.
+**Why:** an unmaintainable retracted dependency is unshippable regardless of its
+retrieval quality; owning the loop end-to-end also removes the buggy third-party
+harness confound that made prior model tests uninterpretable, yielding a clean,
+model-AGNOSTIC rig (any OpenAI-compatible tool-calling model via the gateway) for
+the later bake-off.
+**Deviation:** the swap ships as a PARALLEL factory
+`wiring.build_explorer_scout_engine` (ExplorerBackend), NOT an in-place swap of
+`build_scout_engine`; the FastContext factory and its eval callers are left
+byte-untouched. Deleting the FastContext adapter/dependency is a DEFERRED cleanup
+spec — the parallel factory keeps the backend swap and the removal from entangling
+in one diff and lets the new backend be proven first.
+**Consequence:** Tier 1 is now the native explorer loop; the FastContext adapter
+remains in-tree but OFF the production path. Result: unit-complete (all 10 ACs) and
+LIVE-GREEN — both integration tests passed against Qwen3-8B on loopback Ollama
+(~28s, zero non-loopback egress); full suite 1015 passed / 23 skipped, ruff clean.
+**Out-of-scope staged follow-ups (recorded):** the AST symbol-search tool
+(Tier-0-as-a-tool, the minimal-tools baseline's staged second round); the model
+bake-off (OQ1/OQ3 budget tuning); the representative eval set; and the FastContext
+code + dependency deletion (which closes the parallel-factory deviation).
+
 ## 2026-07-05 — **Spec 0023 OPERATOR RUN — fired the benchmark-fit reformulation probe on REAL SWE-bench long-issue text (FastContext-4B, no instrument change): formal `HOLD_INCONCLUSIVE`, but QUERY_SHAPE FALSIFIED and 0022's `RETRIEVAL_FUNDAMENTAL` corroborated → next spec is FINDER-CAPABILITY, not a reformulation/benchmark layer**
 
 **Artifact:** specs/.archive/0023-benchmark-fit/operator-run-findings.md (self-contained,
