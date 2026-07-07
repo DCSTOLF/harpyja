@@ -26,6 +26,11 @@ BACKEND_ERROR = "backend-error"
 MODEL_UNREACHABLE = "model-unreachable"
 LOOP_TURNS_EXHAUSTED = "loop-turns-exhausted"
 LOOP_WALLCLOCK_EXHAUSTED = "loop-wallclock-exhausted"
+# Spec 0028 (AC3) — the fifth explorer cause: a max_tokens-capped generation ended
+# `finish=length` (truncated mid-generation) without a usable turn. Distinct from
+# `model-unreachable` (transport) and the loop-exhaustion causes; a capped runaway
+# is a degrade, never silently swallowed as an empty turn.
+GENERATION_TRUNCATED = "generation-truncated"
 
 
 class ScoutUnavailable(RuntimeError):

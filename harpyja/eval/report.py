@@ -32,7 +32,7 @@ from pathlib import Path
 # Spec 0026 bumps 0025/1 -> 0026/1: additive run_metadata `representativeness_caveat`
 # (the terse-query eval set travels its scope with every result). Legacy blocks still
 # validate via _RUN_METADATA_DEFAULTS.
-SCHEMA_VERSION = "0027/1"
+SCHEMA_VERSION = "0028/1"
 
 # spec 0026 (AC7): the pinned scope caveat for the terse-query ranking instrument —
 # fixes the QUERY-SHAPE axis, NOT codebase-character (documented OSS, Python
@@ -157,6 +157,8 @@ _AGGREGATE_FIELDS = (
     "scout_degrade_backend_error_count",
     "scout_degrade_loop_turns_exhausted_count",
     "scout_degrade_loop_wallclock_exhausted_count",
+    # spec 0028 (AC3) — additive fifth cause: a max_tokens-capped truncation.
+    "scout_degrade_generation_truncated_count",
 )
 
 # Schema-stable defaults for the additive fields, injected by build_report when a
@@ -212,6 +214,9 @@ _AGGREGATE_DEFAULTS = {
     "scout_degrade_backend_error_count": 0,
     "scout_degrade_loop_turns_exhausted_count": 0,
     "scout_degrade_loop_wallclock_exhausted_count": 0,
+    # spec 0028 (AC3) — the fifth cause; default 0 so a legacy 0027 block still
+    # validates after the bump.
+    "scout_degrade_generation_truncated_count": 0,
 }
 
 

@@ -2,6 +2,107 @@
 
 Append-only. Newest first.
 
+## 2026-07-07 — **Spec 0028 (generation-control) BOUNDED the explorer's per-call generation and made truncation DIAGNOSABLE — surfaced `finish_reason` additively from the Model Gateway (AC0), capped generation at `explorer_max_tokens=2048` with the DRIFT-GUARD on the explorer-owned object (AC2), added the `explorer_enable_thinking` knob via `chat_template_kwargs` (NOT `/no_think`) (AC1), and typed `finish=length` as the FIFTH explorer cause `scout-degraded:generation-truncated` REGARDLESS of a riding tool_call (AC3, `SCHEMA_VERSION 0027/1 → 0028/1`), Deep byte-untouched by `explorer_`-prefix scope (AC8); generation control PROVEN (AC4 first call `finish=tool_calls` ~2s LIVE, units 1046 pass, ruff clean) — but AC5 localization HELD AGAIN, its blocker RE-POINTED from the now-FIXED unbounded generation to a NEW distinct downstream defect: the explorer loop echoes N parallel `tool_calls` (measured N=4) but answers only `tool_calls[0]`, leaving N−1 unanswered → malformed conversation → turn-2 runaway the cap correctly catches as `generation-truncated`. FOURTH consecutive genuine downstream layer; generation control PROVEN, drive-to-citation STILL UNPROVEN, now gated on parallel-tool-call handling**
+
+**Spec:** specs/0028-generation-control/
+**Decision:** Spec 0027 proved the explorer is cheap-prompt but left AC5 (does the model
+actually localize?) a HOLD: on the served 16B stack both gold cases degraded
+`model-unreachable` @~300s with `turns_used=None` — the model NEVER FINISHED GENERATING
+turn 1 because generation was UNBOUNDED (no `max_tokens` cap), and `model-unreachable ≠
+can't-localize` (the degrade-masks-outcome trap). This spec bounds the explorer's per-call
+generation so a first response completes in seconds, and — critically — makes any remaining
+runaway DIAGNOSABLE. Five shipped pieces, in dependency order. (0) **`finish_reason` surfaced
+additively (AC0 — the load-bearing FOUNDATION).** `ModelGateway.complete_with_tools` now
+returns `{content, tool_calls, finish_reason}`, read from `choices[0].finish_reason` (the
+CHOICE, not the message), `str`-cast when present and defaulting to the exact sentinel
+`"unknown"` when absent; backward-additive (the two existing keys unchanged), pinned by unit
+tests. This is what made the AC5 blocker below DIAGNOSABLE where 0027 saw only a masked hang —
+a downstream degrade cannot be TYPED without it. (1) **`explorer_max_tokens=2048` — the PRIMARY
+anti-runaway lever (AC2).** A `Settings` field (additive-last, env-coerced) threaded into the
+explorer's per-call `complete_with_tools`; per the DRIFT-GUARD convention the finite cap ALSO
+lives on the explorer-owned constructed object's own field default (`ExplorerBackend.max_tokens
+= 2048`, pinned by a field-default introspection test), so a `Settings`-bypassing construction
+is still bounded. **`ModelGateway` stays purely param-driven (NO `max_tokens` default of its
+own)**, so the Deep-tier path (which calls the gateway without `explorer_max_tokens`) is never
+capped. (2) **`explorer_enable_thinking` thinking knob (AC1 — the KNOB, not a mandate).** A
+`Settings` bool; when False the explorer's gateway call carries request param
+`chat_template_kwargs={"enable_thinking": false}`, when True the param is OMITTED — the inferior
+`/no_think` query token (measured 43s, template-perturbing) is REJECTED, never a fallback.
+Bidirectional unit test; shipped provisional default `True` (AC6 deferral below). (3)
+**`generation-truncated` — the FIFTH explorer degrade cause (AC3).** A `finish_reason ==
+"length"` turn is a typed degrade emitting the stable cause `scout-degraded:generation-truncated`
+— **REGARDLESS of whether a syntactically valid `tool_call` rode along** (a length-truncated
+response was cut off mid-generation; its tool-call args may be silently incomplete, and
+accepting it would mask cap pressure per AC7). Plumbed through the whole chain:
+`explorer_loop.GENERATION_TRUNCATED` (checked right after the model call, before any tool
+dispatch) → `errors.GENERATION_TRUNCATED` → `ExplorerBackend._EXHAUSTION_CAUSE` → runner
+`_SCOUT_NATIVE_CAUSES` + a DISTINCT `scout_degrade_generation_truncated_count` → report field +
+`_AGGREGATE_DEFAULTS`; `report.SCHEMA_VERSION 0027/1 → 0028/1` (legacy blocks still validate).
+(4) **Explorer scope enforced by construction (AC8).** The knobs are `explorer_`-prefixed and
+passed ONLY by the explorer's `_default_model_call`; a NEW `harpyja/deep/test_rlm.py` guard
+asserts the Deep-tier outbound call carries NEITHER the cap NOR
+`chat_template_kwargs.enable_thinking` (asserting on the actual outbound fields, not the absence
+of the Settings names) — it PASSES on introduction and ROTS FALSE on any future leak. AC4 is
+PROVEN LIVE: a first explorer call returns a well-formed non-truncated `finish=tool_calls` in
+~2s (1.9–2.6s across caps 2048–16384, both thinking modes), far inside ≤30s — the 0027 "never
+finishes turn 1" symptom is GONE.
+**Why:** the recurring project lesson — a degrade that masks an outcome silently reads as a
+capability finding — applied at the generation layer: the 0027 unbounded-generation hang was
+masked as `model-unreachable`; a `max_tokens` cap bounds it AND, paired with a surfaced
+`finish_reason`, converts the hang into a fast, precisely-attributed `generation-truncated`
+degrade instead of a phantom "not found." Generation control is a BLOCKING PREREQUISITE 0027
+named — it GATES the 0026 pilot re-run, the model bake-off, and any localization measurement.
+**AC5 HOLD — RE-POINTED from a FIXED cause to a NEW, precise one.** The 0027 blocker (unbounded
+generation, masked `model-unreachable`) is FIXED. But the live AC5 run surfaced a SECOND,
+distinct downstream blocker, and the new AC0+AC3 machinery diagnosed it precisely: on turn 1 the
+model emits **N parallel `tool_calls`** (measured N=4); the explorer loop echoes ALL N into the
+assistant message but processes and answers only `tool_calls[0]`, leaving **N−1 `tool_calls`
+with no matching `tool` response** — malformed per the OpenAI tool protocol, derailing the model
+into a turn-2 runaway the cap then correctly catches as `generation-truncated`. Controlled
+turn-2 diagnostic (same cap 4096, thinking off, only the assistant message shape differs): FULL
+echo (all 4 tool_calls, 1 answered) → `finish=length` runaway 101.4s; TRIMMED to the answered
+call → `finish=tool_calls` clean 0.8s. **`generation-truncated` here ≠ "can't localize"** — the
+SAME degrade-masks-outcome trap the 0026 RCA and 0027 close both flag. `test_harness_live.py`'s
+AC5 case stays `xfail` (non-strict), its reason RE-POINTED from "unbounded generation" to name
+the exact mechanism (parallel-tool-call echo mismatch → turn-2 runaway), so the follow-up starts
+from the diagnosis, not a re-investigation; it flips to xpass when the loop echo is well-formed.
+**AC6 lever choice DEFERRED (with data):** the thinking-vs-thinking comparison against AC5
+localization QUALITY is not yet MEASURABLE (the parallel-tool-call blocker truncates every run
+regardless of thinking mode); first-call latency is ~2s both ways (thinking-on marginally
+faster), so the provisional `explorer_enable_thinking=True` shipped and the knob makes a later
+flip a one-liner. **AC7 cap validated against BOTH bounds:** upper (runaway) bounded (2048 → 52s
+degrade; 8192 → 237s degrade — a bigger cap is SLOWER truncation, not a completion); turn-budget
+headroom ample (a well-formed turn completes far under 2048 — first call ~2s, TRIMMED turn-2
+0.8s, room for a multi-span `submit_citations`); `N=10` inherited unchanged from 0026/0027.
+**OPEN DESIGN QUESTION for the follow-up — NOT a foregone 1-liner:** (A) **trim-to-answered** —
+echo only the `tool_calls[0]` the loop processes; minimal and well-formed, but discards the N−1
+proposed calls each turn so the model must re-propose them, spending more turns against the
+`N=10` budget (turn-budget pressure — the exact degrade-masks-outcome axis AC7 guards); vs (B)
+**answer-all-N** — dispatch every parallel `tool_call` and append a `tool` response for each
+(OpenAI-correct, uses the model's parallelism for fewer turns), but a larger blast radius on the
+0024 loop invariants (one-dispatch-per-turn → N-per-turn, reordered loop-detection/truncation
+bookkeeping). The turn-budget tradeoff is the crux; the follow-up decides it against
+localization quality once measurable, not by default.
+**Consequence — generation control is PROVEN; drive-to-citation is STILL UNPROVEN.** This is the
+FOURTH consecutive real downstream layer peeled between the project and its first PROVEN
+localization, each a distinct genuine defect — the layered-RCA process WORKING, not failure:
+(0026) terse-query instrument built but the AC8 pilot could not measure (`UNDER_POWERED_STOP`,
+general candidates under-power terse ranking); (0027) eager whole-repo context-map bloat removed
+(~170× payload cut, proven), AC5 HELD on unbounded generation masked as `model-unreachable`;
+(0028, this spec) generation control proven (cap bounds runaway, `finish_reason` surfaced,
+`generation-truncated` typed, AC4 ~2s live), AC5 HELD AGAIN on the parallel-tool-call echo
+mismatch. **AC5 (drive-to-citation) has now been a recorded HOLD across 0027 → 0028**, each time
+by a DIFFERENT, correctly-attributed downstream cause. Units 1046 pass, ruff clean; AC4 pass
+live, AC5 xfail. Report `SCHEMA_VERSION 0028/1`; the explorer degrade taxonomy is now FIVE
+causes.
+**Named blocking follow-up (the BLOCKING PREREQUISITE):** a spec that makes the explorer loop's
+assistant echo well-formed (decide (A) trim-to-answered vs (B) answer-all-N above). It is the
+BLOCKING PREREQUISITE for AC5 localization, the 0026 pilot re-run, AND the model bake-off — the
+harness now bounds AND diagnoses runaway cleanly, but cannot yet DRIVE the model to a citation
+until the turn-2 conversation is well-formed. First evidence recorded: TRIMMED turn-2 = 0.8s
+clean vs FULL = 101.4s runaway. Standing follow-ups unchanged: the Tier-0 AST symbol tool; a
+total-request wall-clock deadline (0017-caveat). See specs/0028-generation-control/.
+
 ## 2026-07-07 — **Spec 0027 (harness) removed the explorer's EAGER whole-repo context map (RCA-driven push → pull), added an on-demand `ls` tool (exact-tool-count convention reconciled 3 → 4), and plumbed the four-cause degrade taxonomy per-cause to the report (`SCHEMA_VERSION 0026/1 → 0027/1`) — map removal PROVEN live (turn-1 payload ~10,181 → ~60 tokens, ~170× cut, repo-size-independent), but AC5 localization is a HOLD: both cases degraded `model-unreachable` @300s on a DOWNSTREAM generation-runaway (model-unreachable ≠ can't-localize), so finder capability is UNMEASURED. Generation control is a BLOCKING PREREQUISITE for the 0026 re-run + bake-off + any localization measurement. Cutover-not-redesign: gate/matrix/orchestrator/`submit_citations`/`Locator` byte-untouched. AC7 committed-error correction (0020–0023 "confounded") narrowed to 0026-ONLY and ASSERTED consistent across all three surfaces**
 
 **Spec:** specs/0027-harness/

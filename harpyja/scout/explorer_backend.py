@@ -29,6 +29,7 @@ from harpyja.scout import errors
 from harpyja.scout.context_map import build_initial_prompt
 from harpyja.scout.errors import ScoutUnavailable
 from harpyja.scout.explorer_loop import (
+    GENERATION_TRUNCATED,
     SUBMITTED,
     TURNS_EXHAUSTED,
     WALLCLOCK_EXHAUSTED,
@@ -43,6 +44,7 @@ from harpyja.symbols.ripgrep import RipgrepMissingError
 _EXHAUSTION_CAUSE = {
     TURNS_EXHAUSTED: errors.LOOP_TURNS_EXHAUSTED,
     WALLCLOCK_EXHAUSTED: errors.LOOP_WALLCLOCK_EXHAUSTED,
+    GENERATION_TRUNCATED: errors.GENERATION_TRUNCATED,  # spec 0028 (AC3)
 }
 
 
@@ -146,6 +148,8 @@ class ExplorerBackend:
         search_engine: Any,
         model_call: Callable[[list[dict[str, Any]]], Mapping[str, Any]] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        max_tokens: int = 2048,
+        enable_thinking: bool = True,
     ) -> None:
         self._gateway = gateway
         self._repo_path = repo_path
@@ -154,6 +158,15 @@ class ExplorerBackend:
         self._search_engine = search_engine
         self._model_call = model_call
         self._clock = clock
+        # Spec 0028 (AC2) — the per-call generation cap. The finite default lives HERE
+        # (the explorer object's own field) so a direct `ExplorerBackend(...)` that
+        # bypasses `Settings` is still bounded (DRIFT-GUARD); the wire site feeds it
+        # `settings.explorer_max_tokens`. The gateway stays param-driven — the Deep
+        # path never carries this cap.
+        self._max_tokens = max_tokens
+        # Spec 0028 (AC1) — the thinking knob. False ⇒ send
+        # chat_template_kwargs={"enable_thinking": False}; True ⇒ omit it.
+        self._enable_thinking = enable_thinking
         # Degrade-rate is a first-class reported field (the "every floor reports its
         # rate" convention): a run that raises ScoutUnavailable counts as a degrade;
         # a clean run — including an honest-empty submission — does not.
@@ -173,8 +186,15 @@ class ExplorerBackend:
     def _default_model_call(self) -> Callable[[list[dict[str, Any]]], Mapping[str, Any]]:
         schemas = _tool_schemas()
 
+        # Spec 0028 (AC1/AC2) — the explorer's generation-control params, assembled
+        # once. `max_tokens` (the anti-runaway cap) is always sent; the thinking knob
+        # adds `chat_template_kwargs` ONLY when thinking is disabled (omitted → on).
+        params: dict[str, Any] = {"max_tokens": self._max_tokens}
+        if not self._enable_thinking:
+            params["chat_template_kwargs"] = {"enable_thinking": False}
+
         def call(messages: list[dict[str, Any]]) -> Mapping[str, Any]:
-            return self._gateway.complete_with_tools(messages, schemas)
+            return self._gateway.complete_with_tools(messages, schemas, **params)
 
         return call
 

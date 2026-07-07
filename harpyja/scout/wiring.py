@@ -57,6 +57,8 @@ def build_scout_engine(
         manifest=manifest,
         search_engine=ripgrep,
         model_call=model_call,
+        max_tokens=settings.explorer_max_tokens,  # spec 0028 (AC2): feed the cap
+        enable_thinking=settings.explorer_enable_thinking,  # spec 0028 (AC1)
     )
     # The explorer loop self-explores from the context map + tools, so no Tier-0
     # warm seed is threaded (a no-op seed_fn keeps the ScoutEngine contract).

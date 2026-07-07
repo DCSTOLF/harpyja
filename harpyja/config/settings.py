@@ -143,6 +143,23 @@ class Settings:
     # construction from resolved Settings.
     lm_http_timeout_s: float = 120.0
 
+    # Spec 0028 (AC2) — `explorer_max_tokens` — the PRIMARY anti-runaway lever: a
+    # per-call cap on the explorer's model generation, threaded into
+    # `complete_with_tools` (the 0027 hang was uncapped). Pinned at 2048 (512
+    # truncated a first tool call in the probe; 2048 completed clean). Additive-last;
+    # the finite object-level default also lives on `ExplorerBackend.max_tokens` so a
+    # Settings-bypassing construction stays bounded (DRIFT-GUARD). `explorer_`-prefixed
+    # so it is explorer-scoped by construction — the Deep-tier path never carries it.
+    explorer_max_tokens: int = 2048
+
+    # Spec 0028 (AC1) — `explorer_enable_thinking` — the TUNABLE COMPLEMENT: when
+    # False the explorer's tool-calling gateway call carries the request param
+    # `chat_template_kwargs={"enable_thinking": False}` (llama.cpp --jinja: 7.7s
+    # clean); when True the param is OMITTED (thinking on). NOT the inferior
+    # `/no_think` query token. Provisional default True (thinking-ON+cap measured
+    # cleanest at 2.5s); AC6 finalizes against localization quality. `explorer_`-scoped.
+    explorer_enable_thinking: bool = True
+
     def __post_init__(self) -> None:
         # Fires on every construction path — defaults, toml/env merge, and
         # per-request `replace` — so an unsupported backend is rejected uniformly

@@ -82,6 +82,7 @@ _SCOUT_NATIVE_CAUSES = (
     "backend-error",
     "loop-turns-exhausted",
     "loop-wallclock-exhausted",
+    "generation-truncated",  # spec 0028 (AC3): the fifth explorer cause
 )
 _SCOUT_DEGRADE_RE = re.compile(r"scout-degraded:([a-z-]+)")
 
@@ -338,6 +339,9 @@ def aggregate_outcomes(
         "scout_degrade_loop_wallclock_exhausted_count": scout_cause_counts[
             "loop-wallclock-exhausted"
         ],
+        # Spec 0028 (AC3) — the fifth cause: a max_tokens-capped truncation, counted
+        # distinctly so a re-emptied case is diagnosable by cause, not turns_used.
+        "scout_degrade_generation_truncated_count": scout_cause_counts["generation-truncated"],
         "deep_degrade_count": deep_degrade_count,
         "deep_degrade_rate": deep_degrade_rate,
         "degraded_dominated": degraded_dominated,

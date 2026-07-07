@@ -398,3 +398,90 @@ def test_explorer_outcome_logic_does_not_branch_on_turns_used():
         text = (_Path("harpyja/scout") / mod).read_text()
         assert not _re.search(r"(turns_used|last_turns_used)\s*(==|!=|<=|>=|<|>)", text), mod
         assert not _re.search(r"(turns_used|last_turns_used)\s+is(\s+not)?\s+None", text), mod
+
+
+class _RecordingGateway:
+    """A fake gateway that records the kwargs passed to complete_with_tools.
+
+    spec 0028 (AC1/AC2): lets a unit assert the explorer's generation-control
+    params (max_tokens, chat_template_kwargs) reach the outbound request without a
+    live model or network.
+    """
+
+    def __init__(self):
+        self.calls = []
+        self.messages = []
+
+    def assert_local(self, resolver=None):
+        return None
+
+    def complete_with_tools(self, messages, tools, **params):
+        self.calls.append(params)
+        self.messages.append(list(messages))
+        return {"content": "", "tool_calls": [], "finish_reason": "stop"}
+
+
+def test_explorer_backend_max_tokens_field_default_is_2048():
+    # spec 0028 AC2 (DRIFT-GUARD): the finite runaway cap lives on the explorer
+    # object's OWN field default (field-default introspection, NOT a source grep),
+    # so a Settings-bypassing construction is still bounded.
+    import inspect
+
+    param = inspect.signature(ExplorerBackend.__init__).parameters["max_tokens"]
+    assert param.default == 2048
+
+
+def test_default_model_call_passes_max_tokens_to_gateway(tmp_path):
+    # spec 0028 AC2: the cap reaches the request as `max_tokens`.
+    gw = _RecordingGateway()
+    backend = _backend(tmp_path, gateway=gw)
+    call = backend._default_model_call()
+    call([{"role": "user", "content": "hi"}])
+    assert gw.calls[0]["max_tokens"] == 2048
+
+
+def _thinking_backend(tmp_path, gw, enable_thinking):
+    return ExplorerBackend(
+        gateway=gw,
+        repo_path=str(tmp_path),
+        settings=Settings(),
+        manifest=[],
+        search_engine=_FakeSearch(),
+        enable_thinking=enable_thinking,
+    )
+
+
+def test_thinking_off_sends_enable_thinking_false(tmp_path):
+    # spec 0028 AC1: thinking-off ⇒ the request carries chat_template_kwargs.
+    gw = _RecordingGateway()
+    call = _thinking_backend(tmp_path, gw, enable_thinking=False)._default_model_call()
+    call([{"role": "user", "content": "hi"}])
+    assert gw.calls[0]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_thinking_on_omits_chat_template_kwargs(tmp_path):
+    # spec 0028 AC1: thinking-on ⇒ the param is OMITTED (not sent as True).
+    gw = _RecordingGateway()
+    call = _thinking_backend(tmp_path, gw, enable_thinking=True)._default_model_call()
+    call([{"role": "user", "content": "hi"}])
+    assert "chat_template_kwargs" not in gw.calls[0]
+
+
+def test_explorer_rejects_no_think_query_token(tmp_path):
+    # spec 0028 AC1: the knob is chat_template_kwargs, NEVER the inferior /no_think
+    # query token (measured 43s, template-perturbing). No message carries it.
+    gw = _RecordingGateway()
+    call = _thinking_backend(tmp_path, gw, enable_thinking=False)._default_model_call()
+    call([{"role": "user", "content": "find the thing"}])
+    assert all("/no_think" not in str(m.get("content", "")) for m in gw.messages[0])
+
+
+def test_generation_truncated_outcome_raises_scout_unavailable_generation_truncated(tmp_path):
+    # spec 0028 AC3: a finish=length truncation degrades with the distinct fifth
+    # cause `generation-truncated`, NOT model-unreachable and NOT honest-empty.
+    model = _scripted({"content": "", "tool_calls": [], "finish_reason": "length"})
+    backend = _backend(tmp_path, model_call=model)
+    with pytest.raises(ScoutUnavailable) as ei:
+        backend.run("q", [])
+    assert ei.value.cause == errors.GENERATION_TRUNCATED
+    assert ei.value.cause != errors.MODEL_UNREACHABLE

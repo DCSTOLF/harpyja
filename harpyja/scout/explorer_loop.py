@@ -39,6 +39,9 @@ from harpyja.server.types import CodeSpan
 SUBMITTED = "submitted"
 TURNS_EXHAUSTED = "turns-exhausted"
 WALLCLOCK_EXHAUSTED = "wallclock-exhausted"
+# Spec 0028 (AC3): the model's generation hit the max_tokens cap (finish=length) —
+# a truncated turn, mapped downstream to the `generation-truncated` degrade cause.
+GENERATION_TRUNCATED = "generation-truncated"
 
 SUBMIT_TOOL = "submit_citations"
 
@@ -198,6 +201,12 @@ def run_explorer_loop(
 
         turns_used += 1
         response = model_call(session.messages())
+        # Spec 0028 (AC3): a max_tokens-capped generation (finish=length) is a
+        # truncation, NEVER the success path — even if a syntactically valid
+        # tool_call rode along, its args may be silently incomplete. Bail before any
+        # tool dispatch so a truncated turn degrades instead of being mis-read.
+        if response.get("finish_reason") == "length":
+            return LoopResult(GENERATION_TRUNCATED, None, turns_used, session.messages())
         session.add(
             {
                 "role": "assistant",

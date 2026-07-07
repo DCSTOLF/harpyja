@@ -144,6 +144,41 @@ def test_complete_with_tools_returns_content_and_tool_calls():
     assert out["content"] == ""
 
 
+def test_complete_with_tools_surfaces_finish_reason():
+    # spec 0028 AC0: finish_reason lives on the CHOICE object, not the message.
+    def transport(url, payload):
+        return {"choices": [{"finish_reason": "tool_calls", "message": {"content": ""}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["finish_reason"] == "tool_calls"
+
+
+def test_complete_with_tools_finish_reason_defaults_unknown_when_absent():
+    # spec 0028 AC0: an absent finish_reason defaults to the exact sentinel "unknown".
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["finish_reason"] == "unknown"
+
+
+def test_complete_with_tools_finish_reason_is_additive_backward_compatible():
+    # spec 0028 AC0: the new key is additive — the two existing keys are unchanged,
+    # and a legacy response (no finish_reason) still yields the "unknown" sentinel.
+    tool_calls = [{"id": "c1", "type": "function", "function": {"name": "grep"}}]
+
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "hi", "tool_calls": tool_calls}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["content"] == "hi"
+    assert out["tool_calls"] == tool_calls
+    assert out["finish_reason"] == "unknown"
+
+
 def test_complete_with_tools_handles_message_without_tool_calls():
     def transport(url, payload):
         return {"choices": [{"message": {"content": "done"}}]}

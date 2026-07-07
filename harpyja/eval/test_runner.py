@@ -497,3 +497,19 @@ def test_per_cause_distinguishes_wallclock_from_honest_empty(tmp_path):
         stack=_degrade_stack(_RaisingScoutCause(_scout_errors.LOOP_WALLCLOCK_EXHAUSTED), a2),
     )
     assert rep_w["aggregate"]["scout_degrade_loop_wallclock_exhausted_count"] == 1
+
+
+def test_generation_truncated_note_increments_distinct_count(tmp_path):
+    # spec 0028 AC3: a `scout-degraded:generation-truncated` note is counted in its
+    # OWN additive field, distinct from model-unreachable and the loop-exhaustion causes.
+    art = tmp_path / "art"
+    art.mkdir()
+    stack = _degrade_stack(_RaisingScoutCause(_scout_errors.GENERATION_TRUNCATED), art)
+    rep = run_dataset(
+        [_point("p1"), _point("p2")], Settings(), EvalConfig(),
+        repo_path=str(tmp_path / "repo"), stack=stack,
+    )
+    agg = rep["aggregate"]
+    assert agg["scout_degrade_generation_truncated_count"] == 2
+    assert agg["scout_degrade_model_unreachable_count"] == 0
+    assert agg["scout_degrade_count"] == 2

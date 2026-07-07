@@ -10,6 +10,7 @@ network.
 
 from harpyja.config.settings import Settings
 from harpyja.scout.explorer_loop import (
+    GENERATION_TRUNCATED,
     SUBMITTED,
     TURNS_EXHAUSTED,
     WALLCLOCK_EXHAUSTED,
@@ -304,3 +305,34 @@ def test_empty_map_truncation_preserves_older_citable_observation():
     assert "OBS[old]" not in text          # bulky raw blob dropped
     assert "old.py:5" in text              # location survives in the re-injected index
     assert CodeSpan(path="old.py", start_line=5, end_line=5) in result.spans
+
+
+def test_finish_length_yields_generation_truncated_outcome():
+    # spec 0028 AC3: a capped generation that ends finish=length with no valid call
+    # is a truncation, NOT an empty turn — a distinct terminal outcome.
+    tools, _ = _recording_tools()
+    model = _scripted({"content": "", "tool_calls": [], "finish_reason": "length"})
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == GENERATION_TRUNCATED
+    assert result.spans is None
+
+
+def test_finish_length_truncates_even_with_valid_tool_call():
+    # spec 0028 AC3 (edge case decided): finish=length NEVER takes the success path
+    # even if a syntactically valid submit_citations rode along — a length-truncated
+    # response was cut off mid-generation and its args may be silently incomplete.
+    tools, _ = _recording_tools()
+    model = _scripted({
+        "content": "",
+        "tool_calls": [_tc("submit_citations", citations=[{"path": "a.py"}])],
+        "finish_reason": "length",
+    })
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == GENERATION_TRUNCATED
+    assert result.spans is None

@@ -422,3 +422,27 @@ def test_scout_loop_budgets_coerce_from_env(tmp_path, monkeypatch):
     assert s.scout_loop_repeat_n == 3
     assert s.scout_history_char_cap == 80000
     assert s.scout_glob_max_paths == 250
+
+
+def test_explorer_max_tokens_default_is_2048():
+    # spec 0028 AC2: the primary anti-runaway lever, pinned (not a >512 floor).
+    assert Settings().explorer_max_tokens == 2048
+
+
+def test_explorer_max_tokens_env_coerces_to_int(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_EXPLORER_MAX_TOKENS", "512")
+    s = load_settings(config_path=None, repo_path=tmp_path)
+    assert s.explorer_max_tokens == 512
+    assert isinstance(s.explorer_max_tokens, int)
+
+
+def test_explorer_enable_thinking_default_is_true():
+    # spec 0028 AC1: provisional default — thinking-ON+cap measured cleanest (2.5s);
+    # AC6 finalizes the shipped value against localization quality.
+    assert Settings().explorer_enable_thinking is True
+
+
+def test_explorer_enable_thinking_env_coerces_to_bool(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_EXPLORER_ENABLE_THINKING", "false")
+    s = load_settings(config_path=None, repo_path=tmp_path)
+    assert s.explorer_enable_thinking is False

@@ -167,7 +167,7 @@ class ModelGateway:
         resolver: Resolver | None = None,
         **params: Any,
     ) -> dict[str, Any]:
-        """Run a tool-calling chat completion; return ``{content, tool_calls}``.
+        """Run a tool-calling chat completion; return ``{content, tool_calls, finish_reason}``.
 
         Spec 0024: the explorer loop needs the model's ``tool_calls`` back, not
         just message content. Like :meth:`complete`, ``assert_local`` runs BEFORE
@@ -175,6 +175,11 @@ class ModelGateway:
         :class:`AirGapError` and nothing is ever sent — the gateway stays the one
         outbound caller and the single air-gap enforcement point. ``tool_calls`` is
         normalized to a list (``[]`` when the model returned a plain message).
+
+        Spec 0028 (AC0): ``finish_reason`` is surfaced additively from the CHOICE
+        (not the message), ``str``-cast when present and defaulting to the exact
+        sentinel ``"unknown"`` when absent, so downstream callers can distinguish
+        a truncated ``"length"`` stop from a clean ``"tool_calls"`` one.
         """
         self.assert_local(resolver=resolver)
         send = transport or functools.partial(_default_transport, timeout_s=self.timeout_s)
@@ -186,8 +191,11 @@ class ModelGateway:
             **params,
         }
         response = send(url, payload)
-        message = response["choices"][0]["message"]
+        choice = response["choices"][0]
+        message = choice["message"]
+        finish_reason = choice.get("finish_reason")
         return {
             "content": message.get("content") or "",
             "tool_calls": message.get("tool_calls") or [],
+            "finish_reason": str(finish_reason) if finish_reason is not None else "unknown",
         }
