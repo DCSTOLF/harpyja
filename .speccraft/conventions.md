@@ -702,6 +702,21 @@
   it claims to fix; an inaccurate correction is worse than none. (See spec 0027 AC7 / T14,
   the `0fdcb57` narrowing of `specs/0026-eval/rca-explorer-context-bloat.md` +
   `operator-run-findings.md`.)
+- A **model-driven loop that emits N PARALLEL tool_calls in one turn ANSWERS ALL N in EMITTED
+  ORDER**, each with its own `tool_call_id` — never only `tool_calls[0]`. Answering a subset
+  leaves an unanswered `tool_call`, a malformed conversation per the OpenAI tool protocol that
+  derails the model into a next-turn runaway (spec 0028 operator-run diagnosis: N=4 parallel
+  calls with only [0] answered → turn-2 runaway, measured FULL-echo-1-answered → finish=length
+  101s vs all-answered → 0.8s clean). Three rules travel with the batch: (a) a TERMINAL action
+  (`submit_citations`) at ANY position returns immediately — remaining calls in the batch are
+  NOT executed; (b) a non-floor per-call failure is recorded as an in-conversation,
+  model-visible, NON-terminal marker (`'tool-call-degraded:execution-error: <Type>: <msg>'`)
+  and the batch CONTINUES — this is deliberately DISTINCT from the terminal `ScoutUnavailable`
+  cause taxonomy (`scout-degraded:<cause>`) and is NOT counted in the report; (c) FLOOR
+  exceptions (`RipgrepMissingError` / `AirGapError`) are re-raised, never degraded, so a floor
+  still floors the tier. N calls = ONE model turn (`turns_used` increments per model_call, not
+  per tool_call), so the turn budget is unaffected. (See `harpyja/scout/explorer_loop.py`
+  `_answer_tool_call` + the tool_calls loop in `run_explorer_loop`, spec 0029 AC1/AC4.)
 
 ## Logging
 

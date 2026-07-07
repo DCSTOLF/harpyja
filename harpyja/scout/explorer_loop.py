@@ -33,7 +33,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from harpyja.gateway.gateway import AirGapError
 from harpyja.server.types import CodeSpan
+from harpyja.symbols.ripgrep import RipgrepMissingError
 
 # Terminal outcomes.
 SUBMITTED = "submitted"
@@ -108,6 +110,71 @@ def _loc_key(s: CodeSpan) -> tuple[str, int | None, int | None]:
 
 def _loc_str(s: CodeSpan) -> str:
     return f"{s.path}:{s.start_line}" if s.start_line is not None else s.path
+
+
+def _answer_tool_call(
+    call: Mapping[str, Any],
+    tools: Mapping[str, Callable[..., Any]],
+    submit: Callable[[Sequence[Mapping[str, Any]]], list[CodeSpan]],
+    session: _Session,
+    settings: Any,
+) -> LoopResult | None:
+    """Answer a single tool call. Returns a LoopResult if terminal (submit_citations),
+    else None to continue to the next call in the batch."""
+    fn = call.get("function", {})
+    name = fn.get("name")
+    args = _parse_arguments(fn.get("arguments"))
+    call_id = call.get("id", "")
+
+    if name == SUBMIT_TOOL:
+        spans = submit(args.get("citations", []))
+        return LoopResult(SUBMITTED, spans, None, session.messages())  # type: ignore
+
+    if name not in tools:
+        session.add(
+            {
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": f"error: unknown tool {name!r}; "
+                f"available: {sorted(tools)} or {SUBMIT_TOOL}",
+            },
+            "control",
+        )
+        return None
+
+    try:
+        result = tools[name](**args)
+    except (RipgrepMissingError, AirGapError):
+        # Floor exceptions (Tier-0 / air-gap) are never degraded; they propagate
+        # to the backend as-is for tier-0 floor handling.
+        raise
+    except Exception as e:
+        # Per-call degrade (spec 0029, AC2): tool failure recorded with stable marker;
+        # batch continues to the next call instead of aborting the turn.
+        session.add(
+            {
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": f"tool-call-degraded:execution-error: {type(e).__name__}: {str(e)}",
+            },
+            "control",
+        )
+        return None
+
+    spans = _spans_of(result)
+    session.add(
+        {"role": "tool", "tool_call_id": call_id, "content": str(result)},
+        "tool",
+        spans=spans,
+    )
+
+    # Loop detection: an exact repeat with no new span for N consecutive turns.
+    session.note_navigation(name, args, spans)
+    if session.repeat >= settings.scout_loop_repeat_n:
+        session.add({"role": "user", "content": _CORRECTIVE}, "control")
+        session.repeat = 0
+
+    return None
 
 
 class _Session:
@@ -221,41 +288,15 @@ def run_explorer_loop(
             session.add({"role": "user", "content": "Call one of the available tools."}, "control")
             continue
 
-        call = tool_calls[0]  # one structured tool call per turn
-        fn = call.get("function", {})
-        name = fn.get("name")
-        args = _parse_arguments(fn.get("arguments"))
-        call_id = call.get("id", "")
-
-        if name == SUBMIT_TOOL:
-            spans = submit(args.get("citations", []))
-            return LoopResult(SUBMITTED, spans, turns_used, session.messages())
-
-        if name not in tools:
-            session.add(
-                {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": f"error: unknown tool {name!r}; "
-                    f"available: {sorted(tools)} or {SUBMIT_TOOL}",
-                },
-                "control",
-            )
-            continue
-
-        result = tools[name](**args)
-        spans = _spans_of(result)
-        session.add(
-            {"role": "tool", "tool_call_id": call_id, "content": str(result)},
-            "tool",
-            spans=spans,
-        )
-
-        # Loop detection: an exact repeat with no new span for N consecutive turns.
-        session.note_navigation(name, args, spans)
-        if session.repeat >= settings.scout_loop_repeat_n:
-            session.add({"role": "user", "content": _CORRECTIVE}, "control")
-            session.repeat = 0
+        # spec 0029: iterate ALL tool_calls (N parallel calls) in order, answering each.
+        # Terminal (submit_citations) at any position returns immediately.
+        # Per-call degrade: tool failure recorded with stable marker; batch continues.
+        for call in tool_calls:
+            result = _answer_tool_call(call, tools, submit, session, settings)
+            if result is not None:
+                # Terminal (submit_citations) was encountered; return immediately.
+                result.turns_used = turns_used
+                return result
 
         # Context management: citation-preserving truncation past the bloat cap.
         session.maybe_truncate(settings.scout_history_char_cap)

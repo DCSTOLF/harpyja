@@ -134,9 +134,14 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `deep/host_tools.build_host_tools` — `grep`/`glob` share the SAME `symbols.ripgrep.RipgrepEngine`
    the Deep `search` tool wraps (one bounded rg source of truth), `read_span` reuses
    `server.tools.read_snippet`, `glob` normalizes to file-level `CodeSpan`s bounded by
-   `scout_glob_max_paths`; `explorer_loop.run_explorer_loop` runs one tool call/turn
-   capped by `scout_max_turns` AND a distinct whole-loop `scout_wall_clock_s` ceiling,
-   with deterministic self-recovery (loop-detection on an exact
+   `scout_glob_max_paths`; `explorer_loop.run_explorer_loop` answers ALL N parallel
+   tool_calls the model emits per turn (spec 0029, answer-all-N): iterates each `tool_call` in
+   emitted order, answering with its `tool_call_id` — a terminal `submit_citations` at any
+   position [0:N] returns immediately and a non-floor per-call tool error is recorded as
+   'tool-call-degraded:execution-error' (in-conversation, model-visible, NON-terminal) and
+   the batch continues; N calls = one model turn (turns_used increments per model_call),
+   capped by `scout_max_turns` (a model-TURN cap, not per-tool) AND a distinct whole-loop
+   `scout_wall_clock_s` ceiling, with deterministic self-recovery (loop-detection on an exact
    `(tool_name, normalized_args)` repeat over `scout_loop_repeat_n` no-new-span turns;
    citation-preserving truncation past `scout_history_char_cap` that drops only stale
    chatter and re-injects a compact dropped-span index — never converting a real find

@@ -336,3 +336,286 @@ def test_finish_length_truncates_even_with_valid_tool_call():
     )
     assert result.outcome == GENERATION_TRUNCATED
     assert result.spans is None
+
+
+# --- spec 0029 (loop: parallel tool_call handling) ---
+
+def test_parallel_echo_both_calls_answered():
+    """T1.1: Two parallel echo calls must BOTH be answered (not just [0])."""
+    tools, calls = _recording_tools()
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="alpha"),
+            _tc("grep", call_id="c1", pattern="beta"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    # Both parallel calls should dispatch, not just [0].
+    assert result.outcome == SUBMITTED
+    assert len(calls) == 2, f"Expected 2 tool dispatches, got {len(calls)}: {calls}"
+    assert calls[0] == ("grep", "alpha")
+    assert calls[1] == ("grep", "beta")
+
+
+def test_parallel_terminal_in_batch_submit_at_position():
+    """T1.2: Terminal submit_citations at position [1] in a batch returns immediately."""
+    tools, calls = _recording_tools()
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="alpha"),
+            _tc("submit_citations", call_id="c1", citations=[{"path": "result.py"}]),
+        ),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    # submit_citations at [1] should return immediately; call [0] may or may not dispatch.
+    assert result.outcome == SUBMITTED
+    # The key: we do NOT see a turn 2. If calls were [0] only, then call [1] would be
+    # invisible and the loop would continue (fail the test).
+    assert result.turns_used == 1, "Submit terminal should stop at turn 1"
+
+
+def test_parallel_bounds_all_calls_answered_not_just_first():
+    """T1.3: All N calls in a batch are answered, verifying we iterate, not just [0]."""
+    tools, calls = _recording_tools()
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="q0"),
+            _tc("grep", call_id="c1", pattern="q1"),
+            _tc("grep", call_id="c2", pattern="q2"),
+            _tc("grep", call_id="c3", pattern="q3"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert len(calls) == 4, f"Expected 4 tool dispatches, got {len(calls)}"
+
+
+def test_parallel_turn2_reach_multiple_calls_on_turn2():
+    """T1.4: Parallel calls on turn 2 (after a turn 1 tool) are all answered."""
+    tools, calls = _recording_tools()
+    model = _scripted(
+        _msg(_tc("grep", call_id="t1c0", pattern="turn1")),
+        _msg(
+            _tc("grep", call_id="t2c0", pattern="turn2a"),
+            _tc("grep", call_id="t2c1", pattern="turn2b"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    # All three grep calls should fire: one on turn 1, two on turn 2.
+    assert len(calls) == 3, f"Expected 3 tool dispatches, got {len(calls)}"
+    assert calls == [("grep", "turn1"), ("grep", "turn2a"), ("grep", "turn2b")]
+
+
+def test_parallel_mixed_tools_multiple_types_in_batch():
+    """T1.5: Parallel calls with mixed tool types (grep, glob) all execute."""
+    def glob(pattern):
+        return [CodeSpan(path="globbed.py", start_line=1, end_line=1)]
+
+    tools = {
+        "grep": lambda pattern, scope=None: [CodeSpan(path="grepped.py", start_line=1, end_line=1)],
+        "glob": glob,
+        "read_span": lambda p, s, e: {},
+    }
+    calls = []
+
+    def grep_track(pattern, scope=None):
+        calls.append(("grep", pattern))
+        return [CodeSpan(path="grepped.py", start_line=1, end_line=1)]
+
+    def glob_track(pattern):
+        calls.append(("glob", pattern))
+        return [CodeSpan(path="globbed.py", start_line=1, end_line=1)]
+
+    tools["grep"] = grep_track
+    tools["glob"] = glob_track
+
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="findme"),
+            _tc("glob", call_id="c1", pattern="*.py"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert len(calls) == 2, f"Expected 2 tool dispatches, got {len(calls)}"
+    assert calls[0] == ("grep", "findme")
+    assert calls[1] == ("glob", "*.py")
+
+
+def test_parallel_order_preservation_calls_answered_in_order():
+    """T1.6: Parallel calls are answered in positional order, IDs preserved in history."""
+    tools, calls = _recording_tools()
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="id_first", pattern="a"),
+            _tc("grep", call_id="id_second", pattern="b"),
+            _tc("grep", call_id="id_third", pattern="c"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    # Verify calls executed in order.
+    assert calls == [("grep", "a"), ("grep", "b"), ("grep", "c")]
+    # Verify history preserves the tool_call_ids in order.
+    tool_messages = [m for m in result.history if m.get("role") == "tool"]
+    assert len(tool_messages) == 3, f"Expected 3 tool messages, got {len(tool_messages)}"
+    assert tool_messages[0]["tool_call_id"] == "id_first"
+    assert tool_messages[1]["tool_call_id"] == "id_second"
+    assert tool_messages[2]["tool_call_id"] == "id_third"
+
+
+# --- T3: Per-call error handling (spec 0029, AC2) ---
+
+def test_parallel_per_call_error_failed_tool_execution():
+    """T3.1: Tool execution failure on one call does NOT stop batch; batch continues."""
+    call_log = []
+
+    def failing_grep(pattern, scope=None):
+        call_log.append(("grep", pattern))
+        raise ValueError("Simulated grep failure")
+
+    def working_glob(pattern):
+        call_log.append(("glob", pattern))
+        return [CodeSpan(path="globbed.py", start_line=1, end_line=1)]
+
+    tools = {
+        "grep": failing_grep,
+        "glob": working_glob,
+        "read_span": lambda p, s, e: {},
+    }
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="fail"),
+            _tc("glob", call_id="c1", pattern="*.py"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    # Both tools should have been called despite the first failing.
+    assert len(call_log) == 2, f"Expected 2 calls despite failure, got {len(call_log)}: {call_log}"
+    assert call_log[0] == ("grep", "fail")
+    assert call_log[1] == ("glob", "*.py")
+
+
+def test_parallel_per_call_error_degraded_marker_recorded():
+    """T3.2: Tool execution failure records a degraded marker in history."""
+    def failing_grep(pattern, scope=None):
+        raise RuntimeError("grep crashed")
+
+    tools = {"grep": failing_grep, "glob": lambda p: [], "read_span": lambda p, s, e: {}}
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="crash"),
+            _tc("submit_citations", citations=[{"path": "a.py"}]),
+        ),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    # History should contain a tool response capturing the error.
+    tool_messages = [m for m in result.history if m.get("role") == "tool"]
+    assert len(tool_messages) >= 1
+    # The response should mention the error or have a degraded note.
+    assert any("error" in m.get("content", "").lower() or "crash" in m.get("content", "").lower()
+               for m in tool_messages)
+
+
+def test_parallel_terminal_after_failed_tool():
+    """T3.3: submit_citations after a failed tool call in the same batch succeeds."""
+    def failing_grep(pattern, scope=None):
+        raise RuntimeError("grep crashed")
+
+    tools = {"grep": failing_grep, "glob": lambda p: [], "read_span": lambda p, s, e: {}}
+    model = _scripted(
+        _msg(
+            _tc("grep", call_id="c0", pattern="crash"),
+            _tc("submit_citations", call_id="c1", citations=[{"path": "result.py"}]),
+        ),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    # Terminal should succeed even though a prior call failed.
+    assert result.outcome == SUBMITTED
+    assert result.spans == [CodeSpan(path="result.py", start_line=None, end_line=None)]
+
+
+# --- T5: Determinism test ---
+
+def test_parallel_determinism_n4_astropy_shape_identical_trace():
+    """T5: N=4 parallel calls executed twice yield identical trace (determinism)."""
+    tools, _ = _recording_tools()
+
+    # Simulates an astropy-like shape: 4 parallel navigational calls in one turn,
+    # then immediate submit on turn 2.
+    responses_1 = [
+        _msg(
+            _tc("grep", call_id="c0", pattern="search1"),
+            _tc("grep", call_id="c1", pattern="search2"),
+            _tc("glob", call_id="c2", pattern="*.py"),
+            _tc("grep", call_id="c3", pattern="search3"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "found.py"}])),
+    ]
+
+    model_1 = _scripted(*responses_1)
+    result_1 = run_explorer_loop(
+        model_call=model_1, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    trace_1 = _rendered(result_1.history)
+
+    # Run it again with identical model responses.
+    tools_2, _ = _recording_tools()
+    responses_2 = [
+        _msg(
+            _tc("grep", call_id="c0", pattern="search1"),
+            _tc("grep", call_id="c1", pattern="search2"),
+            _tc("glob", call_id="c2", pattern="*.py"),
+            _tc("grep", call_id="c3", pattern="search3"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "found.py"}])),
+    ]
+
+    model_2 = _scripted(*responses_2)
+    result_2 = run_explorer_loop(
+        model_call=model_2, tools=tools_2, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    trace_2 = _rendered(result_2.history)
+
+    # Identical traces confirm determinism.
+    assert trace_1 == trace_2, f"Traces diverged:\n{trace_1}\n---vs---\n{trace_2}"
+    assert result_1.turns_used == result_2.turns_used
+    assert result_1.outcome == result_2.outcome == SUBMITTED
