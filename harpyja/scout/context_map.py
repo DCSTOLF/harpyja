@@ -46,12 +46,30 @@ def _is_map_excluded(path: str) -> bool:
     return False
 
 
+def build_initial_prompt(query: str) -> str:
+    """spec 0027 — the MINIMAL OpenCode-style initial prompt: the query + a one-line
+    tool-usage framing, and NO repo listing. Structure is discovered on demand via the
+    `ls`/`glob`/`grep` tools (push → pull), so this is a small constant, independent of
+    repo size — it reads no manifest. Replaces the eager `build_context_map` on the
+    explorer's live path; the query (previously baked into the map) is preserved here."""
+    return (
+        "You are localizing a query in a repository. Discover the layout on demand with "
+        "the ls, glob, and grep tools, then call submit_citations with the file:line "
+        "location.\n\n"
+        f"Query: {query}"
+    )
+
+
 def build_context_map(
     manifest: Sequence[ManifestEntry],
     query: str,
     settings: Settings,
 ) -> str:
-    """Render the query-injected, filtered repo map (no file bytes)."""
+    """Render the query-injected, filtered repo map (no file bytes).
+
+    RETIRED from the explorer's live path in spec 0027 (the eager whole-repo listing
+    dominated the per-turn prompt and degraded the loop — see the 0026 RCA). Kept for
+    reference/history; the backend now uses `build_initial_prompt`."""
     paths = [e.path for e in manifest if not _is_map_excluded(e.path)]
     paths.sort()
     tree = "\n".join(paths)

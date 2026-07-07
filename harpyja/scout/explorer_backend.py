@@ -26,7 +26,7 @@ from harpyja.config.settings import Settings
 from harpyja.gateway.gateway import AirGapError
 from harpyja.index.manifest import ManifestEntry
 from harpyja.scout import errors
-from harpyja.scout.context_map import build_context_map
+from harpyja.scout.context_map import build_initial_prompt
 from harpyja.scout.errors import ScoutUnavailable
 from harpyja.scout.explorer_loop import (
     SUBMITTED,
@@ -47,7 +47,7 @@ _EXHAUSTION_CAUSE = {
 
 
 def _tool_schemas() -> list[dict[str, Any]]:
-    """Minimal OpenAI function schemas for the three tools + the terminal action."""
+    """Minimal OpenAI function schemas for the four tools + the terminal action."""
     return [
         {
             "type": "function",
@@ -89,6 +89,21 @@ def _tool_schemas() -> list[dict[str, Any]]:
                         "end": {"type": "integer"},
                     },
                     "required": ["path", "start", "end"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ls",
+                "description": (
+                    "List the immediate entries of one repo directory "
+                    "(directories end with '/'); defaults to the repo root."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": [],
                 },
             },
         },
@@ -178,7 +193,11 @@ class ExplorerBackend:
             raise
 
     def _run_loop(self, query: str) -> list[CodeSpan]:
-        context_map = build_context_map(self._manifest, query, self._settings)
+        # spec 0027: the eager whole-repo context map is REMOVED (push → pull). The
+        # initial prompt is minimal (query + tool-usage framing, no repo listing); the
+        # model discovers layout on demand via ls/glob/grep. `context_map` is still the
+        # loop's initial-message param — now carrying the minimal prompt, not a repo map.
+        context_map = build_initial_prompt(query)
         tools = build_explorer_tools(
             self._repo_path, self._settings, search_engine=self._search_engine
         )

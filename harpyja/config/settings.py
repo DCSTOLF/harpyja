@@ -115,6 +115,11 @@ class Settings:
     # parallel to `search_max_matches` for `grep`; glob returns file records so it
     # is bounded independently.
     scout_glob_max_paths: int = 400
+    # Spec 0027 — `scout_ls_max_entries` — the `ls`/tree navigation tool's output
+    # clamp (AC3): a single-directory listing is bounded to this many entries (the
+    # layout-discovery affordance `glob` lacks, since glob filters out directories).
+    # Parallel to scout_glob_max_paths; additive-last on the scout budgets.
+    scout_ls_max_entries: int = 200
 
     # Spec 0008 (Wave 5) — Verification Gate (additive, appended last).
     # `verify_method` selects the scoring backend; `verify_threshold` is the pass

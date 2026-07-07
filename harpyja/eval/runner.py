@@ -13,6 +13,7 @@ no gate, D1).
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -69,6 +70,29 @@ def _has_degrade_note(notes: str | None, prefix: str) -> bool:
 
 def _is_scout_degraded(notes: str | None) -> bool:
     return _has_degrade_note(notes, "scout-degraded")
+
+
+# Spec 0027 (AC4): the FOUR native explorer-loop degrade causes, surfaced per-cause so
+# a re-emptied case names WHICH terminal state it hit. The DISCRIMINANT is the typed
+# `scout-degraded:<cause>` note (via ScoutUnavailable.cause / LoopResult.outcome), NEVER
+# turns_used — which is None on any degrade and a sub-cap int on wall-clock exhaustion,
+# indistinguishable from low-turn honest-empty.
+_SCOUT_NATIVE_CAUSES = (
+    "model-unreachable",
+    "backend-error",
+    "loop-turns-exhausted",
+    "loop-wallclock-exhausted",
+)
+_SCOUT_DEGRADE_RE = re.compile(r"scout-degraded:([a-z-]+)")
+
+
+def _scout_degrade_cause(notes: str | None) -> str | None:
+    """Extract the typed cause from a `scout-degraded:<cause>` note (tolerant of the
+    `+no-matches` suffix and any trailing notes); None when not scout-degraded."""
+    if not notes:
+        return None
+    m = _SCOUT_DEGRADE_RE.search(notes)
+    return m.group(1) if m else None
 
 
 def _is_deep_degraded(notes: str | None) -> bool:
@@ -265,6 +289,12 @@ def aggregate_outcomes(
     ]
     degrade_count = sum(1 for scout_d, _ in per_case if scout_d)
     degrade_rate = (degrade_count / attempted) if attempted else None
+    # Spec 0027 (AC4): per-cause attribution alongside the retained collapsed count.
+    scout_cause_counts = dict.fromkeys(_SCOUT_NATIVE_CAUSES, 0)
+    for r in runs:
+        cause = _scout_degrade_cause(r.event.get("notes"))
+        if cause in scout_cause_counts:
+            scout_cause_counts[cause] += 1
     deep_degrade_count = sum(1 for _, deep_d in per_case if deep_d)
     deep_degrade_rate = (deep_degrade_count / attempted) if attempted else None
     # A case counts ONCE for dominance even when both tiers floor (union, not sum).
@@ -299,6 +329,15 @@ def aggregate_outcomes(
         "per_tier_model_calls": (dict(model_calls) if model_calls is not None else None),
         "scout_degrade_count": degrade_count,
         "scout_degrade_rate": degrade_rate,
+        # Spec 0027 (AC4) — per-cause native-loop degrade attribution (additive-last).
+        # LOOP_WALLCLOCK_EXHAUSTED is the PRE-EXISTING spec-0024 between-turns ceiling,
+        # merely surfaced per-cause (not new scope).
+        "scout_degrade_model_unreachable_count": scout_cause_counts["model-unreachable"],
+        "scout_degrade_backend_error_count": scout_cause_counts["backend-error"],
+        "scout_degrade_loop_turns_exhausted_count": scout_cause_counts["loop-turns-exhausted"],
+        "scout_degrade_loop_wallclock_exhausted_count": scout_cause_counts[
+            "loop-wallclock-exhausted"
+        ],
         "deep_degrade_count": deep_degrade_count,
         "deep_degrade_rate": deep_degrade_rate,
         "degraded_dominated": degraded_dominated,

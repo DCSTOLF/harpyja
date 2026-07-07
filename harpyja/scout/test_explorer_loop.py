@@ -258,3 +258,49 @@ def test_truncation_preserves_citable_observation_dropped_span_index_reinjected(
     assert "old.py:5" in text
     # ...and the find resolves (never converted to honest-empty).
     assert CodeSpan(path="old.py", start_line=5, end_line=5) in result.spans
+
+
+# --- spec 0027 (AC9): truncation still fires + citation-preserving with map ABSENT ---
+
+
+def test_truncation_still_fires_past_cap_with_empty_context_map():
+    # spec 0027: with the eager map removed (context_map=""), the citation-preserving
+    # truncation MECHANISM is unchanged — only its onset shifts later (lighter baseline).
+    tools = {"grep": _bulky_grep_factory(), "glob": lambda p: [], "read_span": lambda p, s, e: {}}
+    model = _scripted(
+        _msg(_tc("grep", pattern="a")),
+        _msg(_tc("grep", pattern="b")),
+        _msg(_tc("grep", pattern="c")),
+        _msg(_tc("grep", pattern="d")),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    settings = Settings(scout_history_char_cap=400, scout_max_turns=10)
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="", settings=settings,
+    )
+    assert any("observed locations" in str(m.get("content", "")).lower()
+               for m in result.history)
+
+
+def test_empty_map_truncation_preserves_older_citable_observation():
+    # The 0024 correctness negative, re-proven with context_map="": a citation on an
+    # observation OLDER than the bloat threshold STILL resolves after truncation runs.
+    tools = {"grep": _bulky_grep_factory(), "glob": lambda p: [], "read_span": lambda p, s, e: {}}
+    model = _scripted(
+        _msg(_tc("grep", pattern="old")),
+        _msg(_tc("grep", pattern="f1")),
+        _msg(_tc("grep", pattern="f2")),
+        _msg(_tc("grep", pattern="f3")),
+        _msg(_tc("submit_citations",
+                 citations=[{"path": "old.py", "start_line": 5, "end_line": 5}])),
+    )
+    settings = Settings(scout_history_char_cap=400, scout_max_turns=10)
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="", settings=settings,
+    )
+    text = _rendered(result.history)
+    assert "OBS[old]" not in text          # bulky raw blob dropped
+    assert "old.py:5" in text              # location survives in the re-injected index
+    assert CodeSpan(path="old.py", start_line=5, end_line=5) in result.spans

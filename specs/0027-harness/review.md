@@ -3,9 +3,9 @@ spec: "0027"
 title: "harness — remove eager context-map; on-demand structure discovery"
 reviewers: [codex, claude-p]
 quorum: 1
-verdict: changes-requested
+verdict: reviewed
 generated: 2026-07-07
-rounds: 1
+rounds: 2
 ---
 
 # Cross-model review — 0027 (harness)
@@ -135,23 +135,77 @@ that's wrong.
 
 ---
 
+### Amendments (revision 2)
+
+All three blockers + every single accepted. AC7 narrowed to 0026-only (+ the two
+committed artifacts `rca-explorer-context-bloat.md` / `operator-run-findings.md`
+corrected in `0fdcb57`); AC4 rebuilt on the `ScoutUnavailable.cause` + `LoopResult.outcome`
+four-state taxonomy with the `runner._is_scout_degraded` per-cause-count gap named; new
+**AC8** retires `turns_used` as a why-did-it-end signal (grep sweep); tool-count
+reconciled (convention 3→4 + both tests + `scout_ls_max_entries`); "turn-exhausted →
+honest-empty" reworded to the typed degrade; AC1 backend-level; AC5 turn ceiling + second
+case; `_Session` cutover stated; OQ3→AC9; OQ2 re-run-fresh guard.
+
+---
+
+## Round 2 (revision 2)
+
+### claude-p — approve-with-comments (quorum-meeting)
+
+Independently diffed `0fdcb57` and **verified the priority check**: the AC7 reframe is
+factually correct against the 0024-introduced-the-map timeline, and both committed
+artifacts are corrected with **no new inaccuracy**. All eight round-1 items confirmed
+landed. Two non-blocking comments (accepted):
+- **AC4's new per-cause report fields need `SCHEMA_VERSION` `0026/1 → 0027/1`** — the
+  additive-field + bump convention has been unbroken 0011→0026; AC4 was silent on it.
+- **AC1's bound was unpinned** ("well below ~10K") — needs a concrete number.
+- (+ the second AC5 repo needs a named target + gold span; cosmetic AC7 commit-ref.)
+
+### codex — changes-requested (confirmed R1 resolved; new concreteness items)
+
+Did NOT re-flag any of the eight round-1 items (a critical line-by-line pass falling
+silent on them = they landed). New/convergent:
+- **AC5's turn ceiling `N` and second-repo case were unnamed** (deferred to plan) — not
+  reproducible as the load-bearing binary proof. (Convergent with claude-p.)
+- **Load-bearing OQs (ls granularity, zero-orientation) shouldn't stay open** in a
+  plan-ready spec — decide them in the spec.
+- **NEW (sharp): AC4 requires `LOOP_WALLCLOCK_EXHAUSTED` while OOS excludes a total-request
+  deadline — resolve the ambiguity.** (Verified: `LOOP_WALLCLOCK_EXHAUSTED` is the
+  PRE-EXISTING spec-0024 between-turns `scout_wall_clock_s` ceiling, `explorer_loop.py:196`;
+  the OOS item is a *different* in-flight-preempting total deadline. No conflict —
+  disambiguated.)
+- **AC1/AC6 thresholds vague** ("small constant") — concrete token/byte ceilings + a
+  counting method. **AC5/AC6 need a committed evidence artifact** (skip-not-fail live runs
+  are weak for "AC5 is the whole spec").
+
+### Resolutions (revision 3)
+
+- **AC1/AC6:** turn-1 payload **≤ 2,000 tokens (≤ ~8,000 chars, `len//4`)**, repo-size-
+  independent (small + large synthetic manifest, both clear the bound).
+- **AC4:** `SCHEMA_VERSION 0026/1 → 0027/1` via `_AGGREGATE_DEFAULTS`; clarified
+  `LOOP_WALLCLOCK_EXHAUSTED` is the pre-existing spec-0024 ceiling (surfaced, not new),
+  distinct from the OOS total-deadline.
+- **AC5:** pre-registered **`N = 10` turns**, two concrete cases — `astropy__astropy-12907`
+  (910 `.py`) and **`django__django-12774`** (2,611 `.py` — ~2.9× astropy; gold
+  `django/db/models/query.py` 689–695) — each with a hand-authored terse query; pass =
+  localize (`right-file`/`correct`) without a timeout/backend degrade.
+- **AC6:** committed evidence artifact (payload size, per-turn latency, turns, outcome/cause,
+  bucket) under `specs/0027-harness/`.
+- **Open questions → Decisions:** `ls` = single-directory listing (depth-N rejected);
+  zero initial orientation (empty-start piloted; minimal orientation is a re-run-fresh
+  follow-up only if AC5 shows a genuine exhaustion, not a timeout-degrade).
+- **Cutover DECIDED:** `context_map=""` (zero content → satisfies full-removal; the
+  `_Session` record deletion is optional cleanup). Cosmetic AC7 commit-ref → `0fdcb57`.
+
+---
+
 ## Determination
 
-**Quorum NOT met** — both `changes-requested`. Status stays **draft**. The direction is
-endorsed; the blocking items are accuracy/precision fixes, and this reads
-approve-on-resolution. Required amendments:
-
-- **AC7 (+ committed RCA + correction note):** scope the capability-mute correction to
-  **0026 only**; reframe 0020–0023 as a retired-backend measurement this RCA doesn't bear
-  on. Fix the two committed artifacts too.
-- **AC4:** discriminate via `ScoutUnavailable.cause` + `LoopResult.outcome` (FOUR states),
-  not `turns_used`; name the real gap (`runner._is_scout_degraded` collapses causes → add
-  cause-level report granularity). Correct the What's "turn-exhausted → honest-empty".
-- **Tool count:** amend the convention + both hard-count tests to exactly-four with a
-  rationale; name a dedicated `ls` clamp `Settings` field.
-- **AC1/AC5/AC6:** backend-level map-absence test; a numeric turn ceiling for astropy; a
-  second structurally-different case (or named follow-up). State the `_Session` cutover
-  mechanism.
-- **OQ2/OQ3:** add the re-run-fresh sentence to OQ2; promote OQ3 to a light AC.
-
-Amend `spec.md`, then re-run `/speccraft:spec:review` (round 2).
+**Quorum met** (claude-p: approve-with-comments across round 2, priority check verified),
+and codex's round-2 items — convergent concreteness fixes + the wall-clock disambiguation,
+none re-flagging a round-1 blocker — are resolved in revision 3. No guardrail violations
+survive; the exact-tool-count convention is amended head-on with a rationale, and the
+`SCHEMA_VERSION` bump convention is now honored. Status → **reviewed**. Ready for
+`/speccraft:spec:plan`. The two experiment-defining choices the planner inherits as fixed:
+`N=10` turns and the two named validation cases (astropy + django), on the llama.cpp
+`--jinja` 16B stack.

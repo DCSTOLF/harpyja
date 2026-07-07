@@ -302,3 +302,99 @@ def test_degrade_rate_is_first_class_reported_field(tmp_path):
     assert backend.run_count == 2
     assert backend.degrade_count == 1
     assert backend.degrade_rate == 0.5
+
+
+# --- spec 0027 (AC1/AC2): no eager whole-repo map; bounded, repo-size-independent ---
+
+from harpyja.index.manifest import ManifestEntry  # noqa: E402
+
+
+def _manifest(n):
+    return [
+        ManifestEntry(path=f"pkg/mod{i}/file{i}.py", language="python", size=100,
+                      hash="h", mtime=0.0, prior=0.5)
+        for i in range(n)
+    ]
+
+
+def _capture(box):
+    def model_call(messages):
+        box.setdefault("first", messages)
+        return {"content": "", "tool_calls": [_tc("submit_citations", citations=[])]}
+    return model_call
+
+
+def _turn1_payload(messages):
+    return "".join(str(m.get("content", "")) for m in messages)
+
+
+def _run_with_manifest(tmp_path, n, query, box):
+    ExplorerBackend(
+        gateway=ModelGateway(api_base="http://127.0.0.1:11434/v1"),
+        repo_path=str(tmp_path), settings=Settings(), manifest=_manifest(n),
+        search_engine=_FakeSearch(), model_call=_capture(box),
+    ).run(query, [])
+
+
+def test_run_loop_injects_no_whole_repo_listing(tmp_path):
+    box = {}
+    _run_with_manifest(tmp_path, 500, "where is the retry backoff", box)
+    payload = _turn1_payload(box["first"])
+    # NO whole-repo listing: no manifest path appears in the turn-1 prompt.
+    assert "pkg/mod0/file0.py" not in payload
+    assert "pkg/mod499/file499.py" not in payload
+    # the QUERY is preserved (a minimal prompt, not an empty one).
+    assert "retry backoff" in payload
+
+
+def test_turn1_payload_bounded_and_repo_size_independent(tmp_path):
+    small_box, large_box = {}, {}
+    _run_with_manifest(tmp_path, 3, "find the thing", small_box)
+    _run_with_manifest(tmp_path, 3000, "find the thing", large_box)
+    small = _turn1_payload(small_box["first"])
+    large = _turn1_payload(large_box["first"])
+    for p in (small, large):
+        assert len(p) // 4 <= 2000  # <= ~2000 tokens (AC1 bound)
+    # Repo-size independence: no manifest term → the two payloads are IDENTICAL.
+    assert small == large
+
+
+# --- spec 0027 (AC8): turns_used RETIRED as a why-did-it-end signal; cause is truth ---
+
+import re as _re  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+import harpyja.scout.errors as _scout_errors  # noqa: E402
+from harpyja.scout.errors import ScoutUnavailable as _ScoutUnavailable  # noqa: E402
+
+
+def test_wallclock_exhaustion_cause_derives_from_outcome_not_turns(tmp_path):
+    # A clock that trips the wall-clock ceiling on the first turn → WALLCLOCK_EXHAUSTED
+    # at a SUB-CAP turns_used. The degrade CAUSE derives from LoopResult.outcome, so it
+    # is loop-wallclock-exhausted regardless of the (sub-cap) turns_used — which alone
+    # could not distinguish this from a low-turn honest-empty.
+    clock_vals = iter([0.0, 10**9, 10**9, 10**9])
+    backend = ExplorerBackend(
+        gateway=ModelGateway(api_base="http://127.0.0.1:11434/v1"),
+        repo_path=str(tmp_path), settings=Settings(), manifest=[],
+        search_engine=_FakeSearch(),
+        model_call=_scripted({"content": "", "tool_calls": [_tc("grep", pattern="x")]}),
+        clock=lambda: next(clock_vals),
+    )
+    with pytest.raises(_ScoutUnavailable) as ei:
+        backend.run("q", [])
+    assert ei.value.cause == _scout_errors.LOOP_WALLCLOCK_EXHAUSTED
+    # turns_used is recorded (the 0022 measurement) but is SUB-CAP — not the discriminant.
+    assert backend.last_turns_used is not None
+    assert backend.last_turns_used < Settings().scout_max_turns
+
+
+def test_explorer_outcome_logic_does_not_branch_on_turns_used():
+    # spec 0027 AC8 (executable guard): the two outcome-deciding modules must NOT infer
+    # run outcome / degrade-kind from turns_used (None on any degrade; sub-cap on
+    # wall-clock). turns_used survives ONLY as the 0022 turns-CONSUMED measurement
+    # (assignments + the LoopResult carrier), never a comparison feeding a decision.
+    for mod in ("explorer_backend.py", "explorer_loop.py"):
+        text = (_Path("harpyja/scout") / mod).read_text()
+        assert not _re.search(r"(turns_used|last_turns_used)\s*(==|!=|<=|>=|<|>)", text), mod
+        assert not _re.search(r"(turns_used|last_turns_used)\s+is(\s+not)?\s+None", text), mod

@@ -425,3 +425,75 @@ def test_runner_serializes_file_level_citation_lines_as_null(tmp_path):
     validate_report(rep)
     cited = rep["cases"][0]["citations"]
     assert cited and cited[0]["start_line"] is None and cited[0]["end_line"] is None
+
+
+# --- spec 0027 (AC4): per-cause scout-degrade counts (cause taxonomy, not turns_used) ---
+
+
+class _RaisingScoutCause:
+    def __init__(self, cause):
+        self._cause = cause
+
+    def search(self, query, scope=None):
+        raise ScoutUnavailable(self._cause)
+
+
+class _EmptyScout:
+    def search(self, query, scope=None):
+        return []  # honest-empty — NOT a degrade (no scout-degraded note)
+
+
+def test_scout_degrade_cause_extracts_the_typed_cause():
+    from harpyja.eval.runner import _scout_degrade_cause
+
+    assert (
+        _scout_degrade_cause("scout-degraded:loop-wallclock-exhausted")
+        == "loop-wallclock-exhausted"
+    )
+    # tolerant of the +no-matches suffix and trailing notes
+    assert (
+        _scout_degrade_cause("scout-degraded:model-unreachable+no-matches")
+        == "model-unreachable"
+    )
+    assert _scout_degrade_cause("scout-degraded:backend-error;x") == "backend-error"
+    assert _scout_degrade_cause("deep-degraded:parse-error") is None
+    assert _scout_degrade_cause(None) is None
+
+
+def test_aggregate_reports_per_cause_scout_degrade_counts(tmp_path):
+    art = tmp_path / "art"
+    art.mkdir()
+    stack = _degrade_stack(_RaisingScoutCause(_scout_errors.LOOP_WALLCLOCK_EXHAUSTED), art)
+    rep = run_dataset(
+        [_point("p1"), _point("p2")], Settings(), EvalConfig(),
+        repo_path=str(tmp_path / "repo"), stack=stack,
+    )
+    agg = rep["aggregate"]
+    assert agg["scout_degrade_loop_wallclock_exhausted_count"] == 2
+    assert agg["scout_degrade_model_unreachable_count"] == 0
+    assert agg["scout_degrade_backend_error_count"] == 0
+    assert agg["scout_degrade_loop_turns_exhausted_count"] == 0
+    # per-cause counts sum consistently with the retained collapsed count.
+    assert agg["scout_degrade_count"] == 2
+
+
+def test_per_cause_distinguishes_wallclock_from_honest_empty(tmp_path):
+    # honest-empty (scout returns []) → NO degrade, zero everywhere.
+    a1 = tmp_path / "a1"
+    a1.mkdir()
+    rep_e = run_dataset(
+        [_point("p1")], Settings(), EvalConfig(),
+        repo_path=str(tmp_path / "r1"), stack=_degrade_stack(_EmptyScout(), a1),
+    )
+    assert rep_e["aggregate"]["scout_degrade_count"] == 0
+    assert rep_e["aggregate"]["scout_degrade_loop_wallclock_exhausted_count"] == 0
+    # wallclock-exhaustion degrade → a DISTINCT bucket (discriminant is the cause,
+    # not turns_used, which would be a sub-cap int indistinguishable from honest-empty).
+    a2 = tmp_path / "a2"
+    a2.mkdir()
+    rep_w = run_dataset(
+        [_point("p1")], Settings(), EvalConfig(),
+        repo_path=str(tmp_path / "r2"),
+        stack=_degrade_stack(_RaisingScoutCause(_scout_errors.LOOP_WALLCLOCK_EXHAUSTED), a2),
+    )
+    assert rep_w["aggregate"]["scout_degrade_loop_wallclock_exhausted_count"] == 1

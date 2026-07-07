@@ -375,6 +375,31 @@ def test_scout_loop_budgets_present_with_provisional_defaults():
     assert s.scout_glob_max_paths == 400
 
 
+def test_scout_ls_max_entries_default_is_finite_positive_bound():
+    # spec 0027: the `ls`/tree tool's output clamp — a first-class Settings field
+    # (parallel to scout_glob_max_paths for glob), finite + positive.
+    s = Settings()
+    assert isinstance(s.scout_ls_max_entries, int)
+    assert s.scout_ls_max_entries > 0
+    assert s.scout_ls_max_entries == 200
+
+
+def test_scout_ls_max_entries_is_declared_settings_field():
+    # Field-default introspection (drift guard): the clamp is a declared frozen-dataclass
+    # field, not an ad-hoc attribute.
+    import dataclasses
+
+    names = {f.name for f in dataclasses.fields(Settings)}
+    assert "scout_ls_max_entries" in names
+
+
+def test_scout_ls_max_entries_coerces_from_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_SCOUT_LS_MAX_ENTRIES", "150")
+    s = load_settings(repo_path=tmp_path)
+    assert s.scout_ls_max_entries == 150
+    assert isinstance(s.scout_ls_max_entries, int)
+
+
 def test_scout_wall_clock_exceeds_per_call_http_timeout():
     # The whole-loop wall-clock ceiling must sit strictly ABOVE the per-call HTTP
     # timeout floor — turns and time are distinct budgets (AC4). A single slow call

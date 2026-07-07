@@ -202,11 +202,24 @@ def test_report_multi_repo_shape_validates():
 # --- spec 0014: Deep-degrade visibility — schema 0012/1 → 0013/1 (P6) ---------
 
 
-def test_report_schema_version_is_0026():
-    # spec 0026 bumps 0025/1 -> 0026/1: the additive run_metadata
-    # `representativeness_caveat` field (terse-query eval set). Legacy blocks still
-    # validate via _RUN_METADATA_DEFAULTS.
-    assert SCHEMA_VERSION == "0026/1"
+def test_report_schema_version_is_0027():
+    # spec 0027 bumps 0026/1 -> 0027/1: additive per-cause scout-degrade counts
+    # (AC4 — the four native-loop causes surfaced separately). Legacy blocks still
+    # validate via _AGGREGATE_DEFAULTS.
+    assert SCHEMA_VERSION == "0027/1"
+
+
+def test_per_cause_scout_degrade_fields_default_via_aggregate_defaults():
+    # spec 0027 AC4: a legacy aggregate (no per-cause fields) still validates because
+    # the four per-cause counts are additive-last-with-defaults in _AGGREGATE_DEFAULTS.
+    rep = build_report(_run_metadata(), [_case()], _aggregate())
+    for f in (
+        "scout_degrade_model_unreachable_count",
+        "scout_degrade_backend_error_count",
+        "scout_degrade_loop_turns_exhausted_count",
+        "scout_degrade_loop_wallclock_exhausted_count",
+    ):
+        assert rep["aggregate"][f] == 0
 
 
 def test_run_metadata_carries_representativeness_caveat():

@@ -1,7 +1,7 @@
 ---
 id: "0027"
 title: "harness"
-status: draft
+status: closed
 created: 2026-07-07
 authors: [claude]
 packages: [harpyja/scout, harpyja/eval]
@@ -41,9 +41,9 @@ confounded finding + the RCA).
   injection is REMOVED entirely, not reduced to a smaller tree. Shrinkage leaves a
   confound (*how much did I leave in?*) inside the very fix meant to remove one — full
   removal makes the astropy validation unambiguous. Structure is discovered on demand
-  through tools the model chooses to call. (The cutover mechanism — `context_map=""`
-  compatibility shim vs. deleting the `_Session` map record and refactoring its
-  "right-after-the-map" index assumption — is chosen explicitly in the plan; see What.)
+  through tools the model chooses to call. (Full-removal governs prompt *content* — zero
+  repo listing — not code structure: the decided `context_map=""` cutover injects zero
+  content and satisfies it; see What.)
 - **INVARIANT (blind-start guard — the opposite failure):** removing the map must not
   swing the model into aimless `grep`/`glob` that exhausts its budget — which ALSO
   degrades to empty. Add a cheap on-demand `ls`/tree TOOL. This is genuinely NOT
@@ -78,10 +78,12 @@ confounded finding + the RCA).
 
 - **Remove `build_context_map`'s eager whole-repo injection** from the explorer path
   entirely. The initial prompt is OpenCode-style minimal: system prompt + task/query,
-  **no repo listing**. State the cutover explicitly in the plan — either pass
-  `context_map=""` (leaves a contentless `_Session` record 0, keeps
-  `_refresh_index().insert(1,…)` valid) or delete the map record and refactor the
-  "right-after-the-map" assumption (`explorer_loop.py`) — and PICK one, deliberately.
+  **no repo listing**. **Cutover DECIDED: pass `context_map=""`** (the backend stops
+  calling `build_context_map`) — this injects ZERO repo content, so it satisfies the
+  full-removal invariant (full-removal governs prompt *content*, not whether an empty
+  `_Session` record exists); it also keeps `_refresh_index().insert(1,…)` valid with no
+  restructuring. Deleting the now-empty record 0 and dropping the "right-after-the-map"
+  index assumption is an OPTIONAL cleanup (not load-bearing — AC1/AC2 hold either way).
 - **Add a bounded, read-only `ls`/tree tool** (on-demand directory listing, repo-confined
   via `confine_path`, output-clamped by a NEW dedicated `Settings` field
   `scout_ls_max_entries`) to the tool suite alongside `grep`/`glob`/`read_span` — same
@@ -110,10 +112,12 @@ confounded finding + the RCA).
 ([unit]=fakes/injected; [integration]=live, `@pytest.mark.integration`, skip-not-fail)
 
 1. **[unit]** The explorer's INITIAL prompt contains NO whole-repo listing; the turn-1
-   payload is a small constant (assert an upper bound well below the ~10K-token
-   regression), **independent of repo size** — asserted at the BACKEND level
-   (`ExplorerBackend._run_loop`) with a large synthetic manifest, since the map is built
-   there, not in `run_explorer_loop`.
+   payload is a small constant **≤ 2,000 tokens (≤ ~8,000 chars, counted as
+   `len(payload)//4` — the same heuristic the RCA used)**, well below the ~10,181-token
+   regression, and **independent of repo size** — asserted at the BACKEND level
+   (`ExplorerBackend._run_loop`, run twice with a small AND a large synthetic manifest;
+   both payloads clear the bound and are within a small delta of each other), since the
+   map is built there, not in `run_explorer_loop`.
 2. **[unit]** The per-turn prompt does not re-inject a repo map; prompt growth across
    turns is bounded by tool outputs + the truncation policy only (no map term).
 3. **[unit]** The new `ls`/tree tool is read-only, repo-confined (`confine_path`), and
@@ -125,28 +129,52 @@ confounded finding + the RCA).
    `ScoutUnavailable.cause` + `LoopResult.outcome` — NOT `turns_used`: mid-turn exception
    (`MODEL_UNREACHABLE`/`BACKEND_ERROR`), turn-exhaustion (`LOOP_TURNS_EXHAUSTED`),
    wall-clock exhaustion (`LOOP_WALLCLOCK_EXHAUSTED`), honest-empty (`SUBMITTED`, no
-   citation) — asserted distinct. The report-layer gap is closed:
+   citation) — asserted distinct. **`LOOP_WALLCLOCK_EXHAUSTED` is PRE-EXISTING** — the
+   spec-0024 between-turns `scout_wall_clock_s` ceiling (`explorer_loop.py:196`), merely
+   *surfaced per-cause* here; it is NOT the total-request/in-flight-preemption deadline
+   that is Out of scope (a different mechanism). The report-layer gap is closed:
    `harpyja/eval/runner.py::_is_scout_degraded` currently collapses all causes into one
-   `scout_degrade_count`; add **per-cause** degrade counts so a re-emptied astropy names
-   WHICH state it hit. **(Makes AC5 interpretable.)**
-5. **[integration]** astropy case: the explorer (Qwen3-16B-A3B on llama.cpp) **localizes
-   the file+block WITHOUT degrade in ≤ a pre-stated turn ceiling `N`** — the
-   OpenCode-parity proof. PLUS a **second, structurally different case** (a larger repo
-   whose old map would have been even bigger), so a single lucky localization does not
-   stand in for "harness fixed." If either still empties, AC4's cause taxonomy names WHICH
-   failure — and it must NOT be a timeout/backend degrade. **(AC5 is the whole spec.)**
+   `scout_degrade_count`; add **per-cause** degrade counts (appended last-with-defaults
+   through the existing `report.py::_AGGREGATE_DEFAULTS` anti-drift source, and **bump
+   `report.SCHEMA_VERSION` `0026/1` → `0027/1`** — the mechanical step every prior
+   additive-field spec paid, 0011→0026) so a re-emptied astropy names WHICH state it hit.
+   **(Makes AC5 interpretable.)**
+5. **[integration]** Both cases: the explorer (Qwen3-16B-A3B on llama.cpp) **localizes
+   the gold file+block WITHOUT degrade** (bucket `right-file-wrong-span` or `correct`)
+   **in ≤ `N = 10` turns** (pre-registered ceiling; well below the old 12-cap) — the
+   OpenCode-parity proof. The two cases are pre-registered concretely:
+   **(a) `astropy__astropy-12907`** (910 `.py` files; gold `astropy/modeling/separable.py`
+   242–248) and **(b) `django__django-12774`** (2,611 `.py` files — ~2.9× astropy, so the
+   old map would have been materially bigger; gold `django/db/models/query.py` 689–695),
+   each with a hand-authored terse query. A single lucky localization does not stand in
+   for "harness fixed." If either still empties, AC4's cause taxonomy names WHICH failure
+   — and it must NOT be a timeout/backend degrade (`MODEL_UNREACHABLE`/`BACKEND_ERROR`).
+   **(AC5 is the whole spec.)**
+   > **Live-proof outcome (2026-07-07) — AC5 HOLD.** Map removal PROVEN (turn-1 payload
+   > ~10,181 → ~60 tokens, both cases). AC5 localization BLOCKED: both cases degraded
+   > `model-unreachable` @300s — a **downstream generation-runaway** (Qwen3 thinking +
+   > unbounded generation; `/no_think`+`max_tokens` cap tool-calls in 13.2s, `/no_think`
+   > alone still runs away), NOT the map defect and NOT a localization-capability
+   > finding. Recorded as a HOLD naming the fix → a **generation-control follow-up
+   > spec** (a prerequisite for the 0026 re-run + the bake-off). See
+   > `specs/0027-harness/operator-run-findings.md`; the AC5 integration test
+   > (`test_harness_live.py`) ships `xfail` until the follow-up lands.
 6. **[integration]** The turn-1 payload measured LIVE drops from the ~10,181-token
-   regression to the small constant; per-turn latency is no longer dominated by map
-   prefill (record the actual payload + latency for both AC5 cases).
+   regression to the small constant (the AC1 bound), and per-turn latency is no longer
+   dominated by map prefill. AC5/AC6 produce a **committed evidence artifact** (a run log
+   under `specs/0027-harness/`, mirroring the operator-run-findings pattern) recording,
+   per case: turn-1 payload size (chars + tokens), per-turn latency, turns used, the
+   terminal `LoopResult.outcome`/`ScoutUnavailable.cause`, and the localization bucket —
+   so the "AC5 is the whole spec" proof is durable, not a transient skip-not-fail run.
 7. **[doc]** The record is corrected, **scoped to 0026 ONLY**: the 0026 pilot
    `UNDER_POWERED_STOP` ran on `ExplorerBackend` (post-0024/0025) through the eager map and
    is **capability-mute / timeout-confounded**. Specs **0020–0023 ran on the RETIRED
    FastContext backend (pre-0024) which never called `build_context_map`** → this RCA does
    NOT bear on them (a now-removed backend; NOT "confounded" — do not claim it). The
    FastContext *dependency removal* (0024/0025) stands independently (sourcing, not a
-   capability claim). Fix lands in three places already carrying the overreach: this AC7,
+   capability claim). Fix lands in three places that carried the overreach: this AC7,
    `rca-explorer-context-bloat.md` Impact, and the `operator-run-findings.md` correction
-   note (the latter two committed in `1ef917f` — corrected).
+   note — the latter two originally committed in `1ef917f`, **corrected in `0fdcb57`**.
 8. **[unit]** `turns_used` is RETIRED as a diagnostic signal for *why a run ended*: the
    cause taxonomy (`ScoutUnavailable.cause` + `LoopResult.outcome`) is the single source of
    truth. A grep sweep of `harpyja/scout` + `harpyja/eval` finds no `turns_used`-based
@@ -179,22 +207,25 @@ than none, which is why it is scoped to 0026 only and verified against the actua
   Ollama's `--no-jinja --chat-template chatml` path does NOT for a raw HF GGUF).
 - **A total-request wall-clock deadline** for the explorer (the separate 0017-caveat
   robustness follow-up — this spec removes the bloat that *triggers* the timeout; it does
-  not add a hard-terminable total deadline).
+  not add a hard-terminable total deadline). Distinct from the PRE-EXISTING between-turns
+  `scout_wall_clock_s` ceiling (`LOOP_WALLCLOCK_EXHAUSTED`, spec 0024) that AC4 merely
+  surfaces per-cause — that ceiling is not new scope; a total in-flight-preempting
+  deadline is, and is OOS.
 - **OQ/gate/threshold tuning.**
 
-## Open questions
+## Decisions (settled in review — no load-bearing open questions remain)
 
-1. **`ls`/tree tool granularity:** single-directory listing per call (model walks down)
-   vs. bounded depth-N subtree per call. Single-dir is the purest pull and cheapest;
-   depth-N saves turns but re-creates a mini-eager-dump risk. **Lean single-dir; decide
-   before plan.**
-2. **Does ANY minimal orientation help without re-introducing the defect** — e.g. a
-   one-line "repo root has N top-level dirs: [names]" (cheap, constant) vs. truly nothing?
-   **Lean truly nothing first** (cleanest astropy proof); add minimal orientation only if
-   AC5 shows blind-start turn/wall-exhaustion. Pilot the empty-start; don't pre-scaffold.
-   **Procedural guard:** if orientation IS added later, it MUST re-run AC5/AC6 fresh — the
-   zero-orientation astropy proof does NOT transfer to an orientation-added variant (two
-   variables must not be conflated across specs). **(Settle in review.)**
+1. **`ls`/tree granularity → SINGLE-DIRECTORY listing per call** (the model walks down).
+   The purest pull and cheapest; a bounded depth-N subtree per call is rejected — it
+   re-creates the mini-eager-dump risk this spec exists to remove.
+2. **Initial orientation → ZERO (truly nothing)** — system prompt + task/query only, the
+   cleanest OpenCode-parity proof (AC5). A minimal one-line orientation ("repo root has N
+   top-level dirs: […]") is deliberately NOT shipped now. If AC5 shows a genuine
+   blind-start failure — turn/wall-**exhaustion** (`LOOP_TURNS_EXHAUSTED`/
+   `LOOP_WALLCLOCK_EXHAUSTED`), NOT a timeout/backend degrade — a minimal orientation is a
+   FOLLOW-UP that MUST re-run AC5/AC6 fresh (the zero-orientation proof does not transfer;
+   the two variables — map-removal, orientation-add — must not be conflated across specs).
+   Pilot the empty-start; do not pre-scaffold against a risk that may not materialize.
 
 ## Validation environment (RCA reference)
 

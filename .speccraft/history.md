@@ -2,6 +2,75 @@
 
 Append-only. Newest first.
 
+## 2026-07-07 — **Spec 0027 (harness) removed the explorer's EAGER whole-repo context map (RCA-driven push → pull), added an on-demand `ls` tool (exact-tool-count convention reconciled 3 → 4), and plumbed the four-cause degrade taxonomy per-cause to the report (`SCHEMA_VERSION 0026/1 → 0027/1`) — map removal PROVEN live (turn-1 payload ~10,181 → ~60 tokens, ~170× cut, repo-size-independent), but AC5 localization is a HOLD: both cases degraded `model-unreachable` @300s on a DOWNSTREAM generation-runaway (model-unreachable ≠ can't-localize), so finder capability is UNMEASURED. Generation control is a BLOCKING PREREQUISITE for the 0026 re-run + bake-off + any localization measurement. Cutover-not-redesign: gate/matrix/orchestrator/`submit_citations`/`Locator` byte-untouched. AC7 committed-error correction (0020–0023 "confounded") narrowed to 0026-ONLY and ASSERTED consistent across all three surfaces**
+
+**Spec:** specs/0027-harness/
+**Decision:** The 0026 RCA (`rca-explorer-context-bloat.md`) found the explorer's per-turn
+prompt is dominated by spec-0024's `build_context_map` — a flat whole-repo listing
+(~1,221 lines / ~10,181 tokens for astropy) re-sent every turn — pushing the 16B model
+into a generation that never completes turn 1 inside the 300s timeout → `ScoutUnavailable`
+→ floored to empty (a degrade misread as non-localization). The eager whole-repo *push* is
+the defect; the fix is *pull*. This spec (a) REMOVES the eager map from the live path
+entirely — the backend now calls a minimal `context_map.build_initial_prompt(query)`
+(system framing + query, NO repo listing), so the turn-1 payload is a small constant
+independent of repo size; **DEVIATION (T6):** the spec DECIDED `context_map=""`, but the
+query was baked into `build_context_map`, so the cutover is a minimal
+`build_initial_prompt` (zero repo content, query PRESERVED) rather than a literal empty
+string — full-removal governs prompt *content*, which is satisfied; `build_context_map` is
+retained for reference, simply no longer called. (b) Adds the **blind-start guard**: a
+fourth read-only tool `ls(path=".")` — a `confine_path`-guarded SINGLE-DIRECTORY listing
+(lists files AND dirs, the layout-discovery affordance `glob` lacks, since `glob` filters
+out directories), clamped by a NEW `scout_ls_max_entries: int = 200` Settings field. This
+is a DELIBERATE, RECONCILED tool-suite change: the exact-tool-count convention was amended
+`{grep,glob,read_span}` → `{grep,glob,read_span,ls}` with a rationale, and BOTH hard-count
+tests updated in the same commit — NOT the silent weak-model tool creep the guard exists
+to catch. (c) Plumbs the ALREADY-TYPED four-cause taxonomy
+(`ScoutUnavailable.cause`/`LoopResult.outcome`) to the report layer: `runner`
+`_scout_degrade_cause` + four additive per-cause counts alongside the retained collapsed
+`scout_degrade_count`, `report.SCHEMA_VERSION 0026/1 → 0027/1` via `_AGGREGATE_DEFAULTS`
+(`loop-wallclock-exhausted` is the PRE-EXISTING spec-0024 between-turns ceiling merely
+surfaced, not new scope). (d) RETIRES `turns_used` as a why-did-it-end signal (executable
+source-sweep guard; it survives only as the 0022 turns-CONSUMED measurement). The SUT
+boundary held — cutover, not redesign: `ScoutBackend`/`Locator` seam, gate, matrix,
+orchestrator, and `submit_citations` byte-untouched. **AC5 HOLD — capability UNMEASURED:**
+map removal is PROVEN live (turn-1 ~10,181 → ~60 tokens, ~170× cut, both cases), but the
+live localization is BLOCKED downstream — both astropy-12907 and django-12774 degraded
+`cause=model-unreachable` @~300s (`turns_used=None`), because the model ran away generating
+(Qwen3 thinking + unbounded generation) and never FINISHED, so it never localized.
+`model-unreachable ≠ "can't localize"` — the SAME degrade-masks-outcome trap the 0026 RCA
+corrected. The AC5 test (`test_harness_live.py`) ships `xfail` (non-strict) that flips to
+xpass when the fix lands. Measured diagnosis: `/no_think` alone still runs away (180s);
+`/no_think` + a `max_tokens` cap tool-calls in 13.2s — TWO knobs in the
+generation-control family, distinct from map removal. **AC7 committed-error correction:** a
+factual error shipped in `1ef917f` (0020–0023 "likewise confounded" by the eager map) was
+narrowed to **0026-ONLY** and CORRECTED across all three surfaces (spec AC7, the RCA
+Impact, the operator-run-findings note) in `0fdcb57`; `build_context_map`/`ExplorerBackend`
+are net-new in spec 0024, so 0020–0023 (pre-0024) ran on the retired FastContext backend
+and never touched the eager map → **not confounded** (moot for current Scout). The close
+ASSERTED (T14) — not merely noted — that all three surfaces are 0026-only,
+FastContext-scoped, zero residual "confounded" claims, because a mis-correction that
+half-reverts is worse than the original error.
+**Why:** the recurring project lesson — a degrade that masks an outcome silently reads as
+a capability finding — applied at the harness layer: the eager map was a
+repo-size-dependent prompt-bloat *push* that the loop's own timeout floor converted into a
+phantom "not found." Removing it (pull, on-demand `ls`) is proven cheap and
+repo-size-independent, and surfacing the four terminal causes per-cause is what makes a
+re-emptied case DIAGNOSABLE (which state it hit) rather than one collapsed boolean. But
+the proof stops at the prompt: **generation control** (disable Qwen3 thinking + a tuned
+`max_tokens` cap + likely a more directive tool-use prompt) is a **BLOCKING PREREQUISITE**,
+not 0027 cleanup — it GATES the 0026 pilot re-run, the model bake-off, AND any
+re-validation of localization capability. Until it lands, we cannot measure whether ANY
+model localizes through the explorer.
+**Consequence — the harness is proven cheap-prompt, but model-drive-to-citation is
+UNPROVEN.** Units T1–T11 green; the live proof (`operator-run-findings.md`) recorded map
+removal PROVEN and AC5 a HOLD. Report `SCHEMA_VERSION 0026/1 → 0027/1`; the explorer tool
+suite is now EXACTLY four (`{grep,glob,read_span,ls}`); `scout_ls_max_entries` added.
+**Named blocking follow-up:** a generation-control spec (thinking-off + tuned `max_tokens`
+cap + directive prompt), re-run AC5/AC6 here, then the 0026 pilot re-run and the bake-off.
+Other standing follow-ups unchanged: Tier-0 AST symbol tool; a total-request wall-clock
+deadline (0017-caveat); the tool-call-serving preflight (llama.cpp `--jinja` emits
+`tool_calls`, Ollama's `--no-jinja` chatml path does not). See specs/0027-harness/.
+
 ## 2026-07-06 — **Spec 0026 (eval) built the terse-query ranking INSTRUMENT — labels JOINED (never transcribed) by `case_id` from the sha256-pinned raw fixture, only the QUERY rewritten to Harpyja's terse shape; a version-gated loud loader lets additive-defaults (legacy) and reject-if-missing (terse guard) coexist; the leakage guard is an EXECUTABLE two-model blind protocol carried in a loud-validated provenance shape (state- not capability-independence, model-circularity named-not-closed, paired-ranking retained CO-PRIMARY as the model-independent floor); a frozen/hashed AC8 pilot power-gate STOPs before authoring the full set. INFRA COMPLETE but the instrument is NOT yet usable — the offline blind-authoring pilot (real queries) is the pending deliverable and the committed terse fixture is PLACEHOLDERS; suite 1010 pass, ruff clean; SUT byte-frozen**
 
 **Spec:** specs/0026-eval/

@@ -58,7 +58,38 @@
 - An untrusted, in-process code-**writing** loop is bounded in a **layered** way at different seams — no single ignorable counter is load-bearing. Externally-enforced counters the loop cannot evade (host-tool wrappers stop dispatching; the Gateway refuses further completions) plus a **wall-clock hard-kill via an out-of-band, host-terminable subprocess** are the load-bearing guarantees — a same-thread/event-loop deadline can never preempt a synchronous WASM busy loop, so enforcement is by hard termination, never cooperative cancellation. Internal control-flow bounds (recursion depth / sub-query fan-out) are host-mediated where the runtime exposes a spawn/recurse hook, else **recorded as residual risk** and **transitively contained** by the external counters (every sub-query spends tool-calls, tokens, and wall-clock). A bound the third party can ignore is not a bound. (See `harpyja/deep/runner.py`, `harpyja/deep/budget.py`, AC10/AC10a.)
 - A budget/quality **truncation** is a distinct, caller-visible, **stable non-degrade marker** (`deep-truncated:<bound>`, one of `depth`/`subqueries`/`tool-calls`/`tokens`/`wall-clock`) — never silently indistinguishable from a complete result, and never a tier-degrade (dropping a tier on a *successful but truncated* run would be the ungated escalation a verification gate is meant to govern). Distinct from both a complete run and a typed `DeepUnavailable` degrade. (See `harpyja/orchestrator/locate.py`, `harpyja/deep/engine.py`.)
 - When a third-party tier owns its **own** model client and cannot be routed through the in-house Gateway, enforce the air-gap by calling `gateway.assert_local` on the configured endpoint **before** constructing that client, and **prove** no non-loopback egress with a network-deny integration test — assumption-verified-by-test, not an asserted guarantee. Still **one** air-gap helper, never a parallel check. (See `harpyja/deep/rlm.py`, AC6/AC12.) When that third party is **env-configured** (reads its endpoint/model from `os.environ`, with no constructor/config-file seam — verify against the pinned source) and must be bridged off the request loop, inject its env **only while holding a module-level `threading.Lock`** — *not* an `asyncio.Lock`: each call runs the awaitable on its **own loop-free worker thread** (`asyncio.run` is illegal inside a running loop, so a worker thread keeps the sync seam intact), so concurrent calls land on different OS threads and only a thread lock serializes their `os.environ` writes. Hold the lock across `assert_local` → env-set → construct → the **full** off-loop run when any config key is read lazily per model call (closes the TOCTOU window). The env guard is **set-then-restore** in `try/finally` preserving per-key **unset-vs-empty** (a key absent before is `del`-eted after; a `""` is restored to `""`). This serializes the tier — accept it only where calls already contend for one resource (e.g. a single local GPU), and confine the latitude to that tier (never leak it to a sibling that keeps "config from `Settings`, not ambient env"). The fallback subprocess path scopes env to the **child** via `subprocess env=`, never mutating the parent. (See `harpyja/scout/client.py` `_SCOUT_ENV_LOCK` / `_managed_fc_env` / `_run_coro_on_worker_thread`, AC3/AC4.)
-- A **model-driven navigation loop's tool suite is a set of `confine_path`-guarded, Settings-bounded, READ-ONLY closures built by ONE factory mirroring `deep/host_tools.build_host_tools`** — the driving model is an untrusted caller of the tools (same posture as the RLM host tools), so every tool is repo-path-confined, output-bounded from the existing `Settings` clamps, and has no shell/write/terminal access. The tool COUNT is asserted exactly (`build_explorer_tools` returns EXACTLY `{grep, glob, read_span}`), so a weak model can never motivate silent tool-suite creep — a weak-model result is a finding, not a bug. Any ripgrep-backed tool shares ONE bounded `RipgrepEngine` with the Deep `search` host tool (single source of truth for bounds and repo-confinement — never a second, subtly-different grep surface); each tool returns the shared `CodeSpan`/text shape (a path-listing tool normalizes to file-level `CodeSpan` records, not raw strings). A pre-model context map's vendor/test/generated exclusion is a DISPLAY concern ONLY: it filters the rendered map, never the tool search scope (an excluded test/vendor file stays reachable via the tools — map-filter ≠ tool-scope filter), because a test can be the real localization target. (See `harpyja/scout/explorer_tools.py` `build_explorer_tools` + `harpyja/scout/context_map.py`, mirroring `harpyja/deep/host_tools.py`, spec 0024 AC2/AC3.)
+- A **model-driven navigation loop's tool suite is a set of `confine_path`-guarded, Settings-bounded, READ-ONLY closures built by ONE factory mirroring `deep/host_tools.build_host_tools`** — the driving model is an untrusted caller of the tools (same posture as the RLM host tools), so every tool is repo-path-confined, output-bounded from the existing `Settings` clamps, and has no shell/write/terminal access. The tool COUNT is asserted exactly (`build_explorer_tools` returns EXACTLY `{grep, glob, read_span, ls}` — **amended from three to four in spec 0027**: `ls` is the on-demand single-directory layout-discovery affordance `glob` lacks, added deliberately when the eager whole-repo context map was removed, push → pull; this is a RECONCILED, rationale-carrying change — updated in the same commit as both hard-count tests — NOT the silent weak-model tool creep the exact-count guard exists to catch), so a weak model can never motivate silent tool-suite creep — a weak-model result is a finding, not a bug. Any ripgrep-backed tool shares ONE bounded `RipgrepEngine` with the Deep `search` host tool (single source of truth for bounds and repo-confinement — never a second, subtly-different grep surface); each tool returns the shared `CodeSpan`/text shape (a path-listing tool normalizes to file-level `CodeSpan` records, not raw strings). A pre-model context map's vendor/test/generated exclusion is a DISPLAY concern ONLY: it filters the rendered map, never the tool search scope (an excluded test/vendor file stays reachable via the tools — map-filter ≠ tool-scope filter), because a test can be the real localization target. (See `harpyja/scout/explorer_tools.py` `build_explorer_tools` + `harpyja/scout/context_map.py`, mirroring `harpyja/deep/host_tools.py`, spec 0024 AC2/AC3.)
+- A **model-driven navigation/exploration loop discovers repo structure ON DEMAND through
+  tools it chooses to call — never via an eager whole-repo dump injected into the prompt
+  (push → pull).** An up-front whole-repo listing is a repo-size-dependent per-turn bloat
+  that a general model re-prefills every turn; past a point it pushes the model into a
+  generation that outlasts the per-call timeout, and the loop's own degrade floor then
+  converts that timeout into a phantom "nothing found." REMOVE it entirely (full removal,
+  not a smaller tree — shrinkage leaves a "how much did I leave in?" confound inside the
+  very fix meant to remove one), keep the initial prompt a small constant (task/query +
+  tool framing), and give the model a cheap layout-discovery tool (`ls`, single-directory)
+  so it walks down on demand. Measured: astropy's turn-1 payload dropped ~10,181 → ~60
+  tokens (~170×), repo-size-independent — asserted at the BACKEND level (a small AND a
+  large synthetic manifest, both clearing the bound, byte-identical because no manifest
+  term survives), since the map is built in the backend, not the loop. (See
+  `harpyja/scout/context_map.py` `build_initial_prompt` replacing the retired-from-live
+  `build_context_map`, `harpyja/scout/explorer_backend.py` `_run_loop`, spec 0027 AC1/AC2.)
+- A **bounded loop's "why did it end" is the TYPED cause/outcome, never a `turns_used`
+  integer comparison.** A loop with multiple terminal states (mid-turn exception,
+  turn-exhaustion, wall-clock exhaustion, honest-empty) MUST be discriminated by the
+  already-typed `ScoutUnavailable.cause` + `LoopResult.outcome`, not by arithmetic on the
+  turns count — `turns_used` is `None` on ANY degrade (the count is copied only on the
+  success path) and a *sub-cap* int on wall-clock exhaustion, indistinguishable from a
+  low-turn honest-empty. The real reporting gap is per-cause granularity: a collapsed
+  degrade boolean/count cannot say WHICH state a re-emptied case hit, so surface a
+  per-cause count for each native terminal cause alongside the retained collapsed count
+  (additive-last-with-defaults, `SCHEMA_VERSION` bumped), and pin with an executable
+  source-sweep guard that the outcome-deciding modules never branch on
+  `turns_used`/`last_turns_used`. `turns_used` survives ONLY as a turns-CONSUMED
+  measurement, never a discriminant. (See `harpyja/eval/runner.py` `_scout_degrade_cause`
+  + the four `scout_degrade_*_count` fields, the backend `_EXHAUSTION_CAUSE[result.outcome]`
+  mapping, and `test_explorer_outcome_logic_does_not_branch_on_turns_used`, spec 0027
+  AC4/AC8.)
 - A **model-driven loop ends via a tool-call-native TERMINAL ACTION with a STRICT arg schema — never by emitting free text to be regexed, and the strict schema IS the locator-not-diagnoser guard, not a soft check.** When a model must return a structured result to end a loop, give it a dedicated terminal tool (`submit_citations`) whose STRUCTURED args are validated (unknown/extra fields rejected → a typed `SubmitCitationsSchemaError`) and normalized through the existing validation (`normalize_spans`: repo-confine + clamp + drop malformed/out-of-repo/over-budget; empty is honest-empty, never a raise). The terminal action carries NO repo-read capability (it only validates+normalizes refs). Two load-bearing properties: (a) structured args over prose-regexing RETIRES an inherited text-grammar parse path (the 0011/0012 `<final_answer>` grammar), killing the exact text-parsing fragility class behind that era's worst bugs; (b) a diagnosis-shaped field (`root_cause`/`fix`/`explanation`) FAILING the strict schema is the ENFORCEABLE form of the locator-not-diagnoser boundary — the finder finds, downstream agents reason. (See `harpyja/scout/submit.py` `submit_citations` / `SubmitCitationsSchemaError`, spec 0024 AC6/OQ2.)
 - A **bounded loop's context truncation is CITATION-PRESERVING BY RULE — truncation must never convert a real find into honest-empty, and that negative is PROVEN, not assumed.** When a loop truncates history to stay under a bloat cap, truncation MAY drop ONLY stale navigational chatter (repeated calls, superseded listings), NEVER the raw output of an observation whose location could still appear in the final result; if recency-capping forces dropping such an observation, a compact index of the dropped spans is re-injected so nothing citable is unrecoverable. Assert the PRESERVATION negative directly — a final citation depending on an observation OLDER than the bloat threshold STILL resolves after truncation runs — not merely that truncation fired (asserting the mechanism fires is necessary but does not prove it is safe; the correctness leak is the silent honest-empty). Pair it with a deterministic loop-detector defined by a CHECKABLE equality (an exact `(tool_name, normalized_args)` repeat over N consecutive no-new-progress turns → a corrective injection), never by intent alone. The turn cap and a distinct WHOLE-LOOP wall-clock ceiling are separate budgets (turns ≠ time for a general model; the per-call HTTP timeout is the floor, the ceiling stops one slow turn wedging the loop). (See `harpyja/scout/explorer_loop.py` `run_explorer_loop`, `scout_history_char_cap` / `scout_loop_repeat_n` / `scout_wall_clock_s`, spec 0024 AC4/AC5/OQ3.)
 - A third-party **post-processing crash** is infra failure, not a result: when a backend's own output formatter/parser raises on malformed model output (e.g. FastContext's `get_final_answer` / `format_citations` raising `TypeError`), map **any** unexpected backend exception to the tier's typed degrade cause (`...Unavailable(backend-error)`) — never let a raw third-party exception escape the tier. Floors (`RipgrepMissingError` / `AirGapError`) and the package-absent import signal still propagate; an honest-empty result (a clean run that parsed no citation) still returns `[]`, never a raise. This honors "no model → Tier 0": a buggy backend degrades, it does not crash the request. (See `harpyja/scout/client.py`, AC10.)
@@ -167,6 +198,19 @@
 - Drive async code from sync tests with `asyncio.run(...)` rather than adding an async-test plugin (no `pytest-asyncio` dependency). See `server/test_app.py`, `server/test_stdio_hygiene.py`.
 - Keep tests network-free by injecting collaborators: pass a `resolver` to `assert_local` and a `which` to `run_doctor` instead of touching live DNS or `PATH`. Default to the real implementation, override in tests.
 - Mark tests that spawn a real process or event loop with `@pytest.mark.integration` (declared in `pyproject.toml`) so they are skippable in constrained environments.
+- A **deliberate change to a code-enforced EXACT-COUNT / exact-set guard is RECONCILED in
+  one change — the convention text AND every hard-count test that pins it move together,
+  each with a rationale — never a silent break of the guard.** When an invariant like
+  "`build_explorer_tools` returns EXACTLY `{grep,glob,read_span}`" exists precisely to
+  catch silent creep, legitimately widening it (adding `ls`) is not exempt from the guard:
+  amend the `.speccraft/conventions.md` text (`3 → 4`, `{…,ls}`) WITH a one-line rationale
+  naming why the affordance is deliberate, and update BOTH pinning tests in the SAME commit
+  (`test_build_explorer_tools_returns_exactly_four_navigation_tools` and the
+  schema-vs-dispatch `test_tool_schemas_match_the_built_tool_surface_single_source`). A
+  reconciled, rationale-carrying widening is the sanctioned path; a count bumped in one
+  test but not the convention (or vice versa) silently disarms the very guard. (See
+  `harpyja/scout/test_explorer_tools.py` + `test_explorer_backend.py`, the amended
+  tool-suite convention, spec 0027 AC3.)
 
 ## Filesystem & artifacts
 
@@ -588,6 +632,37 @@
   predicate reuses the scoring oracle's own success buckets (one-oracle reuse). (See
   `harpyja/eval/ac8_pilot.py` `PREREGISTERED_AC8_CONFIG` / `is_signal_discordant` /
   `decide_ac8` / `Ac8Outcome`, spec 0026 AC8.)
+
+- A **load-bearing LIVE acceptance criterion blocked by a DOWNSTREAM/model factor ships
+  the proven part and records the AC as a HOLD via an `xfail`-that-flips-to-`xpass` naming
+  the follow-up — never a skip, and never read as the capability finding it superficially
+  resembles.** When a live proof cleanly establishes the fix this spec scopes (map removal,
+  proven) but a SECOND, distinct blocker prevents the load-bearing measurement (the model
+  ran away generating and degraded `model-unreachable` before it could localize), draw the
+  close-vs-hold boundary BY CAUSE: `model-unreachable ≠ "can't localize"` — a degrade that
+  masks the outcome is NOT a capability result (the 0026 degrade-masks-outcome trap). Ship
+  the proven part, and encode the blocked AC as a non-strict `@pytest.mark.xfail` whose
+  reason NAMES the follow-up: it skips with no live stack (CI-safe) and flips to `xpass`
+  when the follow-up lands — a self-un-holding signal, superior to a bare skip (which can
+  silently pass forever) or a red-fail (which blocks CI on infrastructure this spec does
+  not own). The follow-up it names is stated at the right SCOPE — a BLOCKING PREREQUISITE
+  for downstream work (the 0026 re-run, the bake-off, any localization measurement), not
+  cleanup — with its first evidence recorded (`/no_think`+cap = 13.2s vs 180s runaway).
+  (See `harpyja/eval/test_harness_live.py` `xfail`, `specs/0027-harness/operator-run-findings.md`,
+  spec 0027 AC5/AC6.)
+- A **correction to an already-COMMITTED record gets an executable/asserted consistency
+  check at close, across EVERY surface that carried the error — not a one-line note — because
+  a mis-correction that half-reverts is worse than the original error.** When a factual
+  overreach was shipped into multiple committed artifacts (spec AC7 + a committed RCA's
+  Impact + an operator-run-findings note all claimed 0020–0023 were "likewise confounded"),
+  the fix is scoped to exactly what the evidence supports (0026-ONLY: `build_context_map`
+  is net-new in spec 0024, so pre-0024 specs ran a now-retired backend that never touched
+  it — moot, NOT "confounded") and VERIFIED consistent across all three surfaces at close
+  (all 0026-only, zero residual "confounded" claims), not merely amended in one place. An
+  over-broad correction that re-implicates the innocent cases re-introduces the exact error
+  it claims to fix; an inaccurate correction is worse than none. (See spec 0027 AC7 / T14,
+  the `0fdcb57` narrowing of `specs/0026-eval/rca-explorer-context-bloat.md` +
+  `operator-run-findings.md`.)
 
 ## Logging
 

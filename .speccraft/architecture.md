@@ -129,8 +129,8 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    driven over a bounded read-only loop to a citation list: `context_map.build_context_map`
    renders a pre-model filtered tree from the manifest (no file bytes; the
    vendor/test/generated exclusion is a DISPLAY concern only, tool scope unaffected);
-   `explorer_tools.build_explorer_tools` returns EXACTLY three `confine_path`-guarded,
-   Settings-bounded, read-only navigation closures `{grep, glob, read_span}` mirroring
+   `explorer_tools.build_explorer_tools` returns (as of spec 0027) EXACTLY FOUR `confine_path`-guarded,
+   Settings-bounded, read-only navigation closures `{grep, glob, read_span, ls}` (`ls` added spec 0027) mirroring
    `deep/host_tools.build_host_tools` — `grep`/`glob` share the SAME `symbols.ripgrep.RipgrepEngine`
    the Deep `search` tool wraps (one bounded rg source of truth), `read_span` reuses
    `server.tools.read_snippet`, `glob` normalizes to file-level `CodeSpan`s bounded by
@@ -188,6 +188,31 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    `test_packaging.py` rot-false on reintroduction. Suite 985 pass / 23 skip, ruff clean; the
    AC8 cutover proof passed LIVE end-to-end through the explorer (Qwen3-8B on loopback Ollama,
    zero non-loopback egress). See history.md 2026-07-06 (spec 0025).
+
+   **As of spec 0027 the explorer's EAGER whole-repo context map is REMOVED from the live
+   path (push → pull), the navigation suite is EXACTLY FOUR tools, and `turns_used` is
+   retired as a diagnostic.** `context_map.build_context_map` is RETIRED-from-live (kept for
+   reference, no longer called by the backend); `ExplorerBackend._run_loop` now passes
+   `context_map.build_initial_prompt(query)` — a minimal OpenCode-style initial prompt
+   (system framing + query, NO repo listing) that is a small constant independent of repo
+   size (the turn-1 payload drops ~10,181 → ~60 tokens, ~170×; asserted at the BACKEND level
+   over a small AND large synthetic manifest, byte-identical because no manifest term
+   survives). `explorer_tools.build_explorer_tools` now returns EXACTLY
+   `{grep, glob, read_span, ls}` — the fourth tool `ls(path=".")` is a `confine_path`-guarded
+   SINGLE-DIRECTORY listing (immediate children, files AND dirs, the layout-discovery
+   affordance `glob` lacks) clamped by a NEW `Settings.scout_ls_max_entries` (default 200) —
+   a DELIBERATE, reconciled tool-suite change (exact-count convention amended 3 → 4 + both
+   hard-count tests, same commit). The SUT boundary held (cutover, not redesign): the
+   `ScoutBackend`/`ScoutEngine`/`Locator` seam, gate, matrix, orchestrator, and
+   `submit_citations` are byte-untouched. **Live status: the harness is PROVEN cheap-prompt
+   (map removed), but model-drive-to-citation is UNPROVEN** — the AC5 live localization is a
+   recorded HOLD: both astropy-12907 and django-12774 degraded `model-unreachable` @~300s on
+   a DOWNSTREAM generation-runaway (Qwen3 thinking + unbounded generation), NOT the map
+   defect and NOT a capability finding (`model-unreachable ≠ can't-localize`). Generation
+   control (thinking-off + a tuned `max_tokens` cap + a directive prompt) is a BLOCKING
+   PREREQUISITE for the 0026 re-run + the bake-off + any localization measurement; the AC5
+   test (`test_harness_live.py`) ships `xfail` until it lands. See history.md 2026-07-07
+   (spec 0027).
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -460,6 +485,19 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    operator deliverable, and a likely AC8 `UNDER_POWERED_STOP` is a scoped finding naming
    the finder-capability next step.** See history.md 2026-07-06 (spec 0026).
 
+   **As of spec 0027 the report surfaces PER-CAUSE Scout-degrade counts** (still
+   measurement; the SUT change is the sibling spec-0027 explorer edit, not this layer).
+   `runner.py` gains `_scout_degrade_cause` (parses `scout-degraded:<cause>`, tolerant of
+   the `+no-matches` suffix) and emits four additive per-cause counts —
+   `scout_degrade_model_unreachable_count`, `scout_degrade_backend_error_count`,
+   `scout_degrade_loop_turns_exhausted_count`, `scout_degrade_loop_wallclock_exhausted_count`
+   — alongside the RETAINED collapsed `scout_degrade_count` (the discriminant is the typed
+   cause / `LoopResult.outcome`, NEVER `turns_used`, which is `None` on any degrade and a
+   sub-cap int on wall-clock exhaustion). `report.SCHEMA_VERSION` bumped `0026/1 → 0027/1`,
+   the fields appended last-with-defaults in `_AGGREGATE_DEFAULTS` (legacy 0026 blocks still
+   validate); `loop-wallclock-exhausted` is the PRE-EXISTING spec-0024 between-turns ceiling
+   merely surfaced per-cause, not new scope. See history.md 2026-07-07 (spec 0027).
+
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
 ## Key decisions
@@ -484,7 +522,7 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   precondition. See history.md 2026-06-26.
 - Tier 1 (Scout) is live and additive on the Tier-0 floor. **As of spec 0024 the
   production Tier-1 backend is the native `ExplorerBackend` (a general tool-calling
-  model over three read-only tools to a `submit_citations` terminal action), which
+  model over four read-only tools — `{grep,glob,read_span,ls}` as of spec 0027 — to a `submit_citations` terminal action), which
   RETIRED and replaced the FastContext adapter described below; as of spec 0025
   FastContext is FULLY REMOVED (single canonical `build_scout_engine` factory over
   `ExplorerBackend`, running on `lm_model`) and the FastContext description below is

@@ -32,7 +32,7 @@ from pathlib import Path
 # Spec 0026 bumps 0025/1 -> 0026/1: additive run_metadata `representativeness_caveat`
 # (the terse-query eval set travels its scope with every result). Legacy blocks still
 # validate via _RUN_METADATA_DEFAULTS.
-SCHEMA_VERSION = "0026/1"
+SCHEMA_VERSION = "0027/1"
 
 # spec 0026 (AC7): the pinned scope caveat for the terse-query ranking instrument —
 # fixes the QUERY-SHAPE axis, NOT codebase-character (documented OSS, Python
@@ -149,6 +149,14 @@ _AGGREGATE_FIELDS = (
     # spec 0019 — additive: gate-confound outcome + instruct/scout A/B false-escalation
     # twins (declared once in _GATE_CONFOUND_AGG_FIELDS). Rates null-with-zero-count.
     *_GATE_CONFOUND_AGG_FIELDS,
+    # spec 0027 — additive: per-cause scout-degrade counts (AC4). The four native
+    # explorer-loop causes surfaced separately from the collapsed scout_degrade_count,
+    # so a re-emptied case names WHICH terminal state it hit (cause taxonomy, not
+    # turns_used). loop-wallclock-exhausted is the pre-existing spec-0024 ceiling.
+    "scout_degrade_model_unreachable_count",
+    "scout_degrade_backend_error_count",
+    "scout_degrade_loop_turns_exhausted_count",
+    "scout_degrade_loop_wallclock_exhausted_count",
 )
 
 # Schema-stable defaults for the additive fields, injected by build_report when a
@@ -198,6 +206,12 @@ _AGGREGATE_DEFAULTS = {
     "gate_false_escalation_scout": None,
     "gate_false_escalation_scout_count": 0,
     "gate_false_escalation_scout_total": 0,
+    # spec 0027 — per-cause scout-degrade counts (AC4); default 0 so a legacy 0026
+    # block still validates after the bump.
+    "scout_degrade_model_unreachable_count": 0,
+    "scout_degrade_backend_error_count": 0,
+    "scout_degrade_loop_turns_exhausted_count": 0,
+    "scout_degrade_loop_wallclock_exhausted_count": 0,
 }
 
 
