@@ -96,3 +96,48 @@ the per-op timeout (not a missing-timeout bug), but neither it nor the loop's
 `scout_wall_clock_s` preempts an in-flight dribbling read. A total wall-clock deadline
 (hard-terminable, like Deep's out-of-band subprocess kill) would let the explorer degrade
 instead of wedging. Worth a small robustness spec; independent of 0026.
+
+---
+
+## CORRECTION (2026-07-07) — the verdict is CONFOUNDED by a harness defect
+
+A follow-up RCA (`specs/0026-eval/rca-explorer-context-bloat.md`) found that this
+pilot's `UNDER_POWERED_STOP` is **not a clean measurement of the candidate models — it
+measured the harness.**
+
+**What the RCA found.** The explorer prepends spec-0024's `build_context_map` — a flat
+listing of the ENTIRE repository (~1,221 lines / ~10,181 tokens for astropy) — to the
+prompt, re-sent every turn. On local hardware that costs **~48–68s per turn** just to
+prefill (and pushes the model into a generation that did not complete even turn 1 within
+a 300s timeout). The **same model + server localizes the astropy file+block in seconds
+under OpenCode**, which starts near-empty and discovers structure on demand.
+
+**Why this pilot is confounded.** This run used `lm_http_timeout_s=40` — chosen to avoid
+the default-budget wedge, but **far below the true ~48–68s/turn cost.** So the explorer
+runs almost certainly **timed out / degraded on their first turn** (`ScoutUnavailable`
+→ floored to `empty`, `turns_used: None`) rather than making an honest localization
+attempt. The all-`empty` result across both arms is therefore largely an artifact of
+**the harness timing out on its own oversized prompt**, not of the models failing to
+find code. What I earlier called a "conservative budget intervention" was in fact a
+timeout set below the per-turn floor — the runs did not measure localization at all.
+
+**What still holds vs. what does not.**
+- HOLDS: the *executable two-model blind protocol demonstrably worked* (7 authored
+  blind, 1 verifier-flagged leaky drop, 2 pin-2 issue-leak exclusions) — that machinery
+  is unaffected by the explorer defect.
+- HOLDS: the pre-registered AC8 gate mechanically fired and returned a typed outcome.
+- DOES NOT HOLD (retracted): the *interpretation* that "these two general candidates
+  under-power terse-query ranking" / that the near-zero localization is a **capability**
+  finding. It is **capability-mute** — a degrade misread as non-localization.
+
+**Consequence.** `UNDER_POWERED_STOP` cannot be read as a statement about the candidate
+models until the explorer is fixed (spec **0027-harness** — remove the eager context
+map) and the pilot is **re-run** with a timeout above the real per-turn cost + a
+tool-call serving preflight. The next-step direction (finder-capability) is *not*
+invalidated, but its evidentiary basis moves from "measured near-zero localization" to
+"could not measure localization through this harness." Do not cite this verdict as a
+capability result.
+
+(Scope: this corrects the CAPABILITY characterization only. The FastContext dependency
+removal in 0024/0025 stands independently — that model was retracted/unobtainable, a
+sourcing decision, not a capability claim.)
