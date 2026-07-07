@@ -123,22 +123,35 @@ degrades. The one variable is that Harpyja front-loads the entire repo map and a
 tool/system frame, so the model never gets to *do* the task. A "simple" locator
 out-prompts a full coding agent.
 
-## Impact — prior findings are timeout-confounded
+## Impact — the 0026 pilot finding is timeout-confounded
 
 The all-`empty` results this defect produces are indistinguishable at the taxonomy level
-from "the finder cannot localize", because both surface as an empty citation set. Two
-recorded findings ran through this harness and are therefore **capability-mute, not
-capability-findings**:
+from "the finder cannot localize" — both surface as an empty citation set. The recorded
+finding that ran through THIS harness is therefore **capability-mute, not a
+capability-finding**:
 
-- **0026 pilot `UNDER_POWERED_STOP`** — ran with `lm_http_timeout_s=40`, far below the
-  true ~48–68s/turn cost, so runs degraded on timeout/error, not on localization. It
-  measured the harness, not the candidates.
-- **0020–0023 `RETRIEVAL_FUNDAMENTAL`** — the "near-zero localization" characterization
-  ran through the same eager-map explorer path and is likewise confounded.
+- **0026 pilot `UNDER_POWERED_STOP`** — ran on `ExplorerBackend` (the sole Scout backend
+  post-0024/0025) with `lm_http_timeout_s=40`, far below the true ~48–68s/turn cost, so
+  runs degraded on timeout/error, not on localization. It measured the harness, not the
+  candidates.
+
+**Scope — this does NOT reach 0020–0023 (a correction of this RCA's own first draft).**
+`build_context_map` and `ExplorerBackend` are **net-new in spec 0024** (module docstrings:
+"spec 0024, AC3"; both first committed in `7c94ef2`, "native explorer-loop Scout backend
+replaces FastContext"). Specs **0020–0023 (2026-07-04/05) ran BEFORE 0024**, on the
+retired FastContext client (`harpyja/scout/client.py`) — which **never called
+`build_context_map` because it did not exist yet.** So their `RETRIEVAL_FUNDAMENTAL` /
+near-zero-localization characterization **cannot be confounded by this eager-map defect.**
+They measured a backend that has since been removed (0025); this RCA does not bear on them
+either way. (Whether FastContext had its OWN prompt-construction problems is a separate,
+un-investigated question — not claimed here.) An earlier draft of this section wrongly
+listed 0020–0023 as "likewise confounded"; **that overreach is retracted** — an
+inaccurate correction is worse than none. Only **0026** is confounded by this defect.
 
 The FastContext **dependency removal (0024/0025) stands independently** — that model was
 retracted/unobtainable; a sourcing decision, not a capability claim. What is unproven
-until re-run is the CAPABILITY characterization that a finder "can't localize."
+until re-run is the 0026 CAPABILITY characterization that these candidates "can't
+localize."
 
 ## Fix (spec 0027-harness)
 

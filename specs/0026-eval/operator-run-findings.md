@@ -138,6 +138,17 @@ invalidated, but its evidentiary basis moves from "measured near-zero localizati
 "could not measure localization through this harness." Do not cite this verdict as a
 capability result.
 
-(Scope: this corrects the CAPABILITY characterization only. The FastContext dependency
-removal in 0024/0025 stands independently — that model was retracted/unobtainable, a
-sourcing decision, not a capability claim.)
+(Scope: this corrects the CAPABILITY characterization for the **0026 pilot ONLY**. The
+FastContext dependency removal in 0024/0025 stands independently — that model was
+retracted/unobtainable, a sourcing decision, not a capability claim.)
+
+**Retraction within this correction (2026-07-07, review-caught).** The RCA's first draft
+also listed **0020–0023** as "likewise confounded" by the eager map. **That is wrong and
+retracted.** `build_context_map`/`ExplorerBackend` are net-new in spec 0024; 0020–0023
+(2026-07-04/05) ran on the retired FastContext backend, which never called
+`build_context_map`, so this defect does **not** bear on them. Only **0026** is
+confounded. Consequence: the finder-capability next-step direction now rests on a
+**thinner** basis than the paragraphs above imply — 0026 (confounded) plus 0022/0023
+(which measured a now-removed backend) — so treat it as a direction to **verify
+post-fix**, not an established capability result. (An inaccurate correction is worse than
+none.)
