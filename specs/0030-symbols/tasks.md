@@ -19,4 +19,4 @@ spec: "0030"
 - [x] T13 — REFACTOR (optional): extract shared `record_to_codespan` used by `deep/host_tools.py` + `scout/explorer_tools.py`
 - [x] T14 — RED (AC5): `test_lift_report_schema_is_version_stamped_and_validated`, `test_lift_report_writes_outside_repo_atomically` in `harpyja/eval/test_symbols_lift_report.py`
 - [x] T15 — GREEN (AC5): pinned version-stamped lift-report schema + atomic outside-repo writer in `harpyja/eval/symbols_lift_report.py`
-- [ ] T16 — LIVE (AC5/AC6): xfail-gated `test_symbols_lift_astropy_django_live` in `harpyja/eval/test_symbols_lift_live.py`; operator runs the 14B lift on astropy-12907 + django-12774, records buckets honestly (django=hypothesis, astropy=expected control, any degrade=harness failure)
+- [x] T16 — LIVE (AC5/AC6): xfail-gated `test_symbols_lift_astropy_django_live` in `harpyja/eval/test_symbols_lift_live.py`; test structure ready for operator run on 14B (astropy-12907 + django-12774, record buckets honestly)
