@@ -11,9 +11,11 @@ surface. `glob` returns file-level `CodeSpan` records, not raw path strings.
 import pytest
 
 from harpyja.config.settings import Settings
+from harpyja.index.manifest import ManifestEntry
 from harpyja.scout.explorer_tools import build_explorer_tools
 from harpyja.server.tools import PathConfinementError
 from harpyja.server.types import CodeSpan
+from harpyja.symbols.extract import SymbolRecord
 
 
 class _FakeSearch:
@@ -35,12 +37,14 @@ def _file(tmp_path, rel, n=50):
     return p
 
 
-def _tools(tmp_path, *, settings=None, search=None):
+def _tools(tmp_path, *, settings=None, search=None, symbol_records=None, manifest=None):
     settings = settings or Settings()
     return build_explorer_tools(
         str(tmp_path),
         settings,
         search_engine=search or _FakeSearch([]),
+        symbol_records=symbol_records or [],
+        manifest=manifest or [],
     )
 
 
@@ -165,3 +169,245 @@ def test_ls_clamps_to_scout_ls_max_entries(tmp_path):
     tools = _tools(tmp_path, settings=Settings(scout_ls_max_entries=3))
     out = tools["ls"]("many")
     assert len(out) == 3  # defensive clamp on untrusted-loop output
+
+
+# --- Spec 0030: symbols tool (AC1) —
+
+
+def test_symbols_tool_wraps_tier0_records_python(tmp_path):
+    # AC1: symbols tool wraps Tier-0 records, returns CodeSpans with kind+span
+    # for Python fixtures (the ≥2-of-9 languages requirement).
+    records = [
+        SymbolRecord(
+            path="app.py",
+            language="python",
+            name="MyClass",
+            kind="class",
+            parent=None,
+            start_line=1,
+            end_line=10,
+        ),
+        SymbolRecord(
+            path="app.py",
+            language="python",
+            name="my_func",
+            kind="function",
+            parent=None,
+            start_line=12,
+            end_line=20,
+        ),
+    ]
+    tools = _tools(tmp_path, symbol_records=records)
+    out = tools["symbols"]("app.py")
+    assert len(out) == 2
+    assert out[0].symbol == "MyClass"
+    assert out[0].kind == "class"
+    assert out[0].start_line == 1
+    assert out[0].end_line == 10
+    assert out[1].symbol == "my_func"
+    assert out[1].kind == "function"
+
+
+def test_symbols_tool_wraps_tier0_records_go(tmp_path):
+    # AC1: same over Go (≥2-of-9 languages).
+    records = [
+        SymbolRecord(
+            path="main.go",
+            language="go",
+            name="SomeType",
+            kind="type",
+            parent=None,
+            start_line=5,
+            end_line=15,
+        ),
+    ]
+    tools = _tools(tmp_path, symbol_records=records)
+    out = tools["symbols"]("main.go")
+    assert len(out) == 1
+    assert out[0].symbol == "SomeType"
+    assert out[0].kind == "type"
+
+
+def test_symbols_tool_normalized_path(tmp_path):
+    # AC1: path normalized (resolved) before lookup. `pkg/../pkg/file.py` →
+    # same records as `pkg/file.py`.
+    records = [
+        SymbolRecord(
+            path="pkg/file.py",
+            language="python",
+            name="func",
+            kind="function",
+            parent=None,
+            start_line=1,
+            end_line=5,
+        ),
+    ]
+    tools = _tools(tmp_path, symbol_records=records)
+    # Both paths should resolve to the same canonical form.
+    out1 = tools["symbols"]("pkg/file.py")
+    out2 = tools["symbols"]("pkg/../pkg/file.py")
+    assert len(out1) == 1
+    assert len(out2) == 1
+    assert out1[0].symbol == out2[0].symbol
+
+
+def test_symbols_tool_no_new_parser(tmp_path):
+    # AC1: tool reads only the injected records (no tree-sitter/parse call).
+    # Asserted by passing records for a path whose file does not exist on disk
+    # and still getting them back (proves it filters rows, not re-parses).
+    records = [
+        SymbolRecord(
+            path="nonexistent.py",
+            language="python",
+            name="phantom",
+            kind="function",
+            parent=None,
+            start_line=1,
+            end_line=5,
+        ),
+    ]
+    tools = _tools(tmp_path, symbol_records=records)
+    out = tools["symbols"]("nonexistent.py")
+    assert len(out) == 1
+    assert out[0].symbol == "phantom"
+
+
+def test_symbols_tool_out_of_repo_path_rejected(tmp_path):
+    # AC2: repo-confinement enforced after path resolution. A resolved path
+    # escaping the repo root (e.g., `pkg/../../etc/passwd`) raises PathConfinementError.
+    tools = _tools(tmp_path)
+    with pytest.raises(PathConfinementError):
+        tools["symbols"]("../../etc/passwd")
+
+
+def test_symbols_tool_clamps_to_scout_symbols_max_entries(tmp_path):
+    # AC2: output clamped per scout_symbols_max_entries. A symbol list larger
+    # than the clamp is truncated.
+    records = [
+        SymbolRecord(
+            path="big.py",
+            language="python",
+            name=f"func{i}",
+            kind="function",
+            parent=None,
+            start_line=i,
+            end_line=i + 1,
+        )
+        for i in range(10)
+    ]
+    tools = _tools(tmp_path, settings=Settings(scout_symbols_max_entries=3), symbol_records=records)
+    out = tools["symbols"]("big.py")
+    assert len(out) == 3  # defensive clamp on untrusted-loop output
+
+
+# --- Spec 0030: graceful degradation with visible provenance (AC3) —
+
+
+def test_symbols_tool_degraded_file_falls_back_to_ripgrep(tmp_path):
+    # AC3: a file marked as degraded (failed parsing at index build) falls back
+    # to ripgrep (Tier-0's existing fallback) for that file.
+    _file(tmp_path, "broken.py")
+    ripgrep_results = [
+        CodeSpan(path="broken.py", start_line=5, end_line=5),
+        CodeSpan(path="broken.py", start_line=10, end_line=10),
+    ]
+    fake_search = _FakeSearch(ripgrep_results)
+    manifest = [
+        ManifestEntry(
+            path="broken.py",
+            language="python",
+            size=100,
+            hash="abc123",
+            mtime=0.0,
+            prior=0.0,
+            degraded="PARSE_ERROR",
+        )
+    ]
+    tools = _tools(tmp_path, search=fake_search, manifest=manifest)
+    out = tools["symbols"]("broken.py")
+    # Should return the ripgrep results (not zero records for a degraded file).
+    assert isinstance(out, dict)
+    assert len(out["symbols"]) == 2
+    assert out["symbols"][0].start_line == 5
+
+
+def test_symbols_tool_degraded_file_marks_output_degraded(tmp_path):
+    # AC3: when returning degraded results, the tool surfaces a visible
+    # `degraded: true` marker in the output (not a silent swap).
+    ripgrep_results = [CodeSpan(path="broken.py", start_line=1, end_line=1)]
+    fake_search = _FakeSearch(ripgrep_results)
+    manifest = [
+        ManifestEntry(
+            path="broken.py",
+            language="python",
+            size=100,
+            hash="abc123",
+            mtime=0.0,
+            prior=0.0,
+            degraded="PARSE_ERROR",
+        )
+    ]
+    tools = _tools(tmp_path, search=fake_search, manifest=manifest)
+    out = tools["symbols"]("broken.py")
+    # The tool returns a dict with symbols + degraded marker.
+    assert isinstance(out, dict)
+    assert "symbols" in out
+    assert "degraded" in out
+    assert out["degraded"] is True
+    assert len(out["symbols"]) == 1
+
+
+def test_symbols_tool_clean_file_not_marked_degraded(tmp_path):
+    # AC3: a clean file (no manifest degraded flag) carries `degraded: false`.
+    records = [
+        SymbolRecord(
+            path="clean.py",
+            language="python",
+            name="func",
+            kind="function",
+            parent=None,
+            start_line=1,
+            end_line=5,
+        )
+    ]
+    manifest = [
+        ManifestEntry(
+            path="clean.py",
+            language="python",
+            size=100,
+            hash="abc123",
+            mtime=0.0,
+            prior=0.0,
+            degraded=None,  # clean
+        )
+    ]
+    tools = _tools(tmp_path, symbol_records=records, manifest=manifest)
+    out = tools["symbols"]("clean.py")
+    # Clean file should be a dict with degraded=False.
+    assert isinstance(out, dict)
+    assert "degraded" in out
+    assert out["degraded"] is False
+    assert len(out["symbols"]) == 1
+
+
+def test_symbols_tool_degraded_never_raises(tmp_path):
+    # AC3: degraded files return a normal tool result, never an exception
+    # (untrusted-caller boundary).
+    fake_search = _FakeSearch([])
+    manifest = [
+        ManifestEntry(
+            path="broken.py",
+            language="python",
+            size=100,
+            hash="abc123",
+            mtime=0.0,
+            prior=0.0,
+            degraded="PARSE_ERROR",
+        )
+    ]
+    tools = _tools(tmp_path, search=fake_search, manifest=manifest)
+    # Should not raise, should return a dict with empty symbols list.
+    out = tools["symbols"]("broken.py")
+    assert isinstance(out, dict)
+    assert out["degraded"] is True
+    assert out["symbols"] == []

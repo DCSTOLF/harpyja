@@ -120,6 +120,10 @@ class Settings:
     # layout-discovery affordance `glob` lacks, since glob filters out directories).
     # Parallel to scout_glob_max_paths; additive-last on the scout budgets.
     scout_ls_max_entries: int = 200
+    # Spec 0030 — `scout_symbols_max_entries` — the `symbols` file-local tool's
+    # output clamp (AC2): a symbol list is bounded to this many entries (parallel to
+    # scout_glob_max_paths / scout_ls_max_entries). Additive-last on the scout budgets.
+    scout_symbols_max_entries: int = 400
 
     # Spec 0008 (Wave 5) — Verification Gate (additive, appended last).
     # `verify_method` selects the scoring backend; `verify_threshold` is the pass

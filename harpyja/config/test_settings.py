@@ -400,6 +400,15 @@ def test_scout_ls_max_entries_coerces_from_env(tmp_path, monkeypatch):
     assert isinstance(s.scout_ls_max_entries, int)
 
 
+def test_scout_symbols_max_entries_default_is_finite_positive_bound():
+    # spec 0030: the `symbols` tool's output clamp — a first-class Settings field
+    # (parallel to scout_glob_max_paths for glob, scout_ls_max_entries for ls), finite + positive.
+    s = Settings()
+    assert isinstance(s.scout_symbols_max_entries, int)
+    assert s.scout_symbols_max_entries > 0
+    assert s.scout_symbols_max_entries == 400
+
+
 def test_scout_wall_clock_exceeds_per_call_http_timeout():
     # The whole-loop wall-clock ceiling must sit strictly ABOVE the per-call HTTP
     # timeout floor — turns and time are distinct budgets (AC4). A single slow call

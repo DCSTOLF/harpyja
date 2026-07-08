@@ -1,7 +1,7 @@
-"""The read-only navigation tools handed to the explorer loop (spec 0024, +0027).
+"""The read-only navigation tools handed to the explorer loop (spec 0024, +0027, +0030).
 
 The model driving the loop is an untrusted caller (same posture as the Deep-tier
-RLM host tools in `deep/host_tools.py`). This module builds EXACTLY four bounded,
+RLM host tools in `deep/host_tools.py`). This module builds EXACTLY five bounded,
 repo-path-confined, read-only navigation tools — and nothing mutating:
 
 - ``grep(pattern, scope=None)`` — wraps the SAME ``RipgrepEngine`` the Deep
@@ -16,6 +16,9 @@ repo-path-confined, read-only navigation tools — and nothing mutating:
   (glob filters out directories), added as a DELIBERATE, reconciled tool-suite
   change when the eager whole-repo context map was removed (push → pull). Clamped
   by ``scout_ls_max_entries``.
+- ``symbols(path)`` — **spec 0030** — file-local symbol index (function/class/type
+  definitions and their line spans), sourced from Tier-0's pre-extracted symbol
+  records. Repo-confined, clamped by ``scout_symbols_max_entries``.
 
 The distinct terminal ``submit_citations`` action lives in ``scout/submit.py`` and
 is deliberately NOT part of this navigation suite.
@@ -23,13 +26,15 @@ is deliberately NOT part of this navigation suite.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 from harpyja.config.settings import Settings
+from harpyja.index.manifest import ManifestEntry
 from harpyja.server.tools import confine_path, read_snippet
 from harpyja.server.types import CodeSpan
+from harpyja.symbols.extract import SymbolRecord
 
 
 class _Search:  # structural: anything with .search(pattern, scope)
@@ -41,8 +46,12 @@ def build_explorer_tools(
     settings: Settings,
     *,
     search_engine: _Search,
+    symbol_records: Sequence[SymbolRecord] | None = None,
+    manifest: Sequence[ManifestEntry] | None = None,
 ) -> dict[str, Callable[..., Any]]:
-    """Return exactly the three navigation tools, keyed by name."""
+    """Return exactly the five navigation tools, keyed by name."""
+    symbol_records = symbol_records or []
+    manifest = manifest or []
     repo_real = Path(repo_path).resolve()
 
     def grep(pattern: str, scope: str | None = None) -> list[CodeSpan]:
@@ -96,4 +105,40 @@ def build_explorer_tools(
                 break
         return out
 
-    return {"grep": grep, "glob": glob, "read_span": read_span, "ls": ls}
+    def symbols(path: str) -> list[CodeSpan]:
+        # File-local symbol index (spec 0030): return the symbols (functions, classes,
+        # types, etc.) defined in the given file. Source: Tier-0's pre-extracted symbol
+        # records (no new parser). Path is normalized (resolved) before lookup and
+        # repo-confined. Output clamped by scout_symbols_max_entries.
+
+        # Confine the path first: raises PathConfinementError if out-of-repo.
+        # This preserves the untrusted-caller boundary (loud error, not silent drop).
+        confine_path(repo_path, path)
+
+        try:
+            # Normalize the path: resolve it (handle .. and symlinks), make relative.
+            candidate = (repo_real / path).resolve()
+            rel_path = candidate.relative_to(repo_real)
+        except (ValueError, OSError):
+            return []  # escapes the repo root or other path error — drop
+
+        # Filter records by the normalized repo-relative path, convert to CodeSpan.
+        normalized_str = str(rel_path)
+        out: list[CodeSpan] = []
+        for record in symbol_records:
+            if record.path == normalized_str:
+                out.append(
+                    CodeSpan(
+                        path=record.path,
+                        start_line=record.start_line,
+                        end_line=record.end_line,
+                        symbol=record.name,
+                        language=record.language,
+                        kind=record.kind,
+                    )
+                )
+                if len(out) >= settings.scout_symbols_max_entries:
+                    break
+        return out
+
+    return {"grep": grep, "glob": glob, "read_span": read_span, "ls": ls, "symbols": symbols}
