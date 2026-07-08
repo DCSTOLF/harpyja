@@ -30,21 +30,30 @@ closed: 2026-07-08
 
 ## Deviations (the honest record)
 
-- **AC5/AC6 lift is NOT actually measured — record as inconclusive-and-inconsistent,
-  explicitly NOT "hypothesis validated."** The live test does not use a ground-truth span oracle: it maps
-  outcome → bucket with a crude proxy (`has_citations → CORRECT` else `WRONG_FILE`), so the "both CORRECT" run measures
-  citation-PRESENCE, not span correctness.
-- **The control moved by a mechanism the tool cannot produce.** astropy was
-  baseline `WRONG_FILE`; a file-local symbols tool structurally cannot fix wrong-FILE
-  navigation (AC5 makes astropy the expected control that stays `WRONG_FILE`). Its
-  flip to "CORRECT" is therefore evidence of the crude oracle, not of lift — internally
-  inconsistent.
-- **Tool invocation unconfirmed.** Symbols usage was probed by monkeypatching
-  `_answer_tool_call`; the test itself tolerates `symbols` not appearing.
-  We cannot assert the model called the new tool.
-- **Non-representative live rig:** ad-hoc query strings, hardcoded model, and engine/gateway
-  built with separate Settings objects — not the 0026 terse instrument, N=2.
-- **Stray artifact:** `measure_symbols_lift.py` shipped at the repo ROOT.
+- **AC5/AC6 lift is NOT proven — symbols not invoked in spec 0031 measurement run.** 
+  Spec 0031 AC6 re-ran the same two cases (astropy-12907, django-12774) with the
+  verifier instrument to measure lift. **Finding: symbols tool was available (Tier 0 
+  symbol index built) but NOT invoked by the explorer in either case.** Tool names 
+  in trace for astropy: ["ls", "grep", "submit_citations"]. Django: ["grep", "ls"]. 
+  The hypothesis that symbols availability affects tool selection is unproven (N=2 
+  too small to confirm or refute). **Lift claim RETRACTED.** Tool ships (integrated, 
+  unit-correct) but claimed benefit is unsupported by measurement.
+  
+- **Original deviations (0030 closure record):**
+  - **AC5/AC6 lift was NOT actually measured in 0030's closure** — recorded as 
+    inconclusive-and-inconsistent, explicitly NOT "hypothesis validated." The live test 
+    did not use a ground-truth span oracle: it mapped outcome → bucket with a crude 
+    proxy (`has_citations → CORRECT` else `WRONG_FILE`), so the "both CORRECT" run 
+    measured citation-PRESENCE, not span correctness.
+  - **The control moved by a mechanism the tool cannot produce.** astropy was baseline 
+    `WRONG_FILE`; a file-local symbols tool structurally cannot fix wrong-FILE navigation 
+    (AC5 made astropy the expected control that stays `WRONG_FILE`). Its flip to "CORRECT" 
+    was therefore evidence of the crude oracle, not of lift — internally inconsistent.
+  - **Tool invocation unconfirmed.** Symbols usage was probed by monkeypatching 
+    `_answer_tool_call`; the test itself tolerated `symbols` not appearing.
+  - **Non-representative live rig:** ad-hoc query strings, hardcoded model, and engine/gateway 
+    built with separate Settings objects — not the 0026 terse instrument, N=2.
+  - **Stray artifact:** `measure_symbols_lift.py` shipped at the repo ROOT.
 
 ## Files touched
 
