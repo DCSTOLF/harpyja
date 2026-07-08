@@ -16,21 +16,20 @@ from pathlib import Path
 import pytest
 
 
-def _make_instrumented_model_call(tool_log: list[str]) -> object:
-    """Create a wrapper around model_call that logs tool invocations."""
-    from harpyja.gateway.gateway import ModelGateway
+def _make_tool_call_logger(tool_log: list[str]):
+    """Create a wrapper that logs tool calls from the explorer loop."""
+    from harpyja.scout.explorer_loop import _answer_tool_call
 
-    def wrapper(original_model_call):  # type: ignore
-        def instrumented_call(messages):  # type: ignore
-            response = original_model_call(messages)
-            # Log tool calls if present.
-            tool_calls = response.get("tool_calls") or []
-            for tc in tool_calls:
-                tool_name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
-                tool_log.append(tool_name)
-            return response
-        return instrumented_call
-    return wrapper
+    original_answer = _answer_tool_call
+
+    def logged_answer_tool_call(call, tools, submit, session, settings):
+        # Log which tool was called
+        tool_name = call.get("name") if isinstance(call, dict) else getattr(call, "name", "unknown")
+        tool_log.append(tool_name)
+        # Call the original handler
+        return original_answer(call, tools, submit, session, settings)
+
+    return logged_answer_tool_call
 
 
 @pytest.mark.integration
@@ -71,66 +70,76 @@ def test_symbols_lift_astropy_django_live(tmp_path):
         },
     }
 
-    # Run scout on each case WITH symbols tool available.
+    # Run scout on each case WITH symbols tool available (forced via mode="scout").
     results = {}
     tool_usage = {}
+
+    # Import and patch to log tool calls
+    import harpyja.scout.explorer_loop as explorer_loop_module
+
     for case_id, case_path in [("astropy-12907", astropy_path), ("django-12774", django_path)]:
         settings = Settings()
 
-        # Create gateway.
+        # Create gateway with the correct Ollama model tag.
         gateway = ModelGateway(
             api_base=settings.lm_api_base,
-            model=settings.lm_model,
+            model="qwen3:14b",  # Use the model available in Ollama
             allow_remote=settings.allow_remote,
             timeout_s=settings.lm_http_timeout_s,
         )
 
-        # Build engine with the gateway.
-        engine = build_scout_engine(settings, str(case_path), gateway=gateway)
+        # Build engine with the gateway (use corrected settings with qwen3:14b).
+        corrected_settings = Settings()
+        engine = build_scout_engine(corrected_settings, str(case_path), gateway=gateway)
 
-        # Create a tool_log that we'll populate during the run.
+        # Create a tool_log and patch the explorer loop to log invocations.
         tool_log: list[str] = []
+        original_answer = explorer_loop_module._answer_tool_call
 
-        # Run scout on the test case query using the locate function.
+        def make_logged_answer(log_list):
+            def logged_answer(call, tools, submit, session, settings):
+                tool_name = call.get("name") if isinstance(call, dict) else getattr(call, "name", "unknown")
+                log_list.append(tool_name)
+                return original_answer(call, tools, submit, session, settings)
+            return logged_answer
+
+        explorer_loop_module._answer_tool_call = make_logged_answer(tool_log)
+
+        # Run scout on the test case query using mode="fast" to force the explorer loop.
         query = test_cases[case_id]["query"]
         request = LocateRequest(
             query=query,
             repo_path=str(case_path),
-            mode="auto",
+            mode="fast",  # Force scout explorer, not auto (which may fall back to Tier-0)
             max_results=8,
         )
         outcome = None
         try:
             outcome = locate(request, settings, engine=engine, scout_engine=engine)
-            print(f"\n{case_id}: locate succeeded, outcome={outcome}")
+            print(f"\n{case_id}: scout succeeded, outcome={outcome}")
         except Exception as e:
             # Record degrade if scout fails.
-            print(f"\n{case_id}: locate failed with {type(e).__name__}: {str(e)[:80]}")
+            print(f"\n{case_id}: scout failed with {type(e).__name__}: {str(e)[:80]}")
             results[case_id] = {
                 "before_bucket": baseline[case_id],
                 "after_bucket": "DEGRADE",
                 "error": str(e)[:80],
             }
-            tool_usage[case_id] = []
+            tool_usage[case_id] = {}
+            explorer_loop_module._answer_tool_call = original_answer
             continue
+
+        # Restore original function
+        explorer_loop_module._answer_tool_call = original_answer
 
         # Debug: what did locate actually return?
         has_citations = outcome and hasattr(outcome, "citations") and outcome.citations
-        print(f"{case_id}: outcome type={type(outcome)}, has_citations={has_citations}")
-        if outcome and hasattr(outcome, "__dict__"):
-            print(f"  outcome.__dict__={outcome.__dict__}")
+        print(f"{case_id}: outcome={outcome}, has_citations={has_citations}, tools_called={tool_log}")
 
-        # Extract tool usage from the backend's turn count.
+        # Extract actual tool calls from the logged invocations.
         tools_called = {}
-        turns = getattr(engine._backend, "last_turns_used", None)
-        if turns is not None and turns > 0:
-            tools_called["model_turns"] = turns
-            if has_citations:
-                tools_called["found_citations"] = True
-        else:
-            # Try to infer from outcome - if we got citations, model must have run
-            if has_citations:
-                tools_called["inferred_successful"] = True
+        for tool_name in tool_log:
+            tools_called[tool_name] = tools_called.get(tool_name, 0) + 1
 
         tool_usage[case_id] = tools_called
 
@@ -185,3 +194,15 @@ def test_symbols_lift_astropy_django_live(tmp_path):
     assert results["django-12774"]["after_bucket"] in ["CORRECT", "RIGHT_FILE_WRONG_SPAN", "WRONG_FILE", "DEGRADE"]
     assert results["astropy-12907"]["after_bucket"] in ["CORRECT", "RIGHT_FILE_WRONG_SPAN", "WRONG_FILE", "DEGRADE"]
     assert report_path.exists()
+
+    # CRITICAL: Assert that the symbols tool was actually invoked by the model.
+    # This is the key measurement: does the model use the new tool?
+    django_tools = tool_usage.get("django-12774", {})
+    astropy_tools = tool_usage.get("astropy-12907", {})
+
+    # At least one case should have invoked symbols (the hypothesis case)
+    symbols_used = "symbols" in django_tools or "symbols" in astropy_tools
+    assert symbols_used, (
+        f"SPEC 0030 FAILED: symbols tool was never invoked by the model. "
+        f"django tools: {django_tools}, astropy tools: {astropy_tools}"
+    )
