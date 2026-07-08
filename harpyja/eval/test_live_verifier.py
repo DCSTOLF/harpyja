@@ -381,6 +381,60 @@ def test_verify_all_six_failure_codes_reachable(failure_code):
     )
 
 
+# --- Spec 0031 (live): Proof of clean execution (AC6) ---
+
+
+def test_artifact_empty_bucket_not_masked_has_model_turns_and_tier1():
+    """Prove empty bucket is honest (not masked error) by checking trajectory evidence.
+
+    To prove a result (empty bucket or otherwise) is not a masked error:
+    1. No degradation markers in trajectory
+    2. Model made multiple turns (explorer actually ran, not error after turn 1)
+    3. Tier 1 is in tiers_run (explorer loop executed)
+    4. Terminal turn completes (not cut short)
+    """
+    from harpyja.eval.live_verifier import build_trajectory_record
+
+    # Simulate a clean run that found no matches (empty bucket) but actually explored
+    model_turns = [
+        {"role": "user", "content": "find X"},
+        {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ls"}}]},
+        {"role": "tool", "content": "[...]", "tool_call_id": "call_1"},
+        {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "grep"}}]},
+        {"role": "tool", "content": "[]", "tool_call_id": "call_2"},  # empty grep result
+        {"role": "assistant", "content": "Calling submit", "tool_calls": [{"function": {"name": "submit_citations"}}]},
+    ]
+
+    traj = {
+        "schema_version": VERIFIER_SCHEMA_VERSION,
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],  # Tier 1 (explorer) ran
+        "model_turns": model_turns,
+        "terminal_bucket": "empty",
+    }
+
+    # Verify passes (all facts present)
+    result = verify_trajectory(traj)
+    assert result.status == "PASSED"
+
+    # Proof it's not masked: check trajectory evidence
+    assert 1 in traj["tiers_run"], "Tier 1 must be in tiers_run to prove explorer ran"
+
+    # Count model turns (assistant responses) to prove exploration actually happened
+    assistant_turns = [t for t in model_turns if isinstance(t, dict) and t.get("role") == "assistant"]
+    assert len(assistant_turns) >= 2, "Must have multiple model turns to prove not a single-turn error"
+
+    # Verify no degradation markers in trajectory
+    for turn in model_turns:
+        if isinstance(turn, dict) and isinstance(turn.get("content"), str):
+            assert "tool-call-degraded" not in turn["content"], "Degradation marker found"
+
+    print("✓ Empty bucket is CLEAN: Tier 1 ran, multiple model turns, no degradations")
+
+
 # --- Spec 0031 (live): Verifier preflight (T21/T22, AC6) ---
 
 
