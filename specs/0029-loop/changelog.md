@@ -38,7 +38,7 @@ None. All 10 ACs shipped as specified.
 | **AC6** (turn-2 clean) | GATE | ✅ PASS | astropy 141s, django 207s; both within N=10 turns, no runaway |
 | **AC7** (first full run) | GATE | ✅ PASS | both cases reached terminal state cleanly |
 | **AC8** (harness correctness) | GATE | ✅ **MUST PASS** | ✅ **PASSED** — cause=None for both; no MODEL_UNREACHABLE/BACKEND_ERROR/GENERATION_TRUNCATED; parallel tool_calls answered in order, terminal precedence honored, well-formed conversation |
-| **AC9** (model capability) | REPORT | ✅ MEASURED | astropy→WRONG_FILE (found code, wrong location); django→RIGHT_FILE_WRONG_SPAN (right file, line offset); distribution: 1 wrong-file, 1 right-file-wrong-span, 0 correct, 0 empty |
+| **AC9** (model capability) | REPORT | ✅ MEASURED | astropy→WRONG_FILE (missed file entirely); django→RIGHT_FILE_WRONG_SPAN (correct file, wrong span); distribution: 1 wrong-file, 1 right-file-wrong-span, 0 correct, 0 empty |
 
 **Response cleanliness (spillage check):** ✅ **CLEAN** — no thinking tags, no reasoning markers, no verbose internal reasoning. Explorer output is well-formed.
 
