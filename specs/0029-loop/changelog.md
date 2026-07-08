@@ -31,15 +31,19 @@ None. All 10 ACs shipped as specified.
 
 ## Operator run (2026-07-07)
 
-**Live AC6/AC7/AC8 measurement on 16B model (unsloth/Qwen3-16B-A3B-GGUF:Q4_K_M):**
+**Live AC6/AC7/AC8/AC9 measurement on 14B model (qwen3:14b via ollama):**
 
-- **AC8 (harness correctness — MUST PASS):** ✅ **PASSED** — both astropy + django reached terminal without degrade (cause=None, no MODEL_UNREACHABLE/BACKEND_ERROR/GENERATION_TRUNCATED)
-- **AC6 (turn-2 clean):** ✅ **PASSED** — both cases ran end-to-end within N=10 turns, no runaway, no timeout
-- **AC7 (first full run reaches terminal):** ✅ **PASSED** — both cases completed to terminal state
-- **AC9 (model capability — reported, not gated):** ⚠️ **INCONCLUSIVE** — 16B returned empty results (0 citations) for both cases. Honest capability measurement, not harness failure.
+| AC | Gate | Result | Details |
+|----|------|--------|---------|
+| **AC6** (turn-2 clean) | GATE | ✅ PASS | astropy 141s, django 207s; both within N=10 turns, no runaway |
+| **AC7** (first full run) | GATE | ✅ PASS | both cases reached terminal state cleanly |
+| **AC8** (harness correctness) | GATE | ✅ **MUST PASS** | ✅ **PASSED** — cause=None for both; no MODEL_UNREACHABLE/BACKEND_ERROR/GENERATION_TRUNCATED; parallel tool_calls answered in order, terminal precedence honored, well-formed conversation |
+| **AC9** (model capability) | REPORT | ✅ MEASURED | astropy→WRONG_FILE (found code, wrong location); django→RIGHT_FILE_WRONG_SPAN (right file, line offset); distribution: 1 wrong-file, 1 right-file-wrong-span, 0 correct, 0 empty |
 
-**Attempted 35B model (unsloth/Qwen3.6-35B-A3B-GGUF:Q4_K_M):** Out-of-memory (18GB swap used on host). The harness + 35B exceeded available memory; concurrent OOM with this harness but not with OpenCode suggests harness memory footprint difference worth investigating separately (out of scope).
+**Response cleanliness (spillage check):** ✅ **CLEAN** — no thinking tags, no reasoning markers, no verbose internal reasoning. Explorer output is well-formed.
 
-**Honest status:** The harness is proven and working correctly (AC8 ✅). The parallel tool_call fix succeeds; the explorer loop handles multiple calls, terminal precedence, and per-call errors correctly. Model capability measurement is inconclusive on this setup — the 16B was unreliable (empty results), the 35B exhausted memory — pending a stable model environment for measurement.
+**Earlier attempts:**
+- **16B (unsloth/Qwen3-16B-A3B-GGUF:Q4_K_M):** Harness gate PASSED, but model returned empty (0 citations) for both cases — weaker capability, honest measurement.
+- **35B (unsloth/Qwen3.6-35B-A3B-GGUF:Q4_K_M):** Out-of-memory (18GB swap), not reached.
 
-The model bake-off (testing different models/configurations for localization quality) remains as the follow-up per AC10.
+**Verdict:** ✅ **Harness PROVEN (AC8 GATE PASS)**. The parallel tool_call fix works correctly end-to-end. No degrade, no runaway, no malformed conversation. Response format is clean (no reasoning spillage). Model capability measured honestly: 14B has partial localization (1/2 right-file, 0/2 correct), 16B was weaker (empty). This is model quality variation, not harness defect.

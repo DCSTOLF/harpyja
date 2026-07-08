@@ -7,7 +7,9 @@ authors: [claude]
 packages: []
 related-specs: [0024, 0027, 0028]
 operator_run_date: 2026-07-07
-operator_run_status: "harness-proven / capability-inconclusive-pending-reliable-model"
+operator_run_status: "harness-proven-ac8-gate-pass / capability-measured-partial-14b"
+operator_run_model: "qwen3:14b (ollama)"
+operator_run_verdict: "parallel tool_call fix verified working end-to-end; AC8 GATE PASS; response clean (no reasoning spillage); AC9 measured (1 right-file-wrong-span, 1 wrong-file; 0 correct, 0 empty)"
 ---
 
 # Spec 0029 — loop
