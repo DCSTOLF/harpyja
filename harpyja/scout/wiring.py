@@ -27,7 +27,9 @@ from harpyja.index.indexer import index_repo
 from harpyja.index.manifest import read_manifest
 from harpyja.scout.engine import ScoutEngine
 from harpyja.scout.explorer_backend import ExplorerBackend
+from harpyja.symbols.engine_identity import engine_identity
 from harpyja.symbols.ripgrep import RipgrepEngine
+from harpyja.symbols.symbols_io import load_symbols_or_none
 
 
 def build_scout_engine(
@@ -43,6 +45,10 @@ def build_scout_engine(
     manifest = read_manifest(art_dir)
     file_set = frozenset(e.path for e in manifest)
 
+    # Spec 0030: load symbol records (Tier-0 file-local symbol index) for the
+    # symbols explorer tool (on-demand, not eager injection).
+    symbol_records = load_symbols_or_none(art_dir, engine_identity()) or []
+
     gw = gateway or ModelGateway(
         api_base=settings.lm_api_base,
         model=settings.lm_model,  # spec 0025 (AC8): pin the served tag, not "local"
@@ -56,6 +62,7 @@ def build_scout_engine(
         settings=settings,
         manifest=manifest,
         search_engine=ripgrep,
+        symbol_records=symbol_records,
         model_call=model_call,
         max_tokens=settings.explorer_max_tokens,  # spec 0028 (AC2): feed the cap
         enable_thinking=settings.explorer_enable_thinking,  # spec 0028 (AC1)

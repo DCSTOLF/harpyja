@@ -115,3 +115,21 @@ def test_build_scout_engine_empty_file_set_when_manifest_absent(tmp_path, monkey
     monkeypatch.setattr(wiring, "read_manifest", lambda _art: [])
     engine = wiring.build_scout_engine(Settings(), str(tmp_path))
     assert engine._file_set == frozenset()
+
+
+def test_build_scout_engine_threads_symbol_records_into_symbols_tool(tmp_path):
+    # Spec 0030 (T11): the live factory loads symbol records and threads them into
+    # ExplorerBackend, so the symbols tool returns non-empty for an indexed fixture file.
+    # Guards against a routed-but-empty tool (schema advertises symbols but wiring
+    # never threads records -> every call empty, false "no symbols" reading).
+    (tmp_path / "app.py").write_text(
+        "def hello():\n    return 1\ndef goodbye():\n    return 0\n", encoding="utf-8"
+    )
+    from harpyja.scout.wiring import build_scout_engine
+
+    engine = build_scout_engine(Settings(), str(tmp_path))
+    # Symbol records should be loaded and threaded into the backend.
+    assert engine._backend._symbol_records is not None
+    assert len(engine._backend._symbol_records) > 0
+    # Verify the fixture file's symbols were extracted (not a silent routed-but-empty tool).
+    assert any(r.path == "app.py" for r in engine._backend._symbol_records)
