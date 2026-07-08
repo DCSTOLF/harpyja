@@ -61,8 +61,10 @@ def build_explorer_tools(
     def grep(pattern: str, scope: str | None = None) -> list[CodeSpan]:
         # Confine the search scope to the repo (rejects an out-of-repo scope) and
         # delegate to the shared engine; clamp defensively on untrusted-loop output.
-        scoped = str(confine_path(repo_path, scope)) if scope else repo_path
-        spans = search_engine.search(pattern, scope=scoped)
+        scoped_path = confine_path(repo_path, scope) if scope else Path(repo_path)
+        if scope and not scoped_path.is_dir():
+            return []  # grep on a file → empty (use read_span for file contents)
+        spans = search_engine.search(pattern, scope=str(scoped_path))
         return spans[: settings.search_max_matches]
 
     def glob(pattern: str) -> list[CodeSpan]:

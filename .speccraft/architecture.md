@@ -588,3 +588,39 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
 - Filesystem: read-only access to the target repo's **source**; manifest + symbol
   index are derived artifacts written to `<repo>/.harpyja/` (self-ignoring) or, when
   the repo is unwritable, `${XDG_CACHE_HOME:-~/.cache}/harpyja/<repo-hash>/`.
+
+## Spec 0031 architecture updates — trajectory-verified live measurement
+
+**As of spec 0031 the `harpyja/eval/` package carries the trajectory-verified live-measurement
+VERIFIER** — still measurement, not a runtime tier; the explorer/loop/gateway decision
+behavior is byte-unchanged (only two read-only capture seams were added, see below).
+`live_verifier.py` is a PURE read-only postflight verifier: `verify_trajectory(traj)`
+proves the FOUR FACTS (model identity / model invoked / tool names / terminal bucket)
+or returns a `VerifierResult(status="FAILED", failure_reason=…)` carrying exactly one of
+SIX enumerated codes in a FIXED precedence (`artifact-incomplete > model-unknown >
+model-mismatch > model-not-invoked > tool-names-unextractable > terminal-bucket-missing`,
+artifact-integrity first, first-failing-check wins). `VERIFIER_SCHEMA_VERSION="0031/1"`;
+`write_verifier_artifact` delegates to `report.atomic_write_json` (the outside-repo
+guard, single-sourced). `extract_model_identity` carries OQ1's three branches with a
+`configured_endpoint_models` fallback (Ollama/llama.cpp may omit `response['model']`).
+`verifier_preflight` gates the live run on `assert_local` FIRST then a `/api/tags`
+model-presence check (the 0019 preflight discipline). `build_trajectory_record` is the
+shared capture assembler (also used by `ExplorerBackend.last_trajectory`).
+**State: verifier + seams unit-complete (AC1–AC5/AC7); `run_verified_case` shipped a STUB
+and the AC6 proof-of-instrument live run (0030 astropy+django re-run) is a HELD operator
+deliverable, gated by `verifier_preflight`, skip-clean on an absent stack.** The
+"trajectory-verified measurement" convention binds all future live specs to a verifier
+artifact. See history.md 2026-07-08 (spec 0031).
+
+**As of spec 0031 `ExplorerBackend` exposes a read-only `last_trajectory` capture
+seam** (mirroring the `last_turns_used` side-channel): after `run_explorer_loop`
+returns, the backend records `self.last_trajectory = build_trajectory_record(...)`
+(model turns, ordered-unique tool names, the served model threaded from the model call,
+endpoint), reset per run. `run()` still returns `list[CodeSpan]` and decision behavior
+is byte-unchanged — this is measurement plumbing for the spec-0031 postflight verifier.
+See history.md 2026-07-08 (spec 0031).
+
+**As of spec 0031 `ModelGateway.complete_with_tools` additionally surfaces the served model
+additively as `response.get("model")` in its returned dict** (existing keys unchanged; `None`
+when the endpoint omits it) — read-only metadata capture for postflight model-identity
+verification, request/response semantics untouched.

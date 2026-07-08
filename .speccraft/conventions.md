@@ -730,6 +730,10 @@
   per tool_call), so the turn budget is unaffected. (See `harpyja/scout/explorer_loop.py`
   `_answer_tool_call` + the tool_calls loop in `run_explorer_loop`, spec 0029 AC1/AC4.)
 
+## Trajectory-verified measurement
+
+- **Every live capability measurement is accompanied by a durable trajectory-verified artifact** (spec 0031). A live run's result is trustworthy only when paired with a **verifier artifact** that **proves** the four facts: (1) model identity (the model that ran), (2) model invocation (Tier-1 was engaged), (3) tool names (which tools were invoked), and (4) terminal outcome (the gold-span classification). The verifier artifact carries a machine-readable `status ∈ {PASSED, FAILED}` and, if FAILED, a precise `failure_reason ∈ {artifact-incomplete, model-unknown, model-mismatch, model-not-invoked, tool-names-unextractable, terminal-bucket-missing}` — deterministic precedence order when multiple facts are unprovable. A live capability claim unaccompanied by the artifact is inadmissible (the no-silent-capability rule applied to measurement provenance). Bind all future live measurement specs (bake-off, eval set, capability reports) to this convention: `harpyja/eval/live_verifier.py` defines `VERIFIER_SCHEMA_VERSION`, the `verify_trajectory` function, the six failure codes, and the `VerifierResult` shape that carries all four facts. (See `harpyja/eval/live_verifier.py`, spec 0031 AC1/AC5/AC7.)
+
 ## Logging
 
 - Use the standard `logging` module. Never log secrets, repo source content, or full file contents at info level. Keep stdout clean on the stdio MCP transport (logs go to stderr).

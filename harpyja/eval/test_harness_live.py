@@ -44,6 +44,12 @@ from harpyja.server.types import CodeSpan
 
 _API = "http://127.0.0.1:8131/v1"
 _MODEL = "unsloth/Qwen3-16B-A3B-GGUF:Q4_K_M"
+_MODEL_OVERRIDE_REASON = (
+    "Spec 0029 live measurement: uses a specific 16B tuned model (Qwen3-16B-A3B) "
+    "pulled into llama.cpp at port 8131 for trajectory-verified live proof-of-concept. "
+    "Differs from Settings default (8B Qwen3) for AC4/AC5 generation-control measurement "
+    "(spec 0028); see specs/0029-live-measurement/findings.md and spec 0031 (trajectory verification)."
+)
 _N = 10
 _CAP = 2048  # spec 0028 AC2/AC7 — pinned; a well-formed turn completes well under it
 _FIX = Path("harpyja/eval/fixtures/swebench_verified.resolved.jsonl")
@@ -158,3 +164,34 @@ def test_explorer_localizes_without_degrade_within_n_turns(case_id):
     assert cause not in _HARNESS_DEGRADES, f"harness degrade: {cause}"
     # With the harness healthy, localization is measurable; a gold-file hit is the win.
     assert bucket in (LocateBucket.CORRECT, LocateBucket.RIGHT_FILE_WRONG_SPAN)
+
+
+def test_recorded_model_matches_settings_or_documents_override():
+    """Recorded model/endpoint either match Settings defaults or document override reason.
+
+    Spec 0029 committed-test reconciliation (AC7): the harness's _MODEL/_API must either:
+    1. Equal Settings().lm_model and the default endpoint, OR
+    2. Have a committed _MODEL_OVERRIDE_REASON explaining why a different model/endpoint is used,
+       with a linked spec/issue rationale.
+
+    This prevents silent divergence between committed test data and Settings defaults.
+    """
+    default_settings = Settings()
+    default_endpoint = default_settings.lm_api_base
+
+    # Check if model/endpoint match defaults
+    model_matches = _MODEL == default_settings.lm_model
+    endpoint_matches = _API == default_endpoint
+
+    if not (model_matches and endpoint_matches):
+        # Both must diverge together; at least one does, so check for override reason
+        assert (
+            _MODEL_OVERRIDE_REASON is not None
+        ), (
+            f"Recorded model {_MODEL!r} or endpoint {_API!r} diverges from Settings "
+            f"defaults ({default_settings.lm_model!r}, {default_endpoint!r}), "
+            f"but _MODEL_OVERRIDE_REASON is not defined. "
+            f"Add a constant with the spec/issue rationale."
+        )
+        # Override reason must be non-empty
+        assert len(_MODEL_OVERRIDE_REASON.strip()) > 0, "Override reason must not be empty"

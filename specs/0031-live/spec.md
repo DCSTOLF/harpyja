@@ -1,7 +1,8 @@
 ---
 id: "0031"
 title: "live"
-status: planned
+status: ready-for-operator
+started_at_sha: 78e7d07
 created: 2026-07-08
 authors: [claude]
 packages: []
@@ -59,6 +60,33 @@ Three consecutive specs produced capability numbers that cannot be verified from
 5. [unit] Durable JSON artifact schema (`VERIFIER_SCHEMA_VERSION`, additive, atomic write) carries: (a) all four facts (model_identity, model_invoked, tool_names_invoked, terminal_bucket), (b) per-run provenance (timestamp, served_model, endpoint, verifier_status, failure_reason if FAILED), (c) exactly one of verifier_status∈{PASSED,FAILED}. A run without a complete artifact is a FAILED measurement (status=FAILED, failure_reason=artifact-incomplete).
 6. [integration] Proof-of-instrument: 0030's astropy + django cases re-run with preflight checks (local Model Gateway reachable, configured model present in endpoint, no non-localhost endpoint); if preflight fails, skip with documented reason (not a measurement failure, an invalid setup). For each case that proceeds: verifier produces an artifact with all four facts or distinct failure reason per unprovable fact; status field is PASSED or FAILED. Whether `symbols` tool appears in tool_names_invoked is recorded as-is (not graded; if captured, the prior 0030 lift claim can be re-assessed; if not captured, claim is retracted). Both astropy and django cases must complete with verifier-produced artifacts.
 7. [doc] The 0029 committed-test/changelog model mismatch is reconciled: (a) run the test as-is through the verifier, (b) record the model/endpoint mismatch in the artifact and test file comment, (c) commit the correction so the code and the recorded run are no longer at odds. "Annotate" alone is insufficient; the committed test code or a companion override/fixture must explicitly state why the run used a different model than the current Settings default, with a linked issue/rationale. The "trajectory-verified" requirement is codified as a convention binding all future live measurement specs (bake-off, eval set, capability reports): no capability number is trusted without its verifier artifact and trajectory proof.
+
+## AC6 Proof-of-Instrument — Ready for Live Run
+
+**Status:** Fully implemented and ready. All code in place; awaits live stack (Ollama/llama.cpp with the configured model).
+
+**What it will show:**
+When the operator runs `test_proof_of_instrument_astropy_django_produce_verifier_artifacts` on a live stack (see `specs/0031-live/plan.md` T23–T24 and `harpyja/eval/test_live_verifier_integration.py`), it will:
+
+1. **Load astropy-12907 and django-12774** from the test fixture (worktrees at `.harpyja_eval_work/...`)
+2. **Preflight:** Check that the Model Gateway is reachable (localhost), the configured model is present in `/api/tags`, and skip cleanly if either fails
+3. **For each case:** Construct an `ExplorerBackend`, run the explorer loop against the case query, capture `last_trajectory`, derive `terminal_bucket` from the gold span using `locate_accuracy.classify_case`, verify the trajectory, and write a verifier artifact
+4. **Artifact output:** Two JSON files (one per case) in the output directory, each carrying:
+   - `verifier_status` ∈ {PASSED, FAILED}
+   - `model_identity`, `model_invoked`, `tool_names_invoked`, `terminal_bucket`
+   - If FAILED, a distinct `failure_reason` (one of the six codes)
+   - The `tool_names_invoked` list **will show whether `symbols` appears** (or not)
+
+**This answers the 0030 open question:** After 0030 closed without confirming whether the `symbols` tool was actually invoked (lift measurement was "inconclusive-and-inconsistent"), this re-run will provide the trajectory evidence. If `symbols` appears in `tool_names_invoked`, the lift claim can be re-assessed on that artifact. If it does not, the 0030 lift claim is retracted and `symbols` availability is decoupled from proof-of-use.
+
+**How to run it:**
+```bash
+# Ensure llama.cpp or Ollama is running on localhost:8131 (or the configured endpoint)
+# with the model specified in specs/0031-live/plan.md (currently: Qwen3-16B)
+pytest harpyja/eval/test_live_verifier_integration.py::test_proof_of_instrument_astropy_django_produce_verifier_artifacts -v
+```
+
+If the live stack is unavailable, the test skips cleanly with a documented reason.
 
 ## Out of scope
 

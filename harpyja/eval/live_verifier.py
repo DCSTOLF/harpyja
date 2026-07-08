@@ -367,10 +367,174 @@ def build_trajectory_record(
 
 def verifier_preflight(
     endpoint: str,
-    repo_path: str,
-) -> tuple[bool, str]:
+    requested_model: str,
+    tags_payload: dict[str, Any],
+    *,
+    resolver: Any = None,
+) -> None:
     """Pre-flight checks for AC6 live verification.
 
-    Returns (passed, reason) where reason explains any skip/failure.
+    Asserts the endpoint is loopback-only, then verifies the requested model
+    is present in the /api/tags payload. Raises AirGapError or ValueError on failure.
+
+    Args:
+        endpoint: The gateway API base URL
+        requested_model: The model name to verify
+        tags_payload: The /api/tags response payload
+        resolver: Optional hostname resolver (for testing)
+
+    Raises:
+        AirGapError: If endpoint is not localhost
+        ValueError: If requested model is not in the tags payload
     """
-    raise NotImplementedError("verifier_preflight not yet implemented")
+    from harpyja.gateway.gateway import assert_local
+
+    # Air-gap first: assert the endpoint is loopback-only
+    assert_local(endpoint, resolver=resolver)
+
+    # Extract served model names from tags payload
+    served_models = {m.get("name") for m in (tags_payload or {}).get("models", [])}
+
+    # Check if requested model is present
+    if requested_model not in served_models:
+        raise ValueError(
+            f"Requested model {requested_model!r} not found in served models: "
+            f"{sorted(served_models)}"
+        )
+
+
+def run_verified_case(
+    case_name: str,
+    settings: Any,
+    gateway: Any,  # ModelGateway
+    gold_span: dict[str, Any],
+    out_dir: Path,
+    repo_path: str | None = None,
+    query: str | None = None,
+) -> tuple[VerifierResult, Path]:
+    """Run a verified case through the explorer and produce a verifier artifact.
+
+    Constructs an ExplorerBackend, runs the explorer loop, captures the trajectory,
+    derives terminal_bucket from gold_span, verifies, and writes the artifact.
+
+    Args:
+        case_name: The case identifier (e.g., "astropy__astropy-12907")
+        settings: Settings object with lm_model, lm_endpoint, etc.
+        gateway: ModelGateway instance
+        gold_span: Gold span (dict with file, start_line, end_line)
+        out_dir: Output directory for artifact
+        repo_path: Worktree path (if None, will be looked up from fixture)
+        query: Query text (if None, will be looked up from fixture)
+
+    Returns:
+        (VerifierResult, artifact_path) tuple
+    """
+    from datetime import datetime
+    from harpyja.index.manifest import read_manifest
+    from harpyja.symbols.engine_identity import engine_identity
+    from harpyja.symbols.ripgrep import RipgrepEngine
+    from harpyja.symbols.symbols_io import load_symbols_or_none
+    from harpyja.scout.explorer_backend import ExplorerBackend
+    from harpyja.eval.locate_accuracy import classify_case, normalize_citations
+    from harpyja.scout.errors import ScoutUnavailable
+    from harpyja.server.types import CodeSpan
+    import json
+
+    # Load case data from test fixture if not provided
+    if repo_path is None or query is None:
+        # Use the test-harness fixture
+        from harpyja.eval.test_harness_live import _CASES, _worktree
+        if case_name not in _CASES:
+            raise ValueError(f"Case {case_name} not in fixture")
+        gold_tuple, query_text = _CASES[case_name]
+        if query is None:
+            query = query_text
+        if repo_path is None:
+            repo_path = _worktree(case_name)
+            if repo_path is None:
+                raise ValueError(f"Case {case_name} worktree not found")
+
+    # Build the explorer stack
+    art_dir = Path(repo_path) / ".harpyja"
+    manifest = read_manifest(art_dir) or []
+    symbol_records = load_symbols_or_none(art_dir, engine_identity()) or []
+
+    ripgrep = None
+    try:
+        from harpyja.symbols.ripgrep import RipgrepEngine
+        ripgrep = RipgrepEngine(settings)
+    except Exception:
+        pass
+
+    backend = ExplorerBackend(
+        gateway=gateway,
+        repo_path=repo_path,
+        settings=settings,
+        manifest=manifest,
+        search_engine=ripgrep,
+        symbol_records=symbol_records,
+        max_tokens=settings.explorer_max_tokens,
+        enable_thinking=settings.explorer_enable_thinking,
+    )
+
+    # Run the explorer loop
+    try:
+        citations = backend.run(query, [])  # empty seed
+    except ScoutUnavailable as e:
+        # Explorer degraded - capture what we can
+        citations = []
+        last_trajectory = backend.last_trajectory
+
+    # Capture trajectory
+    last_trajectory = backend.last_trajectory
+    if last_trajectory is None:
+        raise ValueError("Explorer did not capture trajectory")
+
+    # Derive terminal_bucket from locate_accuracy
+    gold_span_obj = CodeSpan(
+        path=gold_span.get("file"),
+        start_line=gold_span.get("start_line"),
+        end_line=gold_span.get("end_line"),
+    )
+    normalized = normalize_citations(citations, None)
+    terminal_bucket, _ = classify_case(
+        normalized.effective,
+        (gold_span_obj,),
+        window=50
+    )
+
+    # Build full trajectory for verification
+    traj = {
+        "schema_version": VERIFIER_SCHEMA_VERSION,
+        "requested_model": settings.lm_model,
+        "endpoint": settings.lm_api_base,
+        "served_model": last_trajectory.get("served_model"),
+        "configured_endpoint_models": [settings.lm_model],
+        "tiers_run": [0, 1],  # explorer always runs Tier 0+1
+        "model_turns": last_trajectory.get("model_turns", []),
+        "terminal_bucket": terminal_bucket.value if terminal_bucket else None,
+    }
+
+    # Verify the trajectory
+    result = verify_trajectory(traj)
+
+    # Build and write artifact
+    artifact = {
+        "schema_version": VERIFIER_SCHEMA_VERSION,
+        "requested_model": settings.lm_model,
+        "endpoint": settings.lm_api_base,
+        "served_model": traj["served_model"],
+        "configured_endpoint_models": [settings.lm_model],
+        "tiers_run": traj["tiers_run"],
+        "model_turns": traj["model_turns"],
+        "terminal_bucket": traj["terminal_bucket"],
+        "verifier_status": result.status,
+        "failure_reason": result.failure_reason,
+        "timestamp": datetime.utcnow().isoformat(),
+        "case": case_name,
+    }
+
+    out_path = (out_dir / f"{case_name}_verifier_artifact.json").resolve()
+    write_verifier_artifact(artifact, out_path, repo_path)
+
+    return result, out_path

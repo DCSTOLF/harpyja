@@ -12,7 +12,9 @@ from harpyja.eval.live_verifier import (
     write_verifier_artifact,
     verify_trajectory,
     VerifierResult,
+    verifier_preflight,
 )
+from harpyja.gateway.gateway import AirGapError
 
 
 def test_verifier_artifact_schema_is_version_stamped_and_validated():
@@ -377,3 +379,47 @@ def test_verify_all_six_failure_codes_reachable(failure_code):
     assert result.failure_reason == failure_code, (
         f"Expected {failure_code} but got {result.failure_reason}"
     )
+
+
+# --- Spec 0031 (live): Verifier preflight (T21/T22, AC6) ---
+
+
+def test_verifier_preflight_passes_when_model_present():
+    """verifier_preflight passes when model is in /api/tags payload."""
+    endpoint = "http://127.0.0.1:11434/v1"
+    requested_model = "qwen3:14b"
+    tags_payload = {
+        "models": [
+            {"name": "qwen3:14b"},
+            {"name": "qwen3:4b"},
+        ]
+    }
+
+    # Should not raise
+    verifier_preflight(endpoint, requested_model, tags_payload)
+
+
+def test_verifier_preflight_fails_when_model_absent():
+    """verifier_preflight raises PreflightError when model not in tags."""
+    endpoint = "http://127.0.0.1:11434/v1"
+    requested_model = "llama:70b"
+    tags_payload = {
+        "models": [
+            {"name": "qwen3:14b"},
+            {"name": "qwen3:4b"},
+        ]
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        verifier_preflight(endpoint, requested_model, tags_payload)
+    assert "llama:70b" in str(exc_info.value) or "missing" in str(exc_info.value).lower()
+
+
+def test_verifier_preflight_rejects_non_localhost_endpoint():
+    """verifier_preflight rejects non-localhost endpoints before probing."""
+    endpoint = "http://8.8.8.8:11434/v1"
+    requested_model = "qwen3:14b"
+    tags_payload = {"models": [{"name": "qwen3:14b"}]}
+
+    with pytest.raises(AirGapError):
+        verifier_preflight(endpoint, requested_model, tags_payload)
