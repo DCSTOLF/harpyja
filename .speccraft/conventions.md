@@ -415,6 +415,18 @@
   may touch + the frozen-oracle **behavior snapshot** — so a silent re-map into the
   shared oracle cannot happen. (See `harpyja/eval/locate_accuracy.py` `SUT_SURFACE` /
   `classify_case`, spec 0022 AC10.)
+- A **lift/capability measurement's per-case outcome bucket is computed by the SAME
+  ground-truth oracle used everywhere else (one-oracle reuse) — never a `has_citations`
+  presence proxy — and the intervention it tests (a tool call) must be CONFIRMED, not
+  assumed.** A bucket mapped as "returned something → CORRECT" measures citation
+  PRESENCE, not correctness; paired with a STRUCTURAL CONTROL that then moves by a
+  mechanism the intervention cannot produce, it is a FALSE-CAPABILITY read — the
+  degrade-masks-outcome trap at the measurement layer. Route the outcome through the
+  existing span oracle (`locate_accuracy` buckets), and instrument the tool call so its
+  invocation is asserted, not tolerated-if-absent. A tool shipping proven + a harness
+  running clean with it present is NOT the same as its lift being measured. (See
+  `harpyja/eval/test_symbols_lift_live.py` deviation vs the 0022/0026 oracle-reuse
+  discipline, spec 0030 deviations.)
 - A **measurement spec closes on a recorded, SUT-observing typed outcome that names the
   next spec — skip-not-fail is never a close**, and a typed null (including an
   *unmeasurable* / DEFERRED metric with a zero-count denominator) is a **complete, valid
