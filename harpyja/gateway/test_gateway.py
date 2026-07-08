@@ -210,6 +210,32 @@ def test_complete_with_tools_asserts_local_before_transport():
         gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
 
 
+# --- Spec 0031 (live): Gateway surfaces served model (T16, AC) ---
+
+
+def test_complete_with_tools_surfaces_served_model():
+    """complete_with_tools surfaces response['model'] as served_model (T16)."""
+    def transport(url, payload):
+        return {
+            "model": "served-model-xyz",
+            "choices": [{"message": {"content": "response"}}],
+        }
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["model"] == "served-model-xyz"
+
+
+def test_complete_with_tools_served_model_absent_is_none():
+    """complete_with_tools returns model=None when response lacks 'model' key (T16)."""
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "response"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "hi"}], _TOOLS, transport=transport)
+    assert out["model"] is None
+
+
 # --- Spec 0017 (B3): gateway HTTP timeout (AC2, AC3, AC7) ---
 
 import json  # noqa: E402

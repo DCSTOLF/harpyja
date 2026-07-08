@@ -23,6 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from harpyja.config.settings import Settings
+from harpyja.eval.live_verifier import build_trajectory_record
 from harpyja.gateway.gateway import AirGapError
 from harpyja.index.manifest import ManifestEntry
 from harpyja.scout import errors
@@ -192,6 +193,12 @@ class ExplorerBackend:
         # None until the first run; populated on submit AND on the exhaustion degrade
         # paths (whichever produced a LoopResult).
         self.last_turns_used: int | None = None
+        # Spec 0031 (live): the per-run trajectory artifact (model turns + tool names).
+        # None until the first run; captured after a successful run to support
+        # trajectory-verified live measurement.
+        self.last_trajectory: dict[str, Any] | None = None
+        # Track the served model from the last response for trajectory capture
+        self._last_served_model: str | None = None
 
     @property
     def degrade_rate(self) -> float:
@@ -220,6 +227,7 @@ class ExplorerBackend:
 
         self.run_count += 1
         self.last_turns_used = None  # reset per run
+        self._last_served_model = None  # reset per run
         try:
             return self._run_loop(query)
         except ScoutUnavailable:
@@ -244,9 +252,17 @@ class ExplorerBackend:
             return submit_citations(citations, self._repo_path, self._settings)
 
         model_call = self._model_call or self._default_model_call()
+
+        # Spec 0031 (live): wrap any model_call to track served_model for trajectory
+        # capture. This works for both injected and default calls.
+        def wrapped_model_call(messages: list[dict[str, Any]]) -> Mapping[str, Any]:
+            response = model_call(messages)
+            self._last_served_model = response.get("model")
+            return response
+
         try:
             result = run_explorer_loop(
-                model_call=model_call,
+                model_call=wrapped_model_call,
                 tools=tools,
                 submit=submit,
                 context_map=context_map,
@@ -267,6 +283,17 @@ class ExplorerBackend:
         # LoopResult (submit and both exhaustion outcomes) — before any degrade raise,
         # so the migrated 0022 measurement survives exhausted runs too.
         self.last_turns_used = result.turns_used
+
+        # Spec 0031 (live): capture trajectory after the loop (before any degrade raise)
+        # for trajectory-verified live measurement. The trajectory carries model_turns,
+        # tool_names_invoked, and served_model; the harness will merge in tiers_run,
+        # requested_model, and terminal_bucket.
+        self.last_trajectory = build_trajectory_record(
+            result.history,
+            result.turns_used,
+            served_model=self._last_served_model,
+            endpoint=self._gateway.api_base,
+        )
 
         if result.outcome == SUBMITTED:
             # Honest-empty (a well-formed empty submission) returns [] — NOT a degrade.

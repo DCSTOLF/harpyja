@@ -198,4 +198,5 @@ class ModelGateway:
             "content": message.get("content") or "",
             "tool_calls": message.get("tool_calls") or [],
             "finish_reason": str(finish_reason) if finish_reason is not None else "unknown",
+            "model": response.get("model"),
         }

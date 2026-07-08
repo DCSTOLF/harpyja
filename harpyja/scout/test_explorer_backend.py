@@ -485,3 +485,74 @@ def test_generation_truncated_outcome_raises_scout_unavailable_generation_trunca
         backend.run("q", [])
     assert ei.value.cause == errors.GENERATION_TRUNCATED
     assert ei.value.cause != errors.MODEL_UNREACHABLE
+
+
+# --- Spec 0031 (live): Explorer backend trajectory capture (T18/T19) ---
+
+
+def test_run_captures_last_trajectory_after_loop(tmp_path):
+    """ExplorerBackend captures last_trajectory with model_turns, tools, and served_model."""
+    _file(tmp_path, "real.py", n=50)
+
+    def model_call(messages):
+        # Return a response with served_model to verify it's threaded through
+        return {
+            "content": "",
+            "tool_calls": [_tc("grep", pattern="needle")],
+            "model": "served-model-test",
+        }
+
+    # Inject a multi-turn model call that uses grep then submits
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="needle")], "model": "served-model-test"},
+        {"content": "", "tool_calls": [_tc("submit_citations",
+         citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])], "model": "served-model-test"},
+    )
+    backend = _backend(tmp_path, model_call=model, search=_FakeSearch([CodeSpan("real.py", 1, 1)]))
+    backend.run("q", [])
+
+    # Verify last_trajectory is captured
+    assert backend.last_trajectory is not None
+    assert "model_turns" in backend.last_trajectory
+    assert len(backend.last_trajectory["model_turns"]) >= 1  # At least one turn captured
+    # Verify tool names are captured
+    assert "tool_names_invoked" in backend.last_trajectory or any(
+        "grep" in str(t.get("tool_calls", []))
+        for t in backend.last_trajectory.get("model_turns", [])
+    )
+    # Verify served_model is in trajectory
+    assert backend.last_trajectory.get("served_model") is not None
+
+
+def test_last_trajectory_is_reset_per_run(tmp_path):
+    """last_trajectory is None before first run and replaced (not accumulated) on next run."""
+    _file(tmp_path, "real.py", n=50)
+
+    model1 = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="n")]},
+        {"content": "", "tool_calls": [_tc("submit_citations",
+         citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])]},
+    )
+    backend = _backend(tmp_path, model_call=model1, search=_FakeSearch([CodeSpan("real.py", 1, 1)]))
+
+    # Initially None
+    assert backend.last_trajectory is None
+
+    # After first run
+    backend.run("q", [])
+    traj1 = backend.last_trajectory
+    assert traj1 is not None
+    initial_turn_count = len(traj1.get("model_turns", []))
+
+    # After second run (fresh model call)
+    model2 = _scripted(
+        {"content": "", "tool_calls": [_tc("submit_citations",
+         citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])]},
+    )
+    backend._model_call = model2
+    backend.run("q", [])
+    traj2 = backend.last_trajectory
+
+    # Verify it's replaced, not accumulated
+    assert traj2 is not traj1  # Different object
+    assert len(traj2.get("model_turns", [])) != 2 * initial_turn_count  # Not accumulated
