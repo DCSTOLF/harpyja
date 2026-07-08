@@ -33,6 +33,8 @@ None. All 10 ACs shipped as specified.
 
 **Live AC6/AC7/AC8/AC9 measurement on 14B model (qwen3:14b via ollama):**
 
+> **Note (added retroactively):** the committed live test (`harpyja/eval/test_harness_live.py`) hardcodes `_MODEL = "unsloth/Qwen3-16B-A3B-GGUF:Q4_K_M"` against `http://127.0.0.1:8131/v1` (llama.cpp) — it does not match the `qwen3:14b`-via-Ollama config reported below. No commit changes that file to point at `qwen3:14b`/Ollama, so the operator run must have used an uncommitted local override; the exact invocation is not reproducible from git alone. Unlike spec 0030 (which produces a durable JSON measurement artifact per its review), this run's results exist only as the hand-typed table below.
+
 | AC | Gate | Result | Details |
 |----|------|--------|---------|
 | **AC6** (turn-2 clean) | GATE | ✅ PASS | astropy 141s, django 207s; both within N=10 turns, no runaway |
