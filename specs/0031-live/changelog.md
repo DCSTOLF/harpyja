@@ -53,8 +53,10 @@ closed: 2026-07-08
   the tool-name parser is DUPLICATED — `extract_tool_names` (verify path) and the inline parse in
   `build_trajectory_record` are two copies with divergent behavior on an unnamed call
   (`extract_tool_names` FAILs `tool-names-unextractable`; `build_trajectory_record` silently skips
-  it). Recorded as tech debt for the T20 follow-up; not currently a correctness bug because the
-  verify path is the sole gate.
+  it). **Filed as T20-tool-name-parser-dedup.md: MEASUREMENT-INTEGRITY BLOCKER** (not just tech debt).
+  Currently safe because verify is sole gate. But this is exactly the copy-drift hazard the verifier
+  was built to prevent. **Blocker for bake-off and any spec that consumes verifier artifacts
+  outside the verify gate.** Must be deduped before downstream specs bypass verification.
 
 ## Files touched
 
