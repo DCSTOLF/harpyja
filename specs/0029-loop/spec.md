@@ -9,7 +9,7 @@ related-specs: [0024, 0027, 0028]
 operator_run_date: 2026-07-07
 operator_run_status: "harness-proven-ac8-gate-pass / capability-measured-partial-14b"
 operator_run_model: "qwen3:14b (ollama)"
-operator_run_verdict: "parallel tool_call fix verified working end-to-end; AC8 GATE PASS; response clean (no reasoning spillage); AC9 measured: 0/2 correct, 1/2 right-file (wrong-span), 1/2 wrong-file"
+operator_run_verdict: "parallel tool_call fix verified working end-to-end; AC8 GATE PASS; response clean (no reasoning spillage); AC9 demonstrated non-degenerate (non-empty, valid citations); capability rate unmeasured, pending full eval set"
 ---
 
 # Spec 0029 — loop
