@@ -26,11 +26,28 @@ import os
 import tempfile
 from pathlib import Path
 
+from harpyja.server.types import CodeSpan
 from harpyja.symbols.extract import SymbolRecord
 
 SYMBOLS_NAME = "symbols.jsonl"
 META_NAME = "symbols.meta.json"
 _KEY_ORDER = ("path", "language", "name", "kind", "parent", "start_line", "end_line")
+
+
+def record_to_codespan(record: SymbolRecord) -> CodeSpan:
+    """Convert a SymbolRecord to a CodeSpan with symbol/kind/line-span fields.
+
+    Shared projection used by both Deep and Scout symbol tools to ensure a
+    single source of truth for the record→CodeSpan conversion.
+    """
+    return CodeSpan(
+        path=record.path,
+        start_line=record.start_line,
+        end_line=record.end_line,
+        symbol=record.name,
+        language=record.language,
+        kind=record.kind,
+    )
 
 
 def _record_json(rec: SymbolRecord) -> str:

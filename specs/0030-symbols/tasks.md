@@ -16,7 +16,7 @@ spec: "0030"
 - [x] T10 — GREEN (AC4 LOCKSTEP, single commit): amend `.speccraft/conventions.md` 4→5 with rationale + add `symbols` schema and `symbol_records` param to `harpyja/scout/explorer_backend.py`
 - [x] T11 — RED: `test_build_scout_engine_threads_symbol_records_into_symbols_tool` in `harpyja/scout/test_scout_wiring.py`
 - [x] T12 — GREEN: load + thread `symbol_records` via `load_symbols_or_none` in `harpyja/scout/wiring.py`
-- [ ] T13 — REFACTOR (optional): extract shared `record_to_codespan` used by `deep/host_tools.py` + `scout/explorer_tools.py`
+- [x] T13 — REFACTOR (optional): extract shared `record_to_codespan` used by `deep/host_tools.py` + `scout/explorer_tools.py`
 - [ ] T14 — RED (AC5): `test_lift_report_schema_is_version_stamped_and_validated`, `test_lift_report_writes_outside_repo_atomically` in `harpyja/eval/test_symbols_lift_report.py`
 - [ ] T15 — GREEN (AC5): pinned version-stamped lift-report schema + atomic outside-repo writer in `harpyja/eval/symbols_lift_report.py`
 - [ ] T16 — LIVE (AC5/AC6): xfail-gated `test_symbols_lift_astropy_django_live` in `harpyja/eval/test_symbols_lift_live.py`; operator runs the 14B lift on astropy-12907 + django-12774, records buckets honestly (django=hypothesis, astropy=expected control, any degrade=harness failure)

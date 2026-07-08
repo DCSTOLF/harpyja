@@ -18,6 +18,7 @@ from harpyja.index.manifest import ManifestEntry
 from harpyja.server.tools import confine_path, read_snippet
 from harpyja.server.types import CodeSpan
 from harpyja.symbols.extract import SymbolRecord
+from harpyja.symbols.symbols_io import record_to_codespan
 
 
 class _Search:  # structural: anything with .search(pattern, scope)
@@ -58,18 +59,7 @@ def build_host_tools(
     def symbols(path: str) -> list[CodeSpan]:
         _charge()
         confine_path(repo_path, path)  # rejects a path outside the repo root
-        return [
-            CodeSpan(
-                path=r.path,
-                start_line=r.start_line,
-                end_line=r.end_line,
-                symbol=r.name,
-                language=r.language,
-                kind=r.kind,
-            )
-            for r in symbol_records
-            if r.path == path
-        ]
+        return [record_to_codespan(r) for r in symbol_records if r.path == path]
 
     def read_span(path: str, start: int, end: int) -> dict[str, Any]:
         _charge()

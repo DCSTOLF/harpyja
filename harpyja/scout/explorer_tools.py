@@ -35,6 +35,7 @@ from harpyja.index.manifest import ManifestEntry
 from harpyja.server.tools import confine_path, read_snippet
 from harpyja.server.types import CodeSpan
 from harpyja.symbols.extract import SymbolRecord
+from harpyja.symbols.symbols_io import record_to_codespan
 
 
 class _Search:  # structural: anything with .search(pattern, scope)
@@ -140,16 +141,7 @@ def build_explorer_tools(
         out: list[CodeSpan] = []
         for record in symbol_records:
             if record.path == normalized_str:
-                out.append(
-                    CodeSpan(
-                        path=record.path,
-                        start_line=record.start_line,
-                        end_line=record.end_line,
-                        symbol=record.name,
-                        language=record.language,
-                        kind=record.kind,
-                    )
-                )
+                out.append(record_to_codespan(record))
                 if len(out) >= settings.scout_symbols_max_entries:
                     break
         return {"symbols": out, "degraded": False}
