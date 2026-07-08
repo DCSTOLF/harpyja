@@ -1,5 +1,6 @@
 """Integration tests for trajectory-verified live measurement (spec 0031, AC6)."""
 
+import json
 import pytest
 import tempfile
 from pathlib import Path
@@ -59,6 +60,8 @@ def test_proof_of_instrument_astropy_django_produce_verifier_artifacts():
             ("django__django-12774", {"file": "django/db/models/query.py", "start_line": 689, "end_line": 695}),
         ]
 
+        results_summary = {}
+
         for case_name, gold_span in test_cases:
             try:
                 # Run the verified case: returns (VerifierResult, artifact_path)
@@ -89,6 +92,29 @@ def test_proof_of_instrument_astropy_django_produce_verifier_artifacts():
 
                 # Artifact file must exist
                 assert artifact_path.exists()
+
+                # Capture terminal bucket for reporting
+                results_summary[case_name] = result.terminal_bucket
+
+                # Load artifact to show symbols invocation
+                with open(artifact_path) as f:
+                    artifact = json.load(f)
+
+                tool_names = set()
+                for turn in artifact.get('model_turns', []):
+                    if isinstance(turn, dict) and 'tool_calls' in turn:
+                        for tc in turn['tool_calls']:
+                            if isinstance(tc, dict):
+                                fname = tc.get('function', {}).get('name')
+                                if fname:
+                                    tool_names.add(fname)
+
+                symbols_invoked = 'symbols' in tool_names
+                print(f"\n[ARTIFACT] {case_name}:")
+                print(f"  - verifier_status: {artifact['verifier_status']}")
+                print(f"  - terminal_bucket: {artifact['terminal_bucket']}")
+                print(f"  - tools_invoked: {sorted(tool_names)}")
+                print(f"  - symbols_invoked: {'YES' if symbols_invoked else 'NO'}")
 
             except Exception as e:
                 # Case execution error: skip this case but continue
