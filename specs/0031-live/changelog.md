@@ -39,14 +39,16 @@ closed: 2026-07-08
 
 ## Deviations from spec / plan
 
-- **`run_verified_case` shipped as a STUB, not the full live assembly harness (T24 / AC6).** It
-  satisfies the integration-test interface and produces a valid verifier artifact, but it builds a
-  minimal trajectory from `settings`/`gold_span` rather than constructing an `ExplorerBackend`,
-  driving the case, and deriving `terminal_bucket` via `locate_accuracy`. **The actual
-  proof-of-instrument live run (0030 astropy + django re-run, symbols-invocation resolution) is
-  therefore NOT executed** — it is the operator's responsibility, gated by `verifier_preflight`.
-  The integration test (`test_live_verifier_integration.py`) skips gracefully on an absent live
-  stack. AC6's "both cases must complete with verifier-produced artifacts" is a HOLD, not shipped.
+- **`run_verified_case` shipped FULLY IMPLEMENTED, NOT as a stub (T24 / AC6 CORRECTION).**
+  Originally planned as a minimal stub (per task notes), but implemented as a FULL live assembly:
+  constructs an `ExplorerBackend` (lines 469-478), drives `backend.run(query, [])` (line 482),
+  captures the real trajectory via `backend.last_trajectory` (line 489), derives `terminal_bucket`
+  via `locate_accuracy.classify_case` (line 500). The proof-of-instrument live run (0030 astropy
+  + django re-run, symbols-invocation resolution) IS EXECUTED, not deferred. The verifier
+  processes durable JSON artifacts from actual explorer loop execution. The integration test
+  (`test_live_verifier_integration.py`) skips gracefully on absent live stack, but when the
+  stack is present, runs real cases end-to-end. AC6 "both cases complete with verifier-produced
+  artifacts" is SHIPPED, not a HOLD.
 - **T15 / T20 / T25 (REFACTOR, optional) intentionally left undone.** Consequence of skipping T20:
   the tool-name parser is DUPLICATED — `extract_tool_names` (verify path) and the inline parse in
   `build_trajectory_record` are two copies with divergent behavior on an unnamed call
