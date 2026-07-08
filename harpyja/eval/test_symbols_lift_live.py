@@ -99,25 +99,43 @@ def test_symbols_lift_astropy_django_live(tmp_path):
 
         def make_logged_answer(log_list):
             def logged_answer(call, tools, submit, session, settings):
-                # Extract tool name from the call object
+                # Extract tool name from the call object - be aggressive about finding it
                 tool_name = "unknown"
+
+                # Try dict first
                 if isinstance(call, dict):
-                    tool_name = call.get("name", "unknown")
-                    if tool_name == "unknown" and "function" in call:
-                        tool_name = call["function"].get("name", "unknown")
+                    print(f"  [CALL OBJ DICT] keys: {list(call.keys())}")
+                    tool_name = call.get("name", None)
+                    if not tool_name and "function" in call:
+                        func = call["function"]
+                        print(f"    [FUNCTION] type: {type(func)}, content: {func}")
+                        if isinstance(func, dict):
+                            tool_name = func.get("name")
+                        else:
+                            tool_name = getattr(func, "name", None)
                 else:
-                    # Try different attributes that might hold the tool name
-                    for attr in ["name", "function_name", "_name"]:
+                    # Try object attributes
+                    print(f"  [CALL OBJ] type: {type(call).__name__}")
+                    print(f"    [ATTRS] {[a for a in dir(call) if not a.startswith('_')][:10]}")
+
+                    # Try to find name in multiple ways
+                    for attr in ["name", "function_name", "id"]:
                         val = getattr(call, attr, None)
                         if val:
-                            tool_name = val
+                            tool_name = str(val)
+                            print(f"    [FOUND {attr}] = {tool_name}")
                             break
-                    # Also check if it has a .function with .name
-                    if tool_name == "unknown":
-                        func = getattr(call, "function", None)
-                        if func and hasattr(func, "name"):
-                            tool_name = func.name
+
+                    func = getattr(call, "function", None)
+                    if func:
+                        print(f"    [HAS function] type: {type(func).__name__}")
+                        func_name = getattr(func, "name", None)
+                        if func_name:
+                            tool_name = func_name
+                            print(f"    [FOUND function.name] = {tool_name}")
+
                 log_list.append(tool_name)
+                print(f"  → Logged tool_name: {tool_name}")
                 return original_answer(call, tools, submit, session, settings)
             return logged_answer
 
