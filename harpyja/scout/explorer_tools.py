@@ -54,6 +54,9 @@ def build_explorer_tools(
     manifest = manifest or []
     repo_real = Path(repo_path).resolve()
 
+    # Build a degraded_paths set for AC3 graceful degradation (manifest-based provenance).
+    degraded_paths = {m.path for m in manifest if m.degraded}
+
     def grep(pattern: str, scope: str | None = None) -> list[CodeSpan]:
         # Confine the search scope to the repo (rejects an out-of-repo scope) and
         # delegate to the shared engine; clamp defensively on untrusted-loop output.
@@ -105,11 +108,13 @@ def build_explorer_tools(
                 break
         return out
 
-    def symbols(path: str) -> list[CodeSpan]:
+    def symbols(path: str) -> dict[str, Any]:
         # File-local symbol index (spec 0030): return the symbols (functions, classes,
         # types, etc.) defined in the given file. Source: Tier-0's pre-extracted symbol
         # records (no new parser). Path is normalized (resolved) before lookup and
         # repo-confined. Output clamped by scout_symbols_max_entries.
+        # Returns a dict {"symbols": [...CodeSpan...], "degraded": bool} with visible
+        # provenance marker (AC3).
 
         # Confine the path first: raises PathConfinementError if out-of-repo.
         # This preserves the untrusted-caller boundary (loud error, not silent drop).
@@ -120,10 +125,18 @@ def build_explorer_tools(
             candidate = (repo_real / path).resolve()
             rel_path = candidate.relative_to(repo_real)
         except (ValueError, OSError):
-            return []  # escapes the repo root or other path error — drop
+            return {"symbols": [], "degraded": False}  # escapes or error — empty clean result
 
-        # Filter records by the normalized repo-relative path, convert to CodeSpan.
         normalized_str = str(rel_path)
+
+        # AC3: Check if this file is degraded (parse failure at index build).
+        if normalized_str in degraded_paths:
+            # Fallback to ripgrep (Tier-0's existing fallback) for this file.
+            ripgrep_results = search_engine.search("", scope=str(candidate))
+            clamped = ripgrep_results[: settings.scout_symbols_max_entries]
+            return {"symbols": clamped, "degraded": True}
+
+        # Clean file: filter records by the normalized repo-relative path, convert to CodeSpan.
         out: list[CodeSpan] = []
         for record in symbol_records:
             if record.path == normalized_str:
@@ -139,6 +152,6 @@ def build_explorer_tools(
                 )
                 if len(out) >= settings.scout_symbols_max_entries:
                     break
-        return out
+        return {"symbols": out, "degraded": False}
 
     return {"grep": grep, "glob": glob, "read_span": read_span, "ls": ls, "symbols": symbols}

@@ -48,12 +48,12 @@ def _tools(tmp_path, *, settings=None, search=None, symbol_records=None, manifes
     )
 
 
-def test_build_explorer_tools_returns_exactly_four_navigation_tools(tmp_path):
+def test_build_explorer_tools_returns_exactly_five_navigation_tools(tmp_path):
     tools = _tools(tmp_path)
-    # spec 0027: EXACTLY four navigation tools — `ls` added as the layout-discovery
-    # affordance `glob` lacks (a DELIBERATE, reconciled tool-suite change). No terminal
-    # submit action, nothing else.
-    assert set(tools) == {"grep", "glob", "read_span", "ls"}
+    # spec 0030: EXACTLY five navigation tools — `symbols` added as the file-local
+    # symbol index tool (spec 0027 added `ls` → 4; spec 0030 adds `symbols` → 5).
+    # This is a DELIBERATE, reconciled tool-suite change. No terminal submit action.
+    assert set(tools) == {"grep", "glob", "read_span", "ls", "symbols"}
     assert "submit_citations" not in tools
 
 
@@ -199,13 +199,14 @@ def test_symbols_tool_wraps_tier0_records_python(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records)
     out = tools["symbols"]("app.py")
-    assert len(out) == 2
-    assert out[0].symbol == "MyClass"
-    assert out[0].kind == "class"
-    assert out[0].start_line == 1
-    assert out[0].end_line == 10
-    assert out[1].symbol == "my_func"
-    assert out[1].kind == "function"
+    assert out["degraded"] is False
+    assert len(out["symbols"]) == 2
+    assert out["symbols"][0].symbol == "MyClass"
+    assert out["symbols"][0].kind == "class"
+    assert out["symbols"][0].start_line == 1
+    assert out["symbols"][0].end_line == 10
+    assert out["symbols"][1].symbol == "my_func"
+    assert out["symbols"][1].kind == "function"
 
 
 def test_symbols_tool_wraps_tier0_records_go(tmp_path):
@@ -223,9 +224,10 @@ def test_symbols_tool_wraps_tier0_records_go(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records)
     out = tools["symbols"]("main.go")
-    assert len(out) == 1
-    assert out[0].symbol == "SomeType"
-    assert out[0].kind == "type"
+    assert out["degraded"] is False
+    assert len(out["symbols"]) == 1
+    assert out["symbols"][0].symbol == "SomeType"
+    assert out["symbols"][0].kind == "type"
 
 
 def test_symbols_tool_normalized_path(tmp_path):
@@ -246,9 +248,9 @@ def test_symbols_tool_normalized_path(tmp_path):
     # Both paths should resolve to the same canonical form.
     out1 = tools["symbols"]("pkg/file.py")
     out2 = tools["symbols"]("pkg/../pkg/file.py")
-    assert len(out1) == 1
-    assert len(out2) == 1
-    assert out1[0].symbol == out2[0].symbol
+    assert len(out1["symbols"]) == 1
+    assert len(out2["symbols"]) == 1
+    assert out1["symbols"][0].symbol == out2["symbols"][0].symbol
 
 
 def test_symbols_tool_no_new_parser(tmp_path):
@@ -268,8 +270,8 @@ def test_symbols_tool_no_new_parser(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records)
     out = tools["symbols"]("nonexistent.py")
-    assert len(out) == 1
-    assert out[0].symbol == "phantom"
+    assert len(out["symbols"]) == 1
+    assert out["symbols"][0].symbol == "phantom"
 
 
 def test_symbols_tool_out_of_repo_path_rejected(tmp_path):
@@ -297,7 +299,7 @@ def test_symbols_tool_clamps_to_scout_symbols_max_entries(tmp_path):
     ]
     tools = _tools(tmp_path, settings=Settings(scout_symbols_max_entries=3), symbol_records=records)
     out = tools["symbols"]("big.py")
-    assert len(out) == 3  # defensive clamp on untrusted-loop output
+    assert len(out["symbols"]) == 3  # defensive clamp on untrusted-loop output
 
 
 # --- Spec 0030: graceful degradation with visible provenance (AC3) —

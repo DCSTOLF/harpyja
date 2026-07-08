@@ -49,7 +49,7 @@ _EXHAUSTION_CAUSE = {
 
 
 def _tool_schemas() -> list[dict[str, Any]]:
-    """Minimal OpenAI function schemas for the four tools + the terminal action."""
+    """Minimal OpenAI function schemas for the five navigation tools + the terminal action."""
     return [
         {
             "type": "function",
@@ -112,6 +112,18 @@ def _tool_schemas() -> list[dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "symbols",
+                "description": "List the symbols (functions, classes, types, etc.) defined in a file.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "submit_citations",
                 "description": "Submit the final file:line citations and end the search.",
                 "parameters": {
@@ -146,6 +158,7 @@ class ExplorerBackend:
         settings: Settings,
         manifest: Sequence[ManifestEntry],
         search_engine: Any,
+        symbol_records: Sequence[Any] | None = None,
         model_call: Callable[[list[dict[str, Any]]], Mapping[str, Any]] | None = None,
         clock: Callable[[], float] = time.monotonic,
         max_tokens: int = 2048,
@@ -156,6 +169,7 @@ class ExplorerBackend:
         self._settings = settings
         self._manifest = manifest
         self._search_engine = search_engine
+        self._symbol_records = symbol_records or []
         self._model_call = model_call
         self._clock = clock
         # Spec 0028 (AC2) — the per-call generation cap. The finite default lives HERE
@@ -215,11 +229,15 @@ class ExplorerBackend:
     def _run_loop(self, query: str) -> list[CodeSpan]:
         # spec 0027: the eager whole-repo context map is REMOVED (push → pull). The
         # initial prompt is minimal (query + tool-usage framing, no repo listing); the
-        # model discovers layout on demand via ls/glob/grep. `context_map` is still the
+        # model discovers layout on demand via ls/glob/grep/symbols. `context_map` is still the
         # loop's initial-message param — now carrying the minimal prompt, not a repo map.
         context_map = build_initial_prompt(query)
         tools = build_explorer_tools(
-            self._repo_path, self._settings, search_engine=self._search_engine
+            self._repo_path,
+            self._settings,
+            search_engine=self._search_engine,
+            symbol_records=self._symbol_records,
+            manifest=self._manifest,
         )
 
         def submit(citations: Sequence[Mapping[str, Any]]) -> list[CodeSpan]:
