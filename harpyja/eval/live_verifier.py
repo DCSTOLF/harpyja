@@ -333,22 +333,19 @@ def build_trajectory_record(
     Returns:
         A partial trajectory dict ready for verification or assembly
     """
-    # Extract tool names from history using the shared parser logic
-    tool_names = []
-    seen = set()
-
-    for turn in history:
-        tool_calls = turn.get("tool_calls", [])
-        for call in tool_calls:
-            name = call.get("function", {}).get("name")
-            if name and name not in seen:
-                tool_names.append(name)
-                seen.add(name)
+    # Tool names come from the ONE canonical parser (spec 0032): the strict
+    # extract_tool_names the verify path uses. A nameless tool_call is a typed
+    # failure carried as DATA (tool_names_failure) — never raised, because this
+    # builder runs live inside ExplorerBackend's loop; never a silent skip.
+    tool_names, _proven, tool_names_failure = extract_tool_names(
+        {"model_turns": history}
+    )
 
     record = {
         "schema_version": VERIFIER_SCHEMA_VERSION,
         "model_turns": history,
         "tool_names_invoked": tool_names,
+        "tool_names_failure": tool_names_failure,
         "served_model": served_model,
         "endpoint": endpoint,
         "turns_used": turns_used,

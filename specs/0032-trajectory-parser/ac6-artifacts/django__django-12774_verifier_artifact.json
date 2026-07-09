@@ -1,0 +1,107 @@
+{
+  "case": "django__django-12774",
+  "configured_endpoint_models": [
+    "qwen3:14b"
+  ],
+  "endpoint": "http://127.0.0.1:11434/v1",
+  "failure_reason": null,
+  "model_turns": [
+    {
+      "content": "You are localizing a query in a repository. Discover the layout on demand with the ls, glob, and grep tools, then call submit_citations with the file:line location.\n\nQuery: where does QuerySet.in_bulk resolve and validate the field_name argument",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"pattern\":\"in_bulk\",\"scope\":\".\"}",
+            "name": "grep"
+          },
+          "id": "call_yxv408xv",
+          "index": 0,
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "content": "[CodeSpan(path='docs/releases/2.0.txt', start_line=275, end_line=275, symbol=None, language=None, kind=None), CodeSpan(path='docs/releases/1.10.txt', start_line=405, end_line=405, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2178, end_line=2178, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2181, end_line=2181, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2191, end_line=2191, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2193, end_line=2193, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2195, end_line=2195, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2197, end_line=2197, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2199, end_line=2199, symbol=None, language=None, kind=None), CodeSpan(path='docs/ref/models/querysets.txt', start_line=2202, end_line=2202, symbol=None, language=None, kind=None), CodeSpan(path='django/db/models/query.py', start_line=685, end_line=685, symbol=None, language=None, kind=None), CodeSpan(path='django/db/models/query.py', start_line=691, end_line=691, symbol=None, language=None, kind=None), CodeSpan(path='django/db/models/query.py', start_line=693, end_line=693, symbol=None, language=None, kind=None), CodeSpan(path='tests/basic/tests.py', start_line=579, end_line=579, symbol=None, language=None, kind=None), CodeSpan(path='tests/or_lookups/tests.py', start_line=238, end_line=238, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=145, end_line=145, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=146, end_line=146, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=147, end_line=147, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=151, end_line=151, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=162, end_line=162, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=163, end_line=163, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=164, end_line=164, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=165, end_line=165, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=166, end_line=166, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=167, end_line=167, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=168, end_line=168, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=169, end_line=169, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=171, end_line=171, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=173, end_line=173, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=180, end_line=180, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=182, end_line=182, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=184, end_line=184, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=192, end_line=192, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=193, end_line=193, symbol=None, language=None, kind=None), CodeSpan(path='tests/lookup/tests.py', start_line=195, end_line=195, symbol=None, language=None, kind=None), CodeSpan(path='tests/custom_pk/tests.py', start_line=151, end_line=151, symbol=None, language=None, kind=None), CodeSpan(path='tests/custom_pk/tests.py', start_line=153, end_line=153, symbol=None, language=None, kind=None), CodeSpan(path='tests/custom_pk/tests.py', start_line=155, end_line=155, symbol=None, language=None, kind=None), CodeSpan(path='tests/custom_pk/tests.py', start_line=158, end_line=158, symbol=None, language=None, kind=None), CodeSpan(path='tests/prefetch_related/tests.py', start_line=1209, end_line=1209, symbol=None, language=None, kind=None), CodeSpan(path='tests/prefetch_related/tests.py', start_line=1218, end_line=1218, symbol=None, language=None, kind=None)]",
+      "role": "tool",
+      "tool_call_id": "call_yxv408xv"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"path\":\"django/db/models/query.py\",\"start\":685,\"end\":685}",
+            "name": "read_span"
+          },
+          "id": "call_ba56sky7",
+          "index": 0,
+          "type": "function"
+        },
+        {
+          "function": {
+            "arguments": "{\"start\":691,\"end\":691,\"path\":\"django/db/models/query.py\"}",
+            "name": "read_span"
+          },
+          "id": "call_4wyp90co",
+          "index": 1,
+          "type": "function"
+        },
+        {
+          "function": {
+            "arguments": "{\"path\":\"django/db/models/query.py\",\"start\":693,\"end\":693}",
+            "name": "read_span"
+          },
+          "id": "call_8nstm7ji",
+          "index": 2,
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "content": "{'path': 'django/db/models/query.py', 'start': 685, 'end': 685, 'language': 'python', 'content': \"    def in_bulk(self, id_list=None, *, field_name='pk'):\\n\", 'truncated': False}",
+      "role": "tool",
+      "tool_call_id": "call_ba56sky7"
+    },
+    {
+      "content": "{'path': 'django/db/models/query.py', 'start': 691, 'end': 691, 'language': 'python', 'content': '            \"Cannot use \\'limit\\' or \\'offset\\' with in_bulk\"\\n', 'truncated': False}",
+      "role": "tool",
+      "tool_call_id": "call_4wyp90co"
+    },
+    {
+      "content": "{'path': 'django/db/models/query.py', 'start': 693, 'end': 693, 'language': 'python', 'content': '            raise ValueError(\"in_bulk()\\'s field_name must be a unique field but %r isn\\'t.\" % field_name)\\n', 'truncated': False}",
+      "role": "tool",
+      "tool_call_id": "call_8nstm7ji"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"citations\":[{\"end_line\":693,\"path\":\"django/db/models/query.py\",\"start_line\":693}]}",
+            "name": "submit_citations"
+          },
+          "id": "call_ebrv2h17",
+          "index": 0,
+          "type": "function"
+        }
+      ]
+    }
+  ],
+  "requested_model": "qwen3:14b",
+  "schema_version": "0031/1",
+  "served_model": "qwen3:14b",
+  "terminal_bucket": "correct",
+  "tiers_run": [
+    0,
+    1
+  ],
+  "timestamp": "2026-07-09T01:47:23.796489",
+  "verifier_status": "PASSED"
+}

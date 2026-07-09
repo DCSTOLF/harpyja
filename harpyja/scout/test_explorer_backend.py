@@ -524,6 +524,31 @@ def test_run_captures_last_trajectory_after_loop(tmp_path):
     assert backend.last_trajectory.get("served_model") is not None
 
 
+def test_run_nameless_tool_call_carries_typed_failure_as_data_not_raise(tmp_path):
+    """Spec 0032 AC7: a nameless tool_call in the history never changes run()'s
+    control flow — the strict tool-name failure is carried as DATA on
+    last_trajectory, not raised.
+    """
+    _file(tmp_path, "real.py", n=50)
+    nameless_call = {"id": "c0", "type": "function", "function": {}}  # no name
+    model = _scripted(
+        {"content": "", "tool_calls": [nameless_call]},
+        {"content": "", "tool_calls": [_tc(
+            "submit_citations",
+            citations=[{"path": "real.py", "start_line": 1, "end_line": 2}])]},
+    )
+    backend = _backend(tmp_path, model_call=model)
+
+    out = backend.run("q", [])  # same terminal path as a fully-named run: no raise
+
+    assert out == [CodeSpan(path="real.py", start_line=1, end_line=2)]
+    assert backend.last_turns_used == 2
+    # The strict failure is data on the captured trajectory, never an exception.
+    assert backend.last_trajectory is not None
+    assert backend.last_trajectory["tool_names_failure"] == "tool-names-unextractable"
+    assert backend.last_trajectory["tool_names_invoked"] == []
+
+
 def test_last_trajectory_is_reset_per_run(tmp_path):
     """last_trajectory is None before first run and replaced (not accumulated) on next run."""
     _file(tmp_path, "real.py", n=50)

@@ -477,3 +477,162 @@ def test_verifier_preflight_rejects_non_localhost_endpoint():
 
     with pytest.raises(AirGapError):
         verifier_preflight(endpoint, requested_model, tags_payload)
+
+
+# --- Spec 0032 (trajectory-parser): dedup pins + divergence closure ---
+
+from harpyja.eval import live_verifier as _lv  # noqa: E402
+from harpyja.eval.live_verifier import (  # noqa: E402
+    FAILURE_PRECEDENCE,
+    build_trajectory_record,
+    extract_tool_names,
+)
+
+
+def _multitool_history() -> list[dict]:
+    """A well-formed multi-tool history (every name present)."""
+    return [
+        {"role": "assistant", "content": "",
+         "tool_calls": [{"function": {"name": "ls"}}]},
+        {"role": "assistant", "content": "",
+         "tool_calls": [{"function": {"name": "grep"}},
+                        {"function": {"name": "symbols"}}]},
+        {"role": "assistant", "content": "",
+         "tool_calls": [{"function": {"name": "grep"}},  # repeat → deduped
+                        {"function": {"name": "submit_citations"}}]},
+    ]
+
+
+def _nameless_history() -> list[dict]:
+    """A history whose tool_call lacks function.name (the T20 divergent input)."""
+    return [
+        {"role": "assistant", "content": "",
+         "tool_calls": [{"function": {"name": "ls"}}]},
+        {"role": "assistant", "content": "",
+         "tool_calls": [{"function": {}}]},  # nameless
+    ]
+
+
+# T1 — characterization pins (AC3/AC5/AC6): green pre-cutover, must survive it.
+
+
+def test_build_trajectory_record_valid_multitool_names_preserved():
+    """AC3: valid multi-tool history parses to the same ordered-unique name list."""
+    record = build_trajectory_record(_multitool_history(), 3)
+
+    assert record["tool_names_invoked"] == ["ls", "grep", "symbols", "submit_citations"]
+    # Post-cutover the sentinel is present-and-None on success; pre-cutover the
+    # key is absent — .get() pins both as "no failure".
+    assert record.get("tool_names_failure") is None
+
+
+def test_verifier_schema_version_and_failure_codes_frozen():
+    """AC5: schema version, the six codes, and their precedence are byte-frozen."""
+    assert VERIFIER_SCHEMA_VERSION == "0031/1"
+    assert FAILURE_CODES == frozenset([
+        "model-unknown",
+        "model-mismatch",
+        "model-not-invoked",
+        "tool-names-unextractable",
+        "terminal-bucket-missing",
+        "artifact-incomplete",
+    ])
+    assert FAILURE_PRECEDENCE == [
+        "artifact-incomplete",
+        "model-unknown",
+        "model-mismatch",
+        "model-not-invoked",
+        "tool-names-unextractable",
+        "terminal-bucket-missing",
+    ]
+
+
+def test_verify_result_field_by_field_stable_on_valid_trajectory():
+    """AC6 (hermetic half): field-by-field VerifierResult golden on a valid trajectory.
+
+    This is the granularity the bake-off depends on — not just PASSED + bucket.
+    """
+    got = verify_trajectory(_traj()).to_dict()
+    got.pop("timestamp")
+
+    assert got == {
+        "schema_version": "0031/1",
+        "status": "PASSED",
+        "failure_reason": None,
+        "model_identity": "served_present_and_matching",
+        "model_invoked": True,
+        "tool_names_invoked": ["grep", "symbols"],
+        "terminal_bucket": "correct",
+        "served_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "verifier_status": "PASSED",
+        "details": {"method": "served_model_match"},
+    }
+
+
+# T2 — divergence closure (AC1/AC2/AC4): RED until the cutover.
+
+
+def test_build_trajectory_record_delegates_to_canonical_extract_tool_names(monkeypatch):
+    """AC1: the builder calls the module-level extract_tool_names symbol.
+
+    Import-identity proof: only a call through the canonical symbol can observe
+    the monkeypatch — an inline copy would silently ignore it.
+    """
+    monkeypatch.setattr(
+        _lv, "extract_tool_names", lambda traj: (["__SENTINEL__"], True, None)
+    )
+    record = build_trajectory_record(_multitool_history(), 3)
+
+    assert record["tool_names_invoked"] == ["__SENTINEL__"]
+
+
+def test_build_trajectory_record_nameless_tool_call_returns_typed_failure_without_raising():
+    """AC2/AC4: a nameless tool_call is a typed, non-raising failure — never a skip.
+
+    The failure surfaces as DATA (tool_names_failure) because the builder is
+    called live by ExplorerBackend and must not change loop control flow.
+    """
+    record = build_trajectory_record(_nameless_history(), 2)  # must not raise
+
+    assert record["tool_names_failure"] == "tool-names-unextractable"
+    # Strict-wins: no partial list that silently dropped the nameless call.
+    assert record["tool_names_invoked"] == []
+
+
+def test_nameless_tool_call_yields_identical_typed_outcome_in_both_paths():
+    """AC2: verify path and builder produce the SAME typed outcome on the same input."""
+    nameless = _nameless_history()
+
+    verify_outcome = verify_trajectory(_traj(model_turns=nameless)).failure_reason
+    build_outcome = build_trajectory_record(nameless, 2)["tool_names_failure"]
+
+    assert verify_outcome == build_outcome == "tool-names-unextractable"
+
+
+def test_extract_tool_names_is_strict_on_nameless_calls():
+    """AC4: the canonical parser itself returns ([], False, code) — no partial list."""
+    names, proven, reason = extract_tool_names({"model_turns": _nameless_history()})
+
+    assert names == []
+    assert proven is False
+    assert reason == "tool-names-unextractable"
+
+
+def test_single_tool_name_parser_definition_by_symbol_audit():
+    """AC8 consumer audit: exactly ONE tool-name parser definition exists.
+
+    build_trajectory_record no longer carries an inline copy — its source calls
+    the canonical extract_tool_names and contains no second seen-set name loop.
+    A source/symbol assertion, not a point-in-time grep.
+    """
+    import inspect
+
+    builder_src = inspect.getsource(build_trajectory_record)
+    assert "extract_tool_names(" in builder_src
+    assert "seen = set()" not in builder_src  # the deleted inline-parse signature
+
+    # The canonical parser is the module-level symbol both paths resolve.
+    assert _lv.extract_tool_names is extract_tool_names
+    verify_src = inspect.getsource(verify_trajectory)
+    assert "extract_tool_names(" in verify_src

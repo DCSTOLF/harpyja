@@ -624,3 +624,23 @@ See history.md 2026-07-08 (spec 0031).
 additively as `response.get("model")` in its returned dict** (existing keys unchanged; `None`
 when the endpoint omits it) — read-only metadata capture for postflight model-identity
 verification, request/response semantics untouched.
+
+## Spec 0032 architecture updates — one tool-name parser, strict-wins-as-data
+
+**As of spec 0032 there is exactly ONE tool-call-name parser.** `build_trajectory_record`
+(live_verifier.py) no longer carries its own inline silent-skip parse (the 0031 T20
+divergence); it now routes through the canonical strict `extract_tool_names`, the same
+implementation the verify path calls. The strict `tool-names-unextractable` failure
+surfaces on the live builder as DATA — an additive `tool_names_failure: str | None` key on
+the returned record dict (`None` on success, `"tool-names-unextractable"` on a nameless
+tool_call, with `tool_names_invoked=[]` and NO partial list). This key lives ONLY on the
+internal record dict; it never reaches the persisted VerifierResult
+(`VERIFIER_SCHEMA_VERSION`, the six codes + precedence, `to_dict()` unchanged — a cutover,
+not a redesign). `ExplorerBackend` is byte-unchanged: it calls the builder live mid-loop and
+only STORES the result (`self.last_trajectory`), never branching on its contents, so control
+flow, citations, and turn accounting are identical whether or not a tool_call is nameless.
+The single-parser invariant is enforced by an `inspect.getsource` symbol-audit test (rots
+false if a second inline `seen = set()` loop reappears). OQ2 audit confirmed tool-names was
+the sole duplicated parse — identity (`extract_model_identity`), tiers_run, and terminal
+bucket (`extract_terminal_bucket`) are each single-sourced. See history.md 2026-07-08
+(spec 0032).
