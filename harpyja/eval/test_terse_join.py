@@ -96,9 +96,9 @@ def test_committed_terse_fixture_is_real_0036_pilot_rows():
     # The five 0026/1 PLACEHOLDER rows are gone: every committed row is a real,
     # blind-authored, fully-tagged 0036/1 pilot case (RED while placeholders remain).
     rows = [
-        json.loads(l)
-        for l in _TERSE_COMMITTED.read_text(encoding="utf-8").splitlines()
-        if l.strip()
+        json.loads(line)
+        for line in _TERSE_COMMITTED.read_text(encoding="utf-8").splitlines()
+        if line.strip()
     ]
     assert len(rows) >= 10  # the pilot set (pilot_n=10)
     for r in rows:

@@ -83,7 +83,11 @@ def gate_report(
     return {
         "outcome": decide_from_pairs(pairs, cfg),
         "config": cfg,
-        "config_hash": AC8_CONFIG_HASH_0036 if cfg is PREREGISTERED_AC8_CONFIG_0036 else config_hash(cfg),
+        "config_hash": (
+            AC8_CONFIG_HASH_0036
+            if cfg is PREREGISTERED_AC8_CONFIG_0036
+            else config_hash(cfg)
+        ),
         "pairs_run": len(pairs),
         "signal_discordant": signal_bearing_discordant(pairs),
         "excluded": excluded,

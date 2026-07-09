@@ -64,9 +64,9 @@ def _span_text(case_id: str, spans: list[dict]) -> str:
 
 def main() -> None:
     raw_index = {
-        json.loads(l)["case_id"]: json.loads(l)
-        for l in RAW.read_text().splitlines()
-        if l.strip()
+        json.loads(line)["case_id"]: json.loads(line)
+        for line in RAW.read_text().splitlines()
+        if line.strip()
     }
     authored = json.loads(QUERIES.read_text())
     if not authored:

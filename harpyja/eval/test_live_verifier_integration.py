@@ -324,3 +324,51 @@ def test_live_bad_scope_marker_in_persisted_trajectory_or_not_exercised():
     else:
         print("[0035 AC6] NOT-EXERCISED: model used no bad scope this run "
               "(hermetic wrapper/loop tests carry the mechanism proof)")
+
+
+@pytest.mark.integration
+def test_pilot_cases_produced_verifier_clean_persisted_artifacts():
+    """spec 0036 AC5: every pilot (case, arm) either produced a verifier-clean
+    artifact — persisted durably under eval_work/live_artifacts/, schema 0034/1,
+    carrying model identity / tools / reasoning / counts / bucket — or is a
+    RECORDED typed degrade in the committed ledger (never silent, never counted
+    clean). Skips (not fails) where the pilot has not run on this machine."""
+    from pathlib import Path
+
+    from harpyja.eval.live_verifier import validate_verifier_artifact
+
+    ledger_path = (
+        Path(__file__).resolve().parents[2]
+        / "specs" / "0036-terse-query" / "pilot" / "pilot_results.json"
+    )
+    if not ledger_path.exists():
+        pytest.skip("pilot ledger not present — pilot has not run here")
+    ledger = json.loads(ledger_path.read_text())
+    entries = ledger["entries"]
+    assert entries, "pilot ledger exists but is empty"
+
+    clean = degraded = 0
+    for key, entry in sorted(entries.items()):
+        if entry["bucket"] is None:
+            # AC5 degrade posture: excluded-by-cause, recorded — never silent.
+            assert entry["degrade"], f"{key}: bucket-less entry with no recorded cause"
+            degraded += 1
+            continue
+        assert entry["artifact"], f"{key}: clean entry lacks its persisted artifact path"
+        apath = Path(entry["artifact"])
+        if not apath.exists():
+            pytest.skip(f"artifact {apath} pruned since the pilot ran")
+        assert "eval_work/live_artifacts/pilot_0036" in str(apath)
+        with open(apath) as f:
+            artifact = json.load(f)
+        validate_verifier_artifact(artifact)
+        assert artifact["schema_version"] == "0034/1"
+        assert artifact["verifier_status"] == "PASSED"
+        assert artifact["served_model"]
+        assert artifact["terminal_bucket"] == entry["bucket"]
+        assert "per_turn" in artifact and "think_mode" in artifact
+        assert "citations_submitted" in artifact and "citations_surviving" in artifact
+        clean += 1
+    print(f"\n[0036 AC5] verifier-clean={clean} recorded-degrades={degraded} "
+          f"config_hash={ledger.get('config_hash')}")
+    assert clean + degraded == len(entries)

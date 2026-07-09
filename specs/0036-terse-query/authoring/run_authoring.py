@@ -111,13 +111,24 @@ def author_invoke(prompt: str) -> str:
 
 
 def verifier_invoke(prompt: str) -> str:
+    import re
+
     raw = _chat(VERIFIER_MODEL, prompt).strip().lower()
+    # (1) the requested one-word answer.
+    if raw in ("leaky", "clean"):
+        return raw
+    # (2) an explicit verdict STATEMENT ("the query is **clean**", "verdict:
+    # leaky", "answer: clean") — first such statement wins; a definitional
+    # mention ('the "leaky" behavior would involve...') never matches this shape.
+    m = re.search(r"(?:\bis\b|answer\s*[:=]?|verdict\s*[:=]?)\s*[\"'*]*\s*(clean|leaky)\b", raw)
+    if m:
+        return m.group(1)
+    # (3) exactly one of the two tokens present anywhere.
     has_leaky = "leaky" in raw
     has_clean = "clean" in raw
-    if has_leaky and not has_clean:
-        return "leaky"
-    if has_clean and not has_leaky:
-        return "clean"
+    if has_leaky != has_clean:
+        return "leaky" if has_leaky else "clean"
+    # (4) genuinely mixed/absent — fail CLOSED, never a silent keep.
     raise SystemExit(
         f"STOP-AND-WARN: ambiguous verifier verdict (fail closed, never a silent keep): {raw!r}"
     )
@@ -125,7 +136,7 @@ def verifier_invoke(prompt: str) -> str:
 
 def main() -> None:
     _preflight()
-    raw_rows = [json.loads(l) for l in RAW.read_text().splitlines() if l.strip()]
+    raw_rows = [json.loads(line) for line in RAW.read_text().splitlines() if line.strip()]
     pilot, skipped = _select_pilot(raw_rows)
     print(f"pilot selection ({len(pilot)} cases, rule: first blind-eligible case_id "
           f"per repo, first {PILOT_N} repos alphabetically):")

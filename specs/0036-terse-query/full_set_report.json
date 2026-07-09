@@ -1,0 +1,14 @@
+{
+  "conceptual_n": 15,
+  "finding": "raw-pool exhaustion: the committed 50-case raw fixture yields 19 blind-clean cases (36 attempts, 17 leaky-dropped, 14 blind-ineligible issues name a gold path) \u2014 the frozen full_n_target=30 is unreachable from this pool; representative-at-frozen-target NOT claimed. Enlarging the pool is a new audited convert step (future spec), never a re-derived target.",
+  "floor_ok": true,
+  "floor_reasons": [],
+  "full_n_target": 30,
+  "gate_config_hash": "114574c4ffa16e90fc3e1de54080491e7bfd396bb56952b37c419b16fc0c682a",
+  "lexical_n": 4,
+  "meets_full_n_target": false,
+  "num_repos": 11,
+  "representative_at_frozen_target": false,
+  "stratum_status": "reportable",
+  "usable_n": 19
+}

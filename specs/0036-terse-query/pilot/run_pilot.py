@@ -64,7 +64,7 @@ def _preflight() -> None:
         with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=10) as r:
             served = {m["name"] for m in json.loads(r.read())["models"]}
     except Exception as e:  # noqa: BLE001
-        raise SystemExit(f"STOP-AND-WARN: Ollama unreachable: {e}")
+        raise SystemExit(f"STOP-AND-WARN: Ollama unreachable: {e}") from e
     missing = set(ARMS) - served
     if missing:
         raise SystemExit(f"STOP-AND-WARN: pilot arms not servable: {sorted(missing)}")
@@ -124,13 +124,14 @@ def _run_one(case_id: str, query: str, gold: dict, arm: str) -> dict:
 
 def main() -> None:
     _preflight()
-    terse_rows = [json.loads(l) for l in TERSE.read_text().splitlines() if l.strip()]
-    if any(r.get("query_provenance") == "placeholder-pending-offline-authoring" for r in terse_rows):
+    terse_rows = [json.loads(line) for line in TERSE.read_text().splitlines() if line.strip()]
+    placeholder = "placeholder-pending-offline-authoring"
+    if any(r.get("query_provenance") == placeholder for r in terse_rows):
         raise SystemExit("STOP-AND-WARN: fixture still holds placeholder rows — run T12 first")
     raw_index = {
-        json.loads(l)["case_id"]: json.loads(l)
-        for l in RAW.read_text().splitlines()
-        if l.strip()
+        json.loads(line)["case_id"]: json.loads(line)
+        for line in RAW.read_text().splitlines()
+        if line.strip()
     }
     ledger = _load_ledger()
     entries = ledger["entries"]

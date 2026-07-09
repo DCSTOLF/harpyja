@@ -218,8 +218,8 @@ def test_dataset_known_terse_schema_versions_set(tmp_path):
     # Detection is known-versions-SET membership, not exact match: a 0026/1 legacy
     # row and a 0036/1 row BOTH load down the terse branch (spans omitted OK).
     from harpyja.eval.dataset import (
-        DATASET_SCHEMA_VERSION_0036,
         _KNOWN_TERSE_SCHEMA_VERSIONS,
+        DATASET_SCHEMA_VERSION_0036,
     )
 
     assert DATASET_SCHEMA_VERSION_0036 == "0036/1"

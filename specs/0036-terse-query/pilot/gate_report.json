@@ -1,0 +1,12 @@
+{
+  "arms": [
+    "qwen3:14b",
+    "qwen3:4b-instruct"
+  ],
+  "config_hash": "114574c4ffa16e90fc3e1de54080491e7bfd396bb56952b37c419b16fc0c682a",
+  "excluded": {},
+  "next_step": "author the full ~20-40 case terse set and run the bake-off",
+  "outcome": "proceed",
+  "pairs_run": 10,
+  "signal_discordant": 5
+}

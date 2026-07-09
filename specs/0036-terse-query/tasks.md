@@ -18,10 +18,10 @@ spec: "0036"
 - [x] T12 [operator]: post-authoring mechanical reachability tag + concept/patch hand-label; assemble 0036/1 pilot rows replacing the 5 placeholders in swebench_verified.terse.jsonl
 - [x] T13 (RED): test_terse_join.py + test_terse_floor.py — fixture-backed tests expect real 0036/1 rows (fail while placeholders remain)
 - [x] T14 (GREEN): commit replaced swebench_verified.terse.jsonl (real blind-authored + tagged pilot rows)
-- [ ] T15 [live][operator]: run pilot end-to-end via run_verified_case; persist each artifact via write_live_artifact (VERIFIER_SCHEMA_VERSION 0034/1); record degrades per case (bounded re-run/exclusion); batched ~35+ min; STOP-AND-WARN
-- [ ] T16 [live]: test_live_verifier_integration.py — pilot-set integration test asserts verifier-clean persisted artifact per case or recorded typed degrade (skip-not-fail on infra)
-- [ ] T17 [live][operator]: apply decide_ac8 under PREREGISTERED_AC8_CONFIG_0036 (hash cited) → PROCEED or UNDER_POWERED_STOP gate artifact
-- [ ] T18 [doc]: AC6 — cite pinned REPRESENTATIVENESS_CAVEAT (report.py:41) in spec close/changelog; no parallel restatement
-- [ ] T19 [conditional-on-PROCEED][operator][live]: author + tag the full set at-or-above full_n_target=30 (upward-only), enforcing conceptual-stratum ≥5 reportability floor
-- [ ] T20 (RED)[conditional-on-PROCEED]: fixture-backed full-set tests — validate_terse_set_floor ok + meets_full_n_target true + conceptual_stratum_report reportable
-- [ ] T21 (GREEN)[conditional-on-PROCEED]: commit full swebench_verified.terse.jsonl (Step-20 tests pass) — OR on UNDER_POWERED_STOP mark T19–T21 N/A-by-gate and close with the finding
+- [x] T15 [live][operator]: run pilot end-to-end via run_verified_case; persist each artifact via write_live_artifact (VERIFIER_SCHEMA_VERSION 0034/1); record degrades per case (bounded re-run/exclusion); batched ~35+ min; STOP-AND-WARN
+- [x] T16 [live]: test_live_verifier_integration.py — pilot-set integration test asserts verifier-clean persisted artifact per case or recorded typed degrade (skip-not-fail on infra)
+- [x] T17 [live][operator]: apply decide_ac8 under PREREGISTERED_AC8_CONFIG_0036 (hash cited) → PROCEED or UNDER_POWERED_STOP gate artifact
+- [x] T18 [doc]: AC6 — cite pinned REPRESENTATIVENESS_CAVEAT (report.py:41) in spec close/changelog; no parallel restatement
+- [x] T19 [conditional-on-PROCEED][operator][live]: author + tag the full set at-or-above full_n_target=30 (upward-only), enforcing conceptual-stratum ≥5 reportability floor
+- [x] T20 (RED)[conditional-on-PROCEED]: fixture-backed full-set tests — validate_terse_set_floor ok + meets_full_n_target true + conceptual_stratum_report reportable
+- [x] T21 (GREEN)[conditional-on-PROCEED]: commit full swebench_verified.terse.jsonl (Step-20 tests pass) — OR on UNDER_POWERED_STOP mark T19–T21 N/A-by-gate and close with the finding

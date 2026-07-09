@@ -98,5 +98,95 @@
     "gold_withheld": true,
     "query_provenance": "model-authored-blind",
     "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "astropy__astropy-13977",
+    "query": "Should `Quantity.__array_ufunc__` return `NotImplemented` instead of raising `ValueError` when input units are incompatible?",
+    "repo": "astropy/astropy",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "django__django-14315",
+    "query": "Find where Django's runshell method interacts with os.environ and subprocess, specifically handling PostgreSQL's empty dict behavior.",
+    "repo": "django/django",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "matplotlib__matplotlib-24177",
+    "query": "How does `matplotlib.axes.Axes.hist` handle density scaling for `histtype='step'` compared to other `histtype` values?",
+    "repo": "matplotlib/matplotlib",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "pytest-dev__pytest-5840",
+    "query": "What changes in pytest 5.1.2 caused the import path casing to break the 'python' module reference in the conftest?",
+    "repo": "pytest-dev/pytest",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "sphinx-doc__sphinx-9698",
+    "query": "How does Sphinx generate index entries for `py:method` with `:property:` and why are parentheses added?",
+    "repo": "sphinx-doc/sphinx",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "sympy__sympy-22914",
+    "query": "How to add _print_Min and _print_Max methods to PythonCodePrinter?",
+    "repo": "sympy/sympy",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "astropy__astropy-14365",
+    "query": "Where in the code is the QDP command parsing enforcing uppercase letters for commands like \"READ\"?",
+    "repo": "astropy/astropy",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "matplotlib__matplotlib-25332",
+    "query": "How does `align_labels()` introduce a non-picklable `weakref.ReferenceType` in the figure object during serialization?",
+    "repo": "matplotlib/matplotlib",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "pytest-dev__pytest-7324",
+    "query": "\"Where in the code is the `compiler_nameop` function checking if a name is 'False', 'True', or 'None'?\"",
+    "repo": "pytest-dev/pytest",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
   }
 ]

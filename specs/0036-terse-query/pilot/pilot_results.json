@@ -1,0 +1,125 @@
+{
+  "config_hash": "114574c4ffa16e90fc3e1de54080491e7bfd396bb56952b37c419b16fc0c682a",
+  "entries": {
+    "astropy__astropy-12907::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T213222Z-85734/astropy__astropy-12907_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "degrade": null
+    },
+    "astropy__astropy-12907::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220641Z-95057/astropy__astropy-12907_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "django__django-13516::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T213424Z-85734/django__django-13516_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "wrong-file",
+      "degrade": null
+    },
+    "django__django-13516::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220655Z-95057/django__django-13516_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "matplotlib__matplotlib-21568::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T213637Z-85734/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "wrong-file",
+      "degrade": null
+    },
+    "matplotlib__matplotlib-21568::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220710Z-95057/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "pallets__flask-5014::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T214146Z-88782/pallets__flask-5014_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "correct",
+      "degrade": null
+    },
+    "pallets__flask-5014::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220724Z-95057/pallets__flask-5014_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "psf__requests-1766::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T215449Z-92222/psf__requests-1766_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "degrade": null
+    },
+    "psf__requests-1766::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220933Z-97555/psf__requests-1766_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "pydata__xarray-3993::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T214406Z-88782/pydata__xarray-3993_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "pydata__xarray-3993::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220745Z-95057/pydata__xarray-3993_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "pylint-dev__pylint-7080::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T215734Z-92222/pylint-dev__pylint-7080_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "pylint-dev__pylint-7080::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220941Z-97555/pylint-dev__pylint-7080_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "pytest-dev__pytest-10081::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T214824Z-88782/pytest-dev__pytest-10081_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "degrade": null
+    },
+    "pytest-dev__pytest-10081::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220754Z-95057/pytest-dev__pytest-10081_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "scikit-learn__scikit-learn-10844::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T215247Z-92222/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "degrade": null
+    },
+    "scikit-learn__scikit-learn-10844::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T220804Z-95057/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "sympy__sympy-16792::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_14b/20260709T220156Z-95057/sympy__sympy-16792_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    },
+    "sympy__sympy-16792::qwen3:4b-instruct": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0036/qwen3_4b-instruct/20260709T221016Z-97555/sympy__sympy-16792_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "degrade": null
+    }
+  }
+}

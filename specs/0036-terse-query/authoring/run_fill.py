@@ -20,13 +20,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT))
 
-from harpyja.eval.authoring_provenance import (  # noqa: E402
-    AuthoringArtifact,
-    validate_authoring_artifact,
-    write_authoring_artifact,
-)
-from harpyja.eval.terse_authoring import author_terse_case  # noqa: E402
-
 from run_authoring import (  # noqa: E402  (the committed first-pass tooling)
     AUTHOR_MODEL,
     FIXTURES,
@@ -39,21 +32,37 @@ from run_authoring import (  # noqa: E402  (the committed first-pass tooling)
     verifier_invoke,
 )
 
+from harpyja.eval.authoring_provenance import (  # noqa: E402
+    AuthoringArtifact,
+    validate_authoring_artifact,
+    write_authoring_artifact,
+)
+from harpyja.eval.terse_authoring import author_terse_case  # noqa: E402
+
 ARTIFACT = FIXTURES / "swebench_verified.authoring.json"
 # Pass 2 (recorded): mwaskom/seaborn EXHAUSTED (its only remaining case is
 # blind-ineligible) — the rule's continuation moved to sphinx-doc/sphinx (repo 11),
 # which went 3/3 leaky (budget exhausted, all recorded).
-# Pass 3 (recorded): the LAST remaining repo, sympy/sympy (repo 12 of 12). If this
-# also drops, the pilot runs at kept=9 across 9 repos — recorded, not padded.
-DROPPED_REPOS = ("sympy/sympy",)
-MAX_ATTEMPTS_PER_REPO = 3
+# Pass 3 (recorded): sympy/sympy (repo 12 of 12) — 16792 kept; pilot_n=10 restored.
+# Pass 4+ (FULL SET, conditional-on-PROCEED — the gate returned PROCEED,
+# gate_report.json hash 114574c4...): author EVERY remaining blind-eligible raw
+# case across all repos in case_id order until kept_total >= full_n_target(30)
+# or candidates exhaust (an exhaustion below 30 is a recorded finding).
+DROPPED_REPOS = tuple(sorted({
+    "astropy/astropy", "django/django", "matplotlib/matplotlib",
+    "mwaskom/seaborn", "pallets/flask", "psf/requests", "pydata/xarray",
+    "pylint-dev/pylint", "pytest-dev/pytest", "scikit-learn/scikit-learn",
+    "sphinx-doc/sphinx", "sympy/sympy",
+}))
+MAX_ATTEMPTS_PER_REPO = 5
+FULL_N_TARGET = 30
 
 
 def main() -> None:
     _preflight()
     artifact = validate_authoring_artifact(json.loads(ARTIFACT.read_text()))
     already = {r.case_id for r in artifact.records}
-    raw_rows = [json.loads(l) for l in RAW.read_text().splitlines() if l.strip()]
+    raw_rows = [json.loads(line) for line in RAW.read_text().splitlines() if line.strip()]
     kept_rows = json.loads(OUT_QUERIES.read_text())
 
     records = list(artifact.records)
@@ -94,6 +103,9 @@ def main() -> None:
                     }
                 )
                 break
+        if len(kept_rows) >= FULL_N_TARGET:
+            print(f"full_n_target reached: kept={len(kept_rows)}")
+            break
 
     merged = AuthoringArtifact(
         schema_version=artifact.schema_version,

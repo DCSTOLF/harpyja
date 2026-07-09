@@ -201,6 +201,43 @@ def test_committed_pilot_fixture_is_tagged_and_stratum_reported():
     )
 
 
+def test_committed_full_set_report_matches_computed_truth():
+    # spec 0036 T20/T21: the committed full_set_report.json must EQUAL what the
+    # helpers compute from the committed fixture — the recorded claim can never
+    # drift from the data (no-false-capability). The static floor must pass; the
+    # frozen full_n_target status is recorded HONESTLY (the 50-case raw pool
+    # exhausted below 30 — a finding, not a hidden shortfall), and the
+    # representative-at-frozen-target claim is NOT made while it reads false.
+    from harpyja.eval.ac8_pilot import PREREGISTERED_AC8_CONFIG_0036
+    from harpyja.eval.terse_dataset import conceptual_stratum_report, meets_full_n_target
+
+    report_path = (
+        Path(__file__).resolve().parents[2]
+        / "specs" / "0036-terse-query" / "full_set_report.json"
+    )
+    assert report_path.exists(), "full_set_report.json not committed"
+    report = json.loads(report_path.read_text())
+
+    ds = load_terse_dataset(
+        Path(__file__).parent / "fixtures" / "swebench_verified.terse.jsonl", _RAW, _PROV
+    )
+    floor = validate_terse_set_floor(ds)
+    lex_n, con_n, status = conceptual_stratum_report(ds)
+    target_met = meets_full_n_target(ds, PREREGISTERED_AC8_CONFIG_0036)
+
+    assert report["usable_n"] == floor.usable_n == len(ds.cases)
+    assert report["num_repos"] == floor.num_repos
+    assert report["floor_ok"] == floor.ok is True
+    assert report["lexical_n"] == lex_n
+    assert report["conceptual_n"] == con_n
+    assert report["stratum_status"] == status
+    assert report["full_n_target"] == PREREGISTERED_AC8_CONFIG_0036.full_n_target
+    assert report["meets_full_n_target"] == target_met
+    assert (
+        report["representative_at_frozen_target"] is target_met
+    ), "the representativeness claim must track the computed target status exactly"
+
+
 def test_conceptual_stratum_pilot_floor_is_two():
     # The pilot-sized floor (>= 2) — pre-declared alongside the full-set floor.
     from harpyja.eval.terse_dataset import (
