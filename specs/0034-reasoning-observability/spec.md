@@ -1,7 +1,7 @@
 ---
 id: "0034"
 title: "reasoning-observability"
-status: reviewed
+status: planned
 started_at_sha: 34c2c3b
 created: 2026-07-09
 authors: [claude]
