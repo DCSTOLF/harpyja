@@ -644,3 +644,60 @@ false if a second inline `seen = set()` loop reappears). OQ2 audit confirmed too
 the sole duplicated parse — identity (`extract_model_identity`), tiers_run, and terminal
 bucket (`extract_terminal_bucket`) are each single-sourced. See history.md 2026-07-08
 (spec 0032).
+
+## Spec 0033 architecture updates — repo-relative scoped grep + found-then-dropped counts
+
+**As of spec 0033 `RipgrepEngine.search` emits REPO-RELATIVE paths for scoped searches**,
+fixed at the ONE bounded rg seam. `search(pattern, scope=None, *, repo_root: str | None =
+None)` gained an optional per-CALL `repo_root` keyword (deliberately NOT a constructor
+field — the engine is built once and shared across repos at `server/app.py` and `cli.py`,
+so the repo root is a per-call fact). Mechanism (b), parse-side re-prefix: with `repo_root`
+supplied, the `rg` invocation is byte-identical for DIRECTORY scopes (still `cwd=scope`,
+same flags) and only the parsed paths are re-prefixed in `_parse(stdout, rel_prefix=...)`
+via `os.path.normpath(os.path.join(rel_prefix, path))` (collapsing `.`/`./` artifacts);
+`rel_prefix == "."` (scope == repo_root) leaves paths unchanged. A FILE scope (the
+`symbols` degraded fallback shape) runs `rg` from the file's PARENT with the filename as an
+rg path argument and re-prefixes by the parent's repo-relative prefix — supported, never
+the pre-0033 `NotADirectoryError` crash. The legacy no-`repo_root` path is verbatim
+(cwd-relative parse), so Tier-0 locate (`scope=req.repo_path`) is byte-identical. See
+history.md 2026-07-09 (spec 0033).
+
+**As of spec 0033 the fix is INHERITED by every engine consumer, not re-implemented per
+caller.** Explorer `grep`, the `explorer_tools.symbols` degraded fallback, and Deep
+`host_tools.search` all SUPPLY `repo_root=repo_path` as data to the shared engine; the
+re-prefix logic lives solely in `RipgrepEngine` (the one-bounded-rg-source-of-truth
+invariant — supplying data is not a per-caller re-prefix). The tool-contract is: every
+path-DISCOVERING explorer tool (grep scoped + unscoped, glob, ls, symbols) emits
+repo-relative paths; `read_span` is excluded (it echoes the caller-supplied path and
+discovers nothing); `ls` directory entries carry the trailing-`/` shape as repo-relative
+non-citable listings.
+
+**As of spec 0033 the submit seam carries a found-then-dropped citation count.**
+`submit_citations` returns a frozen `SubmitResult(spans, submitted, surviving)`
+(`submitted = len(raw)`, `surviving = len(normalized)`), counted at the ONE normalize pass
+where an explorer citation can drop — distinct from the engine re-normalize pass that feeds
+`fc_citation_dropped_count` (whose engine-pass-only scope is now documented). The counts
+thread as DATA `LoopResult.citations_submitted/citations_surviving` (defaulted) →
+`ExplorerBackend` → `build_trajectory_record` → the persisted verifier artifact, mirroring
+the `last_turns_used`/`last_trajectory` side-channel discipline. So found-then-dropped
+`(1, 0)` is structurally distinguishable from honest-empty `(0, 0)` and can never again hide
+inside an `empty` terminal bucket.
+
+**As of spec 0033 `VERIFIER_SCHEMA_VERSION` is `"0033/1"` behind a version GATE.**
+`validate_verifier_artifact` no longer uses strict equality; it accepts
+`_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1"})` (the 0026
+`DATASET_SCHEMA_VERSION` pattern), and the two count fields are OPTIONAL, so a legacy
+`0031/1` artifact still validates. The eval-report schema and `fc_citation_dropped_count`
+are byte-untouched. `run_verified_case` now captures its typed `ScoutUnavailable` cause
+into a variable that outlives the except block, names `.cause` in the "did not capture
+trajectory" raise, and chains `from` — the dead shadowed `last_trajectory` assignment was
+deleted (net-removing a pre-existing ruff F841).
+
+**Measurement-integrity note (not code — a known instrument gap, spec 0034 target):**
+`qwen3:14b` on the served Ollama THINKS BY DEFAULT — a `/v1/chat/completions` response
+carries a `reasoning` field even with no `think` request param. `ModelGateway.complete_with_tools`
+currently DROPS `reasoning` (returns only content/tool_calls/finish_reason/model), so this
+reasoning has been generated invisibly and has consumed the `explorer_max_tokens=2048` cap
+unseen since 0028 → the 0031–0033 live baselines were measured under invisible-truncation-risk.
+Spec 0034 will surface `reasoning` additively and record per-turn reasoning lengths in the
+trajectory artifact. See history.md 2026-07-09 (spec 0033).
