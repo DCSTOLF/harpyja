@@ -10,6 +10,7 @@ because the RLM that calls these is untrusted code. `build_host_tools` returns
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 from harpyja.config.settings import Settings
@@ -52,9 +53,16 @@ def build_host_tools(
             for e in entries[: settings.manifest_page]
         ]
 
-    def search(pattern: str, scope: str | None = None) -> list[CodeSpan]:
-        _charge()
+    def search(pattern: str, scope: str | None = None) -> list[CodeSpan] | str:
+        _charge()  # a bad-scope call is a real tool call — still charged
         scoped = str(confine_path(repo_path, scope)) if scope else repo_path
+        # Spec 0035: a NONEXISTENT scope is a typed, RLM-visible marker — never the
+        # uncaught FileNotFoundError the engine's subprocess raises on a missing
+        # cwd (the crash this guard replaces), and never a whole-tier degrade for
+        # one navigation mistake. Fires BEFORE delegation. Same contract as the
+        # explorer grep (one engine, converged wrappers).
+        if scope is not None and not Path(scoped).exists():
+            return f"search-scope-not-found: {scope!r}"
         # repo_root threads the repo-relative output contract (spec 0033) — the
         # inherited engine-seam fix, same contract as the explorer grep.
         spans = search_engine.search(pattern, scope=scoped, repo_root=repo_path)

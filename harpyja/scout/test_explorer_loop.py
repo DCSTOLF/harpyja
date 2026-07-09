@@ -658,3 +658,68 @@ def test_loop_honest_empty_counts_zero_zero(tmp_path):
     )
     assert result.outcome == SUBMITTED
     assert (result.citations_submitted, result.citations_surviving) == (0, 0)
+
+
+# --- Spec 0035: scope-marker visibility through the loop (zero loop changes) ---
+
+
+def _marker_grep_tools(calls):
+    def grep(pattern, scope=None):
+        calls.append((pattern, scope))
+        return f"grep-scope-not-found: {scope!r}"
+
+    return {"grep": grep}
+
+
+def test_grep_scope_marker_visible_and_non_terminal(tmp_path):
+    """AC2: the marker string reaches the model-visible history verbatim and the
+    loop CONTINUES to a terminal submit — non-terminal by construction."""
+    calls = []
+    model = _scripted(
+        _msg(_tc("grep", pattern="x", scope="repo")),
+        _msg(_tc("submit_citations", citations=[])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=_marker_grep_tools(calls),
+        submit=_submit_ok, context_map="", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert any("grep-scope-not-found: 'repo'" in str(m.get("content", ""))
+               for m in result.history)
+
+
+def test_repeated_bad_scope_trips_loop_detection(tmp_path):
+    """AC2: note_navigation still runs on a marker return — repeated identical
+    bad-scope calls trip the corrective note (the property the 0029 exception
+    route would silently defeat)."""
+    calls = []
+    model = _scripted(
+        _msg(_tc("grep", pattern="x", scope="repo")),
+        _msg(_tc("grep", pattern="x", scope="repo")),
+        _msg(_tc("submit_citations", citations=[])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=_marker_grep_tools(calls),
+        submit=_submit_ok, context_map="",
+        settings=Settings(scout_loop_repeat_n=2),
+    )
+    assert result.outcome == SUBMITTED
+    corrective = [m for m in result.history
+                  if "unproductive" in str(m.get("content", ""))]
+    assert corrective  # loop detection armed and fired
+
+
+def test_grep_scope_marker_not_flagged_execution_error(tmp_path):
+    """AC2: the marker is NOT routed through the 0029 execution-error degrade —
+    no 'tool-call-degraded:execution-error:' prefix anywhere in the history."""
+    calls = []
+    model = _scripted(
+        _msg(_tc("grep", pattern="x", scope="repo")),
+        _msg(_tc("submit_citations", citations=[])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=_marker_grep_tools(calls),
+        submit=_submit_ok, context_map="", settings=Settings(),
+    )
+    assert not any("tool-call-degraded:execution-error" in str(m.get("content", ""))
+                   for m in result.history)

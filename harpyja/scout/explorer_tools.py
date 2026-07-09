@@ -60,12 +60,17 @@ def build_explorer_tools(
     # Build a degraded_paths set for AC3 graceful degradation (manifest-based provenance).
     degraded_paths = {m.path for m in manifest if m.degraded}
 
-    def grep(pattern: str, scope: str | None = None) -> list[CodeSpan]:
+    def grep(pattern: str, scope: str | None = None) -> list[CodeSpan] | str:
         # Confine the search scope to the repo (rejects an out-of-repo scope) and
         # delegate to the shared engine; clamp defensively on untrusted-loop output.
         scoped_path = confine_path(repo_path, scope) if scope else Path(repo_path)
-        if scope and not scoped_path.is_dir():
-            return []  # grep on a file → empty (use read_span for file contents)
+        # Spec 0035: an UNSEARCHABLE (nonexistent) scope is a typed, model-visible
+        # marker — never a silent [] that reads as "searched, nothing found". The
+        # guard MUST fire before delegation (a nonexistent cwd crashes the engine's
+        # subprocess). An existing FILE scope falls through: the engine searches it
+        # for real (0033 parent-dir mechanism) — delegation, not a redirect.
+        if scope and not scoped_path.exists():
+            return f"grep-scope-not-found: {scope!r}"
         # repo_root threads the repo-relative output contract (spec 0033): the
         # engine re-prefixes scoped results so a cited hit survives normalization.
         spans = search_engine.search(pattern, scope=str(scoped_path), repo_root=repo_path)
@@ -94,13 +99,18 @@ def build_explorer_tools(
     def read_span(path: str, start: int, end: int) -> dict[str, Any]:
         return read_snippet(repo_path, path, start, end, settings)
 
-    def ls(path: str = ".") -> list[CodeSpan]:
+    def ls(path: str = ".") -> list[CodeSpan] | str:
         # Single-directory listing (immediate children only — the model walks down;
         # NOT a recursive tree, which would re-create the eager-dump risk removed in
         # spec 0027). Repo-confined via confine_path; lists files AND directories
         # (dirs suffixed "/") as file-level CodeSpan records so layout is
         # discoverable. Deterministic order; bounded by scout_ls_max_entries.
         target = Path(confine_path(repo_path, path))
+        # Spec 0035: a NONEXISTENT path is a typed marker (same class as grep's
+        # unsearchable-scope rule); an existing FILE keeps honest-[] below —
+        # "list children" of a file is genuinely empty, distinct from path-absent.
+        if not target.exists():
+            return f"ls-path-not-found: {path!r}"
         if not target.is_dir():
             return []  # ls on a file → empty (use read_span for file contents)
         out: list[CodeSpan] = []

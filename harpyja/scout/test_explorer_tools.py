@@ -502,3 +502,62 @@ def test_symbols_degraded_fallback_file_scope_repo_relative_no_crash(tmp_path):
     out = tools["symbols"]("astropy/modeling/core.py")
     assert out["degraded"] is True
     assert [s.path for s in out["symbols"]] == ["astropy/modeling/core.py"]
+
+
+# --- Spec 0035: scope markers + file-scope delegation ---
+
+
+def test_grep_real_dir_zero_matches_returns_plain_empty(tmp_path):
+    """PIN (0035 AC3): a searchable dir scope with zero matches stays plain [] —
+    honest-empty is never blurred by the marker split."""
+    _file(tmp_path, "astropy/modeling/core.py")
+    empty_runner, _ = _runner_returning()  # no match lines
+    out = _tools(tmp_path, search=_real_engine(empty_runner))["grep"]("needle", scope="astropy/")
+    assert out == []
+
+
+def test_ls_existing_file_returns_plain_empty(tmp_path):
+    """PIN (0035 OQ1): ls on an existing FILE keeps [] — 'list children' of a file
+    is honestly empty, categorically distinct from path-absent (which markers)."""
+    _file(tmp_path, "a.py")
+    assert _tools(tmp_path)["ls"]("a.py") == []
+
+
+def test_grep_file_scope_delegates_returns_engine_matches(tmp_path):
+    """AC1 (the positive astropy fixture): a FILE scope DELEGATES to the engine
+    (0033 parent-dir mechanism) and returns real repo-relative matches — the
+    0033-observed right-file greps would have returned these, not []."""
+    _file(tmp_path, "astropy/modeling/separable.py")
+    runner, _ = _runner_returning(_match_line("separable.py", 66))
+    out = _tools(tmp_path, search=_real_engine(runner))["grep"](
+        "separability_matrix", scope="astropy/modeling/separable.py"
+    )
+    assert [s.path for s in out] == ["astropy/modeling/separable.py"]
+
+
+def test_grep_nonexistent_scope_returns_marker(tmp_path):
+    """AC2: a nonexistent scope returns the stable marker — and the guard fires
+    BEFORE delegation (the injected engine raises on any call)."""
+    class _RaisingEngine:
+        def search(self, pattern, scope=None, *, repo_root=None):
+            raise AssertionError("engine must not be called for a nonexistent scope")
+
+    out = _tools(tmp_path, search=_RaisingEngine())["grep"]("x", scope="repo")
+    assert out == "grep-scope-not-found: 'repo'"
+
+
+def test_grep_real_file_zero_matches_delegates_returns_empty(tmp_path):
+    """AC3 (file-scope honest-empty via delegation): the engine IS called and its
+    empty result passes through as plain []."""
+    _file(tmp_path, "a.py")
+    fake = _FakeSearch([])
+    out = _tools(tmp_path, search=fake)["grep"]("needle", scope="a.py")
+    assert out == []
+    assert fake.calls  # delegation happened — the engine was consulted
+
+
+def test_ls_nonexistent_path_returns_marker(tmp_path):
+    """AC4: ls on a NONEXISTENT path returns the stable marker — same fix class
+    as grep (confine_path non-strict + silent-[] mechanics)."""
+    out = _tools(tmp_path)["ls"]("does/not/exist")
+    assert out == "ls-path-not-found: 'does/not/exist'"

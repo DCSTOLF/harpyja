@@ -2,14 +2,13 @@
 
 import json
 import pytest
-import tempfile
-from pathlib import Path
 
 from harpyja.eval.live_verifier import (
     run_verified_case,
     VerifierResult,
     verifier_preflight,
 )
+from harpyja.eval.live_artifacts import live_artifact_dir
 from harpyja.gateway.gateway import ModelGateway
 from harpyja.config.settings import Settings
 
@@ -51,8 +50,8 @@ def test_proof_of_instrument_astropy_django_produce_verifier_artifacts():
         pytest.skip(f"Setup failed: {e}")
 
     # If we reach here, the live stack is up and valid
-    with tempfile.TemporaryDirectory() as tmpdir:
-        out_dir = Path(tmpdir)
+    if True:  # spec 0035: persistent artifacts (was a TemporaryDirectory)
+        out_dir = live_artifact_dir("proof_of_instrument")
 
         # Test cases: (case_name, gold_span_stub)
         # Note: actual gold spans will be loaded from fixture, these are just placeholders
@@ -158,7 +157,7 @@ def test_astropy_live_scoped_grep_survives_or_not_exercised():
     )
     gateway = ModelGateway(api_base=settings.lm_api_base, model=settings.lm_model)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    if True:  # spec 0035: persistent artifacts (was a TemporaryDirectory)
         try:
             result, artifact_path = run_verified_case(
                 case_name="astropy__astropy-12907",
@@ -166,7 +165,7 @@ def test_astropy_live_scoped_grep_survives_or_not_exercised():
                 gateway=gateway,
                 gold_span={"file": "astropy/modeling/separable.py",
                            "start_line": 242, "end_line": 248},
-                out_dir=Path(tmpdir),
+                out_dir=live_artifact_dir("scoped_grep_survives"),
             )
         except ValueError as e:
             pytest.skip(f"case setup/degrade: {e}")
@@ -234,7 +233,7 @@ def test_live_records_nonzero_reasoning_or_not_exercised():
               "(hermetic AC1/AC2 fixtures carry the mechanism proof)")
         return
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    if True:  # spec 0035: persistent artifacts (was a TemporaryDirectory)
         try:
             _result, artifact_path = run_verified_case(
                 case_name="astropy__astropy-12907",
@@ -242,7 +241,7 @@ def test_live_records_nonzero_reasoning_or_not_exercised():
                 gateway=gateway,
                 gold_span={"file": "astropy/modeling/separable.py",
                            "start_line": 242, "end_line": 248},
-                out_dir=Path(tmpdir),
+                out_dir=live_artifact_dir("reasoning_recording"),
             )
         except ValueError as e:
             pytest.skip(f"case setup/degrade: {e}")
@@ -262,3 +261,66 @@ def test_live_records_nonzero_reasoning_or_not_exercised():
             "precondition says the model reasons by default, but no per-turn "
             "reasoning was recorded — the hidden variable is still invisible"
         )
+
+
+@pytest.mark.integration
+def test_live_bad_scope_marker_in_persisted_trajectory_or_not_exercised():
+    """Spec 0035 AC6: when a live model greps an unsearchable scope, the typed
+    marker appears in the PERSISTED trajectory (durable under
+    eval_work/live_artifacts/) and the run still reaches a terminal submit
+    (non-terminal proven live). Model-behavior-contingent → 0023 fallback:
+    a run with no bad-scope grep records NOT-EXERCISED (never a silent pass);
+    the hermetic wrapper/loop tests carry the mechanism proof. Skip-not-fail."""
+    import dataclasses
+
+    import requests
+
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
+        served = {m.get("name") for m in resp.json().get("models", [])}
+        if "qwen3:14b" not in served:
+            pytest.skip(f"qwen3:14b not served: {sorted(served)}")
+    except Exception as e:
+        pytest.skip(f"Ollama not reachable: {e}")
+
+    settings = dataclasses.replace(
+        Settings(),
+        lm_api_base="http://127.0.0.1:11434/v1",
+        lm_model="qwen3:14b",
+        scout_max_turns=10,
+        scout_wall_clock_s=600.0,
+        lm_http_timeout_s=300.0,
+    )
+    gateway = ModelGateway(api_base=settings.lm_api_base, model=settings.lm_model)
+
+    try:
+        _result, artifact_path = run_verified_case(
+            case_name="astropy__astropy-12907",
+            settings=settings,
+            gateway=gateway,
+            gold_span={"file": "astropy/modeling/separable.py",
+                       "start_line": 242, "end_line": 248},
+            out_dir=live_artifact_dir("bad_scope_marker"),
+        )
+    except ValueError as e:
+        pytest.skip(f"case setup/degrade: {e}")
+
+    with open(artifact_path) as f:
+        artifact = json.load(f)
+
+    assert "eval_work/live_artifacts/bad_scope_marker" in str(artifact_path)
+    history_text = str(artifact.get("model_turns", []))
+    markers = [m for m in ("grep-scope-not-found", "ls-path-not-found")
+               if m in history_text]
+    submitted_terminal = "submit_citations" in history_text
+    print(f"\n[0035 AC6] markers_seen={markers} terminal_submit={submitted_terminal} "
+          f"bucket={artifact.get('terminal_bucket')} artifact={artifact_path}")
+    if markers:
+        assert submitted_terminal, (
+            "a scope marker fired but the run did not reach a terminal submit — "
+            "the marker must be non-terminal"
+        )
+        print("[0035 AC6] EXERCISED: marker visible in persisted trajectory, run terminal")
+    else:
+        print("[0035 AC6] NOT-EXERCISED: model used no bad scope this run "
+              "(hermetic wrapper/loop tests carry the mechanism proof)")

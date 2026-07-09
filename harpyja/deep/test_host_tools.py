@@ -149,3 +149,32 @@ def test_deep_search_unscoped_byte_identical(tmp_path):
     tools = _engine_tools(tmp_path, runner)
     out = tools["search"]("in_bulk")
     assert [s.path for s in out] == ["django/db/models/query.py"]
+
+
+def test_deep_search_file_scope_delegates_no_defect(tmp_path):
+    """PIN (0035 AC5 file-scope half): Deep search on an existing FILE scope is
+    already engine-delegated (0033 parent-dir mechanism) — real repo-relative
+    matches, no wrapper guard. The behavior the explorer grep now converges to."""
+    (tmp_path / "astropy" / "modeling").mkdir(parents=True)
+    (tmp_path / "astropy" / "modeling" / "separable.py").write_text("needle\n", encoding="utf-8")
+    runner, _ = _runner_returning(_match_line("separable.py", 66))
+    tools = _engine_tools(tmp_path, runner)
+    out = tools["search"]("needle", scope="astropy/modeling/separable.py")
+    assert [s.path for s in out] == ["astropy/modeling/separable.py"]
+
+
+def test_deep_search_nonexistent_scope_returns_marker_not_crash(tmp_path):
+    """AC5 (the discovered defect): a nonexistent scope must return the typed
+    marker, never the uncaught FileNotFoundError the engine's subprocess raises
+    on a nonexistent cwd. The raising engine proves the guard precedes delegation."""
+    class _CrashingEngine:
+        def search(self, pattern, scope=None, *, repo_root=None):
+            raise FileNotFoundError(f"[Errno 2] No such file or directory: {scope!r}")
+
+    settings = Settings()
+    tools = build_host_tools(
+        str(tmp_path), settings, search_engine=_CrashingEngine(),
+        symbol_records=[], manifest=[], budget=DeepBudget(settings),
+    )
+    out = tools["search"]("x", scope="nope")
+    assert out == "search-scope-not-found: 'nope'"
