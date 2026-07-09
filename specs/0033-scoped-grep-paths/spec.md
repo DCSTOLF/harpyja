@@ -1,7 +1,7 @@
 ---
 id: "0033"
 title: "scoped-grep-paths"
-status: draft
+status: reviewed
 started_at_sha: f736bde
 created: 2026-07-08
 authors: [claude]
@@ -50,21 +50,56 @@ conventions.md "one bounded rg source of truth" (the fix location rule), 0012/00
 
 ## Invariants
 
-**INVARIANT (fix at the tool seam, once):** scoped-grep output is made repo-relative at the
-`RipgrepEngine`/tool-wrapper seam — the ONE bounded rg source of truth shared by the explorer
-`grep` and the Deep `search` host tool — never per-caller, never by re-adding a downstream
-suffix-recovery repair. Every consumer of the engine inherits the fix in the same change
-(blast radius enumerated: explorer grep, Deep search, Tier-0 locate path, any eval driver).
+**INVARIANT (fix at the ENGINE seam, once — DECIDED, wrapper option eliminated):** scoped
+output is made repo-relative INSIDE `RipgrepEngine` — the ONE bounded rg source of truth —
+never per-caller, never by re-adding a downstream suffix-recovery repair. A wrapper-level
+re-prefix in `explorer_tools.grep` is EXCLUDED: it would not reach Deep's `search` host tool
+(which passes subdirectory scopes through the same engine and has the same defect today),
+i.e. it IS the per-caller fix this invariant forbids. The mechanism choice at plan is
+between two ENGINE-level options only: (a) run rg from the repo root with the scope as a
+relative path argument (note: callers pass ABSOLUTE scopes today, so the engine must compute
+the repo-relative scope — the repo root likely needs threading into the engine), or
+(b) engine-level re-prefix of parsed paths with the scope's repo-relative prefix. Every
+consumer of the engine inherits the fix in the same change — blast radius enumerated and
+EACH pinned: explorer `grep` (scoped + unscoped), Deep `search` (scoped + unscoped), Tier-0
+locate (which passes `scope=req.repo_path`, the ABSOLUTE REPO ROOT — a distinct variant to
+pin, not a no-scope call), the `symbols` degraded fallback (see next paragraph), and any
+eval driver.
 
-**INVARIANT (tool-contract consistency):** after the fix, EVERY explorer tool that returns
-paths (`grep`, `glob`, `ls`, `symbols`, `read_span`) returns repo-relative paths — asserted
-as one contract test over the tool suite, not per-tool prose.
+**Blast-radius edge (enumerated, decide-at-plan):** `explorer_tools.symbols()`'s degraded
+fallback calls `search_engine.search("", scope=str(candidate))` where `candidate` is a
+resolved FILE path — with the default runner (`subprocess.run(cwd=scope)`) this raises
+`NotADirectoryError` TODAY (broken outside injected-runner tests), and the two engine fix
+mechanisms change its behavior differently. This consumer is IN scope: the plan must pin its
+post-fix behavior explicitly (a file scope either becomes a supported rg path argument under
+mechanism (a), or is normalized/rejected loudly — never a silent behavior drift).
+
+**INVARIANT (tool-contract consistency):** after the fix, every explorer tool that DISCOVERS
+paths (`grep` scoped + unscoped, `glob`, `ls`, `symbols`) returns repo-relative paths —
+asserted as one contract test over the tool suite, not per-tool prose. `read_span` is
+EXCLUDED from the producer contract with rationale: it echoes the caller-supplied path and
+discovers nothing, so it has no path-shape authority of its own. `ls` directory entries
+(the trailing-`/` shape, e.g. `modeling/`) are repo-relative but non-citable listings — the
+contract test states that semantic explicitly rather than treating them as citation paths.
 
 **INVARIANT (found-then-dropped is visible forever):** the trajectory/verifier record carries
 a submitted-vs-surviving citation count (`citations_submitted` / `citations_surviving`),
 so a normalization drop is DISTINGUISHABLE from an honest-empty submission in the artifact.
-This class of defect must never again hide inside `empty`. Additive fields,
-`VERIFIER_SCHEMA_VERSION` bumped per the additive-last-with-defaults rule.
+This class of defect must never again hide inside `empty`. Named concretely:
+`citations_submitted` / `citations_surviving`, `VERIFIER_SCHEMA_VERSION "0031/1" → "0033/1"`.
+**Validator mechanism scoped (the additive claim must be implementable):**
+`validate_verifier_artifact` today hard-fails on `schema_version != VERIFIER_SCHEMA_VERSION`
+(strict equality) and `live_verifier.py` has none of `report.py`'s `_with_defaults`
+machinery — so "legacy artifacts still validate" requires the validator to version-gate
+(accept the enumerated known versions, defaulting the new fields for `0031/1` blocks — the
+0026 `DATASET_SCHEMA_VERSION` pattern) or grow a `_with_defaults` map (the `report.py`
+pattern). Pick at plan; either way the mechanism ships IN this spec, not assumed.
+**Interface shape named:** `submit_citations` returns `list[CodeSpan]` today and
+`LoopResult` carries only spans/outcome/history/turns — the counts ride a small result
+shape (or non-breaking out-param per the `recovered_paths_out` precedent) from
+`submit_citations` through `LoopResult` to the backend; the loop's terminal handling is the
+single production caller and is updated in the same change, with an assertion that no other
+caller of `submit_citations` exists.
 
 **DECIDED (count at the drop seam — `fc_citation_dropped_count` is NOT this measurement):**
 there are TWO normalize passes and the existing field watches the wrong one. The explorer's
@@ -84,17 +119,29 @@ naming-debt record; the eval-report schema is NOT touched (the bake-off consumes
 artifacts, where the per-case counts now live).
 
 **DECIDED (fold the cause-swallowing fix in — same file, same function, tiny diff):**
-`run_verified_case` (live_verifier.py) currently catches `ScoutUnavailable` without binding
-it and then raises a cause-less `ValueError("Explorer did not capture trajectory")` when the
-explorer degraded before producing a `LoopResult` — the 0031 diagnosability gap that cost a
-masked-cause debugging round in 0032's AC6 run. Since 0033's AC6 re-run drives this exact
-function, the fix folds in: bind the exception, carry the typed cause in the raise
-(`... (scout cause: {e.cause})`, `raise ... from e`). No behavior change on any path that
+`run_verified_case` (live_verifier.py) binds the caught exception (`except ScoutUnavailable
+as e:`) but DISCARDS it — the cause-less `ValueError("Explorer did not capture trajectory")`
+raise sits OUTSIDE the except block, where `e` is already out of scope (Python deletes the
+except variable at block exit), so no chain is possible as the code stands. This is the 0031
+diagnosability gap that cost a masked-cause debugging round in 0032's AC6 run. Since 0033's
+AC6 re-run drives this exact function, the fix folds in: capture the exception (and its
+typed `.cause`) into a variable that OUTLIVES the except block, name the cause in the raise
+message, and chain `from` the captured exception. While in the block, delete the dead
+`last_trajectory = backend.last_trajectory` assignment inside the except (immediately
+shadowed by the unconditional one two lines later). No behavior change on any path that
 captures a trajectory; only the failure message/chain improves.
 
-**INVARIANT (behavior-preserving on unscoped input):** `grep(pattern)` with no scope (or
-scope=".") returns byte-identical results to today. The fix changes ONLY the path prefix of
-scoped results; match content, bounds, and clamps are untouched.
+**INVARIANT (behavior-preserving on unscoped input, pinned at a NAMED seam):** at the
+`RipgrepEngine.search` seam, `scope=None` / `scope="."` today means the HARPYJA PROCESS cwd
+(`scope or "."`), NOT the repo root — every production caller papers over this by passing an
+ABSOLUTE scope (Tier-0 passes `scope=req.repo_path`). The pin is therefore: absolute-repo-root
+scope (the Tier-0/django shape) returns byte-identical results to today, asserted via an
+injected-runner fixture PLUS one real-rg integration case (rg-from-root can subtly shift
+match ORDERING and ignore-file resolution — the pin must tolerate none of that on this path).
+Whether bare `scope=None` comes to mean repo root (a behavior change only for a hypothetical
+cwd-relying caller — none exist in production) is decided at plan when the repo-root
+threading lands. The fix changes ONLY the path prefix of subdirectory-scoped results; match
+content, bounds, and clamps are untouched.
 
 ## What
 
@@ -111,8 +158,10 @@ scoped results; match content, bounds, and clamps are untouched.
   `submit_citations` surfaces `(submitted, surviving)`, threaded through `LoopResult` →
   `ExplorerBackend` → `build_trajectory_record` → the verifier artifact (additive,
   schema-bumped), so found-then-dropped is a first-class recorded fact.
-- Fix `run_verified_case`'s cause-swallowing: bind the caught `ScoutUnavailable` and carry
-  its typed cause into the "Explorer did not capture trajectory" raise (`from e`).
+- Fix `run_verified_case`'s cause-swallowing: capture the caught `ScoutUnavailable` (and its
+  typed `.cause`) into a variable that outlives the except block, name the cause in the
+  "Explorer did not capture trajectory" raise, chain `from` the captured exception, and
+  delete the dead shadowed `last_trajectory` assignment inside the except.
 - Re-run the 0032 AC6 astropy case live: the scoped-grep citation should now survive
   normalization and the bucket should reflect the model's actual output (expected:
   wrong-file for the historical cite, but the RUN's bucket is whatever the model does —
@@ -120,28 +169,49 @@ scoped results; match content, bounds, and clamps are untouched.
 
 ## Acceptance Criteria
 
-1. **[unit]** `RipgrepEngine.search` with a subdirectory scope returns repo-relative paths;
-   with no scope / scope="." results are byte-identical to today (regression pin).
-2. **[unit]** Tool-contract consistency: one test asserts every path-returning explorer tool
-   emits repo-relative paths (grep scoped + unscoped, glob, ls, symbols).
+1. **[unit]** `RipgrepEngine.search` with a subdirectory scope returns repo-relative paths —
+   parameterized over the scope variants: `"astropy"` (no trailing slash), `"astropy/"`
+   (trailing slash), a nested scope (`"astropy/modeling"`), and rg's `./`-prefixed output
+   shapes. The absolute-repo-root scope (the Tier-0/django shape) is byte-identical to today,
+   pinned via an injected-runner fixture PLUS one real-rg integration case (ordering and
+   ignore-file resolution included in the pin).
+2. **[unit]** Tool-contract consistency: one test asserts every path-DISCOVERING explorer
+   tool emits repo-relative paths (grep scoped + unscoped, glob, ls, symbols clean branch).
+   `read_span` excluded with the echoes-input rationale; `ls` directory entries asserted as
+   repo-relative non-citable listings (trailing-`/` semantics stated in the test).
 3. **[unit]** The astropy shape end-to-end: a scoped-grep hit cited via `submit_citations`
    survives `normalize_spans` (no drop); the django shape unchanged.
-4. **[unit]** Blast radius: the Deep `search` host tool and the Tier-0 locate path are
-   asserted unaffected on unscoped input (shared-engine consumers enumerated + each pinned).
+4. **[unit]** Blast radius, each shared-engine consumer pinned in BOTH directions: Deep
+   `search` scoped output POSITIVELY changes to repo-relative (the inherited fix — not just
+   unscoped non-regression) and unscoped stays byte-identical; Tier-0 locate
+   (`scope=req.repo_path`) byte-identical; the `symbols` degraded fallback
+   (`search("", scope=<file path>)` — raises `NotADirectoryError` with the default runner
+   today) gets an explicit post-fix behavior pin (supported file-scope or loud rejection,
+   decided at plan — never silent drift).
 5. **[unit]** Verifier carries submitted-vs-surviving, counted AT THE SUBMIT SEAM:
-   `submit_citations` surfaces `(submitted, surviving)`; the counts thread LoopResult →
-   backend → `build_trajectory_record` → artifact (additive); a found-then-dropped fixture
+   `submit_citations` surfaces the counts via the named result shape (single production
+   caller — the loop's terminal handling — updated in the same change, no-other-caller
+   asserted); the counts thread LoopResult → backend → `build_trajectory_record` → artifact
+   as `citations_submitted` / `citations_surviving`; a found-then-dropped fixture
    (submitted=1, surviving=0) is distinguishable from an honest-empty fixture
-   (submitted=0, surviving=0) in the artifact; `VERIFIER_SCHEMA_VERSION` bumped, legacy
-   artifacts still validate. `fc_citation_dropped_count` and the eval-report schema are
-   byte-untouched (asserted), its engine-pass-only scope documented.
+   (submitted=0, surviving=0) in the artifact; `VERIFIER_SCHEMA_VERSION "0031/1" → "0033/1"`
+   with the validator version-gated or defaults-mapped so a `0031/1` artifact still validates
+   (the mechanism ships in this spec — pinned by a legacy-artifact fixture test).
+   `fc_citation_dropped_count` and the eval-report schema are byte-untouched (asserted), its
+   engine-pass-only scope documented.
 6. **[unit]** `run_verified_case` carries the typed cause: when the explorer degrades
-   pre-trajectory, the raise names `e.cause` and chains `from e` — pinned by a unit test
-   with a raising fake backend; behavior on trajectory-capturing paths unchanged.
-7. **[integration]** The 0032 astropy case re-run live: the scoped-grep citation is no longer
-   dropped (surviving count > 0 when the model cites a scoped-grep hit), and the artifact
-   records both counts. Skip-not-fail on absent stack; the deliverable run fails loud.
-8. **[doc]** conventions.md: the tool-contract rule (every path-returning tool emits
+   pre-trajectory, the raise names the captured `.cause` and chains `from` the captured
+   exception (captured OUTSIDE the except block's variable lifetime) — pinned by a unit test
+   with a raising fake backend asserting both the message and `__cause__`; behavior on
+   trajectory-capturing paths unchanged; the dead shadowed assignment is gone.
+7. **[integration]** The 0032 astropy case re-run live: when the model cites a scoped-grep
+   hit, the citation is no longer dropped (surviving count > 0) and the artifact records both
+   counts. The condition is MODEL-BEHAVIOR-CONTINGENT (a run where the model never greps
+   scoped cannot exercise it — the 0023 input-validity-precondition rule): such a run records
+   the condition as NOT-EXERCISED in the findings (never a silent pass), and AC3's hermetic
+   fixture remains the deterministic proof the fix works. Skip-not-fail on absent stack; the
+   deliverable run fails loud.
+8. **[doc]** conventions.md: the tool-contract rule (every path-DISCOVERING tool emits
    repo-relative paths; fix path-shape defects at the engine seam, never per-caller, never
    by downstream repair) + the 0012→0025→0033 history + the two-normalize-passes scope note
    for `fc_citation_dropped_count` recorded.
@@ -158,10 +228,19 @@ scoped results; match content, bounds, and clamps are untouched.
 
 ## Open Questions
 
-1. Fix mechanism: run rg from repo root with scope as a path argument (canonical output,
-   possibly changes match ordering/`./` prefixes) vs re-prefix parsed paths with the scope's
-   repo-relative prefix (smaller diff, keeps rg invocation untouched)? Decide at plan after
-   reading `_default_runner_factory` and every `RipgrepEngine` constructor site.
-2. Does the engine need the repo root threaded as a constructor field, or can the wrapper
-   (`explorer_tools.grep`) re-prefix — and if the wrapper does it, does the Deep `search`
-   host tool have the same defect today (check: does Deep pass subdirectory scopes)?
+Both remaining OQs are ENGINE-level mechanism choices — the wrapper-level option is
+eliminated by the fix-at-the-engine-seam invariant (it would leave Deep's `search`, which
+demonstrably has the same defect, with the old contract — the per-caller fix the invariant
+forbids).
+
+1. Engine fix mechanism: (a) run rg from the repo root with the scope as a relative path
+   argument (canonical output; requires computing the repo-relative scope from the absolute
+   scope callers pass; may shift match ordering / `./` prefixes / ignore-file resolution —
+   AC1's byte-identical repo-root pin guards this) vs (b) engine-level re-prefix of parsed
+   paths (smaller diff, rg invocation untouched; must handle the trailing-slash and nested
+   variants AC1 enumerates)? Decide at plan after reading `_default_runner_factory` and
+   every `RipgrepEngine` constructor site.
+2. Repo-root threading: constructor field on `RipgrepEngine` vs a `search(..., repo_root=)`
+   param — and does bare `scope=None` come to mean repo root (no production caller relies on
+   process-cwd today; Tier-0 always passes the absolute repo path)? Decide with OQ1; the
+   `symbols` degraded-fallback file-scope pin (AC4) depends on which mechanism lands.
