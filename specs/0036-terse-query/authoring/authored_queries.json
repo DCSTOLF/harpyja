@@ -1,0 +1,102 @@
+[
+  {
+    "schema_version": "0026/1",
+    "case_id": "astropy__astropy-12907",
+    "query": "Where is the code that computes the separability matrix for nested CompoundModels in Astropy?",
+    "repo": "astropy/astropy",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "django__django-13516",
+    "query": "\"Where in the migrate management command is self.stdout/stderr's flush() method overridden or bypassed, causing delayed output?\"",
+    "repo": "django/django",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "matplotlib__matplotlib-21568",
+    "query": "How does matplotlib handle datetime axis tick spacing when usetex is enabled?",
+    "repo": "matplotlib/matplotlib",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "pallets__flask-5014",
+    "query": "How to check if a Blueprint's name is empty and raise a ValueError when it is?",
+    "repo": "pallets/flask",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "pydata__xarray-3993",
+    "query": "Why does `DataArray.integrate` use the argument name `dim` instead of `coord`, unlike `Dataset.integrate`?",
+    "repo": "pydata/xarray",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "pytest-dev__pytest-10081",
+    "query": "How does pytest handle the execution of `tearDown()` for `unittest.TestCase` classes decorated with `unittest.skip` when running with `--pdb`?",
+    "repo": "pytest-dev/pytest",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "scikit-learn__scikit-learn-10844",
+    "query": "How is the fowlkes_mallows_score implemented in scikit-learn, focusing on the sqrt(pk * qk) calculation?",
+    "repo": "scikit-learn/scikit-learn",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "psf__requests-1766",
+    "query": "Where in the code is the 'qop-options' directive in Digest Auth being constructed and quoted according to RFC2617?",
+    "repo": "psf/requests",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "pylint-dev__pylint-7080",
+    "query": "Where in the code is the `--recursive` flag and `ignore-paths` configuration processed to exclude specified directories during analysis?",
+    "repo": "pylint-dev/pylint",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  },
+  {
+    "schema_version": "0026/1",
+    "case_id": "sympy__sympy-16792",
+    "query": "How does the Cython backend in codegen handle function argument types for array parameters not referenced in the wrapped expression?",
+    "repo": "sympy/sympy",
+    "classification": "point",
+    "gold_withheld": true,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent"
+  }
+]

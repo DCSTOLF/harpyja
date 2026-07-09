@@ -85,3 +85,51 @@ def test_terse_label_provenance_is_patch_derived_at_convert(tmp_path):
     terse = _write_terse(tmp_path / "terse.jsonl", [_terse_row(_CASE)])
     ds = load_terse_dataset(terse, _RAW, _PROV)
     assert ds.cases[0].label_provenance == "patch-derived-at-convert"
+
+
+# --- spec 0036: the COMMITTED fixture holds real blind-authored 0036/1 rows ------
+
+_TERSE_COMMITTED = _FIX / "swebench_verified.terse.jsonl"
+
+
+def test_committed_terse_fixture_is_real_0036_pilot_rows():
+    # The five 0026/1 PLACEHOLDER rows are gone: every committed row is a real,
+    # blind-authored, fully-tagged 0036/1 pilot case (RED while placeholders remain).
+    rows = [
+        json.loads(l)
+        for l in _TERSE_COMMITTED.read_text(encoding="utf-8").splitlines()
+        if l.strip()
+    ]
+    assert len(rows) >= 10  # the pilot set (pilot_n=10)
+    for r in rows:
+        assert r["schema_version"] == "0036/1"
+        assert r["gold_withheld"] is True
+        assert r["query_provenance"] == "model-authored-blind"
+        assert "PLACEHOLDER" not in r["query"]
+        assert r["reachability"] in {"lexical", "conceptual"}
+        assert r["reachability_provenance"] in {"mechanical", "hand-labeled"}
+        assert r["concept_patch_relation"] in {"same", "divergent"}
+        assert "expected_spans" not in r  # labels stay join-only, never transcribed
+
+
+def test_committed_terse_fixture_joins_and_preserves_concept_span():
+    # The loud loader + pinned join accept the committed fixture end-to-end; the
+    # hand-labeled concept_span (divergent rows) passes through the join UNTOUCHED
+    # (the join replaces only the label fields — the concept span is never
+    # overwritten by the patch-derived authority).
+    ds = load_terse_dataset(_TERSE_COMMITTED, _RAW, _PROV)
+    assert ds.cases, "committed fixture joined to zero cases"
+    assert all(c.expected_spans for c in ds.cases)  # every case joined its label
+    divergent = [c for c in ds.cases if c.concept_patch_relation == "divergent"]
+    for c in divergent:
+        assert c.concept_span is not None
+        assert c.concept_span_provenance
+        # concept and patch are genuinely different locations on a divergent row.
+        patch = c.expected_spans[0]
+        assert (
+            c.concept_span.path != patch.path
+            or c.concept_span.start_line != patch.start_line
+        )
+    same = [c for c in ds.cases if c.concept_patch_relation == "same"]
+    for c in same:
+        assert c.concept_span is None

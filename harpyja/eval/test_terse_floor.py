@@ -181,6 +181,26 @@ def test_conceptual_stratum_reportability_floor():
     assert (lex_n, con_n, status) == (26, 4, STRATUM_UNDER_POPULATED)
 
 
+def test_committed_pilot_fixture_is_tagged_and_stratum_reported():
+    # spec 0036: the COMMITTED fixture (the real pilot set) loads through the loud
+    # loader with every case tagged; the pilot-sized conceptual-stratum report is
+    # computed and PRINTED (its status is a typed finding either way — an
+    # UNDER_POPULATED pilot stratum is honest data, not a test failure). The
+    # min_n=12 static floor is the FULL set's gate, deliberately not asserted here.
+    from harpyja.eval.terse_dataset import conceptual_stratum_report
+
+    ds = load_terse_dataset(
+        Path(__file__).parent / "fixtures" / "swebench_verified.terse.jsonl", _RAW, _PROV
+    )
+    assert ds.cases, "committed fixture joined to zero cases"
+    assert all(c.reachability in {"lexical", "conceptual"} for c in ds.cases)
+    lex_n, con_n, status = conceptual_stratum_report(ds, pilot_sized=True)
+    assert lex_n + con_n == len(ds.cases)  # every case carries the tag
+    print(
+        f"\n[0036 pilot stratum] lexical={lex_n} conceptual={con_n} status={status}"
+    )
+
+
 def test_conceptual_stratum_pilot_floor_is_two():
     # The pilot-sized floor (>= 2) — pre-declared alongside the full-set floor.
     from harpyja.eval.terse_dataset import (

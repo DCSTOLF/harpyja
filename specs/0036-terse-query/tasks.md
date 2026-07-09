@@ -14,10 +14,10 @@ spec: "0036"
 - [x] T8 (GREEN): ac8_pilot.py — commit PREREGISTERED_AC8_CONFIG_0036 + AC8_CONFIG_HASH_0036 (arms only differ; thresholds copied verbatim) — FREEZE, before any pilot run
 - [x] T9 (RED): test_pilot_runner.py — build PilotPairs + decide_from_pairs under 0036 config; typed degrade excluded + recorded, never counted clean
 - [x] T10 (GREEN): pilot_runner.py — pure aggregation glue (bucket→PilotPair, degrade exclusion), no live I/O
-- [ ] T11 [operator][live]: blind-author pilot queries via 0026 author_terse_set (author≠verifier, Ollama live); commit AuthoringArtifact; STOP-AND-WARN on infra error
-- [ ] T12 [operator]: post-authoring mechanical reachability tag + concept/patch hand-label; assemble 0036/1 pilot rows replacing the 5 placeholders in swebench_verified.terse.jsonl
-- [ ] T13 (RED): test_terse_join.py + test_terse_floor.py — fixture-backed tests expect real 0036/1 rows (fail while placeholders remain)
-- [ ] T14 (GREEN): commit replaced swebench_verified.terse.jsonl (real blind-authored + tagged pilot rows)
+- [x] T11 [operator][live]: blind-author pilot queries via 0026 author_terse_set (author≠verifier, Ollama live); commit AuthoringArtifact; STOP-AND-WARN on infra error
+- [x] T12 [operator]: post-authoring mechanical reachability tag + concept/patch hand-label; assemble 0036/1 pilot rows replacing the 5 placeholders in swebench_verified.terse.jsonl
+- [x] T13 (RED): test_terse_join.py + test_terse_floor.py — fixture-backed tests expect real 0036/1 rows (fail while placeholders remain)
+- [x] T14 (GREEN): commit replaced swebench_verified.terse.jsonl (real blind-authored + tagged pilot rows)
 - [ ] T15 [live][operator]: run pilot end-to-end via run_verified_case; persist each artifact via write_live_artifact (VERIFIER_SCHEMA_VERSION 0034/1); record degrades per case (bounded re-run/exclusion); batched ~35+ min; STOP-AND-WARN
 - [ ] T16 [live]: test_live_verifier_integration.py — pilot-set integration test asserts verifier-clean persisted artifact per case or recorded typed degrade (skip-not-fail on infra)
 - [ ] T17 [live][operator]: apply decide_ac8 under PREREGISTERED_AC8_CONFIG_0036 (hash cited) → PROCEED or UNDER_POWERED_STOP gate artifact
