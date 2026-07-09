@@ -1,0 +1,1 @@
+{"id":"chatcmpl-948","object":"chat.completion","created":1783612912,"model":"qwen3:14b","system_fingerprint":"fp_ollama","choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning":"Okay, the user wants me to count from 1 to 100, one"},"finish_reason":"length"}],"usage":{"prompt_tokens":26,"completion_tokens":20,"total_tokens":46}}
