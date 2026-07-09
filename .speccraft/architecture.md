@@ -722,4 +722,66 @@ currently DROPS `reasoning` (returns only content/tool_calls/finish_reason/model
 reasoning has been generated invisibly and has consumed the `explorer_max_tokens=2048` cap
 unseen since 0028 → the 0031–0033 live baselines were measured under invisible-truncation-risk.
 Spec 0034 will surface `reasoning` additively and record per-turn reasoning lengths in the
-trajectory artifact. See history.md 2026-07-09 (spec 0033).
+trajectory artifact. See history.md 2026-07-09 (spec 0033). **(RESOLVED by spec 0034 — see
+below.)**
+
+## Spec 0034 architecture updates — reasoning observability (the gateway return contract, the backend accumulator seam, think_mode, schema 0034/1)
+
+**As of spec 0034 `ModelGateway.complete_with_tools` surfaces `reasoning` and
+`completion_tokens` ADDITIVELY** (AC1, the 0028 `finish_reason` / 0031 `model`
+additive-return pattern). The return dict gains `"reasoning": message.get("reasoning")`
+(absent field → `None`, present-but-empty → `""` — the honest 0-vs-None SOURCE) and
+`"completion_tokens": (response.get("usage") or {}).get("completion_tokens")` (absent
+`usage` → `None`) — the cap's actual TOKEN currency, alongside chars. The two 0028/0031
+keys are unchanged; no transport change, no second outbound path. See history.md
+2026-07-09 (spec 0034).
+
+**As of spec 0034 the per-turn reasoning data rides a NEW backend-side accumulator — the
+DECIDED capture seam.** `ExplorerBackend.wrapped_model_call` grew from the
+`_last_served_model` last-write scalar into `self._per_turn`, a list appending
+`{reasoning_chars, completion_tokens, finish_reason}` per model response (`reasoning_chars
+= len(reasoning) if reasoning is not None else None`), reset per run in `run()` alongside
+`last_turns_used`/`_last_served_model`. This is the ONLY seam that observes every response
+INCLUDING a `finish="length"` FINAL turn — the history-ride route was eliminated because
+`LoopResult.history` IS `session.messages()` (double-duty as the outbound wire messages —
+annotating it would mutate the request body) and on `finish_reason="length"` the loop
+returns BEFORE the assistant message is added to the session, so the truncated turn never
+enters `model_turns`. Consequence: **`per_turn` and `model_turns` carry an intrinsic length
+SKEW** (a truncated final turn has a `per_turn` entry but no `model_turns` entry) —
+documented at the `build_trajectory_record` `per_turn` key; consumers must NOT zip the two
+positionally. A truncated-by-reasoning turn (`finish_reason="length"` + `reasoning_chars > 0`
++ empty content) is structurally distinguishable in the record from content-truncated and
+from clean. The list threads `build_trajectory_record(..., per_turn=, think_mode=)` → the
+in-memory record AND `run_verified_case`'s hand-assembled written artifact (both wired;
+guarded by a written-JSON test before any live run — the 0033 drop-at-assembly lesson).
+
+**As of spec 0034 the trajectory carries ONE canonical `think_mode`.**
+`derive_think_mode(think: bool | None, enable_thinking: bool)` in `explorer_backend.py`
+returns one of `{"native-think-true", "native-think-false", "chat-template-disabled",
+"default-omitted", "unknown"}` — native (`think` explicitly set) WINS over the
+chat-template mechanism on a double-set config, so the two thinking mechanisms
+(`explorer_enable_thinking`'s `chat_template_kwargs`, the llama.cpp template-era knob that
+COEXISTS, and the new native `think` param) can never produce an ambiguous record.
+
+**As of spec 0034 `VERIFIER_SCHEMA_VERSION` is `"0034/1"`.**
+`_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1"})` behind the
+same version GATE; the new `per_turn`/`think_mode` (and the reasoning fields generally) are
+OPTIONAL, so legacy `0031/1` and `0033/1` artifacts still validate and a non-reasoning
+model legitimately producing none is not rejected. `probe_reasoning_default(gateway)` (AC5
+precondition helper) makes one sanctioned `complete_with_tools` call through the air-gapped
+seam and returns whether THIS served model emits `reasoning` by default — instance-relative
+by design (the default-thinking finding is about this endpoint + model, not a universal),
+gating the live recording proof skip-clean per the 0023 input-validity-precondition rule.
+
+**As of spec 0034 `explorer_think` is the native think knob — tri-state, default-inert.**
+`Settings.explorer_think: bool | None = None`: `None` ⇒ OMIT the `think` request param ⇒
+the outbound request body is BYTE-IDENTICAL to pre-0034 (params == `{"max_tokens": 2048}`
+under defaults — the observability-only default, pinned on the request body, not prose);
+`True/False` ride as `params["think"]` and are operator opt-in generation control. `_coerce`
+gained `bool | None` handling (`target_str in ("bool", "bool | None")`). The knob is
+`explorer_`-scoped and threaded from TWO ctor sites — `wiring.py` (`build_scout_engine`)
+AND `live_verifier.run_verified_case` (missing the second silently kills the live path); the
+shared `ModelGateway` stays param-driven with no default, and the Deep-tier outbound guard
+(`deep/test_rlm.py`) is extended so Deep carries neither the knob nor a `think` param (rots
+false on leak). Coexists with `explorer_enable_thinking` (0028, the llama.cpp era) — the one
+`think_mode` field disambiguates. See history.md 2026-07-09 (spec 0034).
