@@ -455,3 +455,29 @@ def test_explorer_enable_thinking_env_coerces_to_bool(tmp_path, monkeypatch):
     monkeypatch.setenv("HARPYJA_EXPLORER_ENABLE_THINKING", "false")
     s = load_settings(config_path=None, repo_path=tmp_path)
     assert s.explorer_enable_thinking is False
+
+
+# --- Spec 0034: explorer_think — the native think knob (tri-state) ---
+
+
+def test_explorer_think_default_is_none():
+    # spec 0034: None ⇒ OMIT the param ⇒ outbound request byte-identical to
+    # pre-0034 (the observability-only default). True/False are operator opt-in.
+    assert Settings().explorer_think is None
+
+
+def test_explorer_think_is_declared_field_with_none_default():
+    # Field-default introspection (the 0028 drift-guard pattern, never a grep).
+    import dataclasses
+
+    field = {f.name: f for f in dataclasses.fields(Settings)}["explorer_think"]
+    assert field.default is None
+
+
+def test_explorer_think_env_coerces_to_bool(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARPYJA_EXPLORER_THINK", "true")
+    s = load_settings(config_path=None, repo_path=tmp_path)
+    assert s.explorer_think is True
+    monkeypatch.setenv("HARPYJA_EXPLORER_THINK", "false")
+    s = load_settings(config_path=None, repo_path=tmp_path)
+    assert s.explorer_think is False

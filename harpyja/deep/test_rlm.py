@@ -53,3 +53,13 @@ def test_deep_outbound_carries_no_enable_thinking():
     kwargs = _run_deep_and_capture(settings)
     assert "chat_template_kwargs" not in kwargs
     assert "enable_thinking" not in kwargs
+
+
+def test_deep_outbound_carries_no_think_param():
+    # spec 0034 (AC3): explorer_think set; the Deep forward call must NOT carry a
+    # `think` param — the native think knob is explorer-only. Green on
+    # introduction; ROTS FALSE on any future leak.
+    settings = dataclasses.replace(Settings(), explorer_think=True)
+    kwargs = _run_deep_and_capture(settings)
+    assert "think" not in kwargs
+    assert "explorer_think" not in kwargs

@@ -6,13 +6,13 @@ from typing import Any, Mapping
 
 from harpyja.eval.report import atomic_write_json
 
-VERIFIER_SCHEMA_VERSION = "0033/1"
+VERIFIER_SCHEMA_VERSION = "0034/1"
 
-# Spec 0033: the version GATE (0026 DATASET_SCHEMA_VERSION pattern) — a legacy
+# Spec 0033 (+0034): the version GATE (0026 DATASET_SCHEMA_VERSION pattern) — a legacy
 # 0031/1 artifact (no citation-count fields) still validates; an unknown version
 # fails loud. The 0033/1 additions are OPTIONAL fields (citations_submitted /
 # citations_surviving), so no legacy artifact is invalidated by the bump.
-_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1"})
+_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1"})
 
 # Six enumerated failure reasons (when facts cannot be proven)
 FAILURE_CODES = frozenset([
@@ -320,6 +320,8 @@ def build_trajectory_record(
     terminal_bucket: str | None = None,
     citations_submitted: int | None = None,
     citations_surviving: int | None = None,
+    per_turn: list[dict[str, Any]] | None = None,
+    think_mode: str | None = None,
 ) -> dict[str, Any]:
     """Build trajectory artifact record from captured explorer loop data.
 
@@ -362,6 +364,12 @@ def build_trajectory_record(
         # structurally distinguishable from honest-empty (0, 0).
         "citations_submitted": citations_submitted,
         "citations_surviving": citations_surviving,
+        # Spec 0034: per-turn (reasoning_chars, completion_tokens, finish_reason)
+        # from the backend accumulator. NOTE the deliberate length SKEW vs
+        # model_turns: a finish="length" final turn never enters the history but
+        # DOES get a per_turn entry — consumers must not zip the lists positionally.
+        "per_turn": per_turn or [],
+        "think_mode": think_mode,
     }
 
     # Add optional fields if provided
@@ -411,6 +419,28 @@ def verifier_preflight(
             f"Requested model {requested_model!r} not found in served models: "
             f"{sorted(served_models)}"
         )
+
+
+def probe_reasoning_default(gateway: Any) -> bool:
+    """Spec 0034 (AC5 precondition): does THIS served model emit `reasoning` by
+    default (no `think` param)?
+
+    One call through the sanctioned gateway seam (air-gap asserted inside
+    `complete_with_tools` before any I/O). Instance-relative by design — the
+    default-thinking finding is about this endpoint + model, not a universal.
+    """
+    probe_tools = [{
+        "type": "function",
+        "function": {"name": "noop", "description": "no-op probe tool",
+                     "parameters": {"type": "object", "properties": {}}},
+    }]
+    resp = gateway.complete_with_tools(
+        [{"role": "user", "content": "Reply with the single word: ok"}],
+        probe_tools,
+        max_tokens=256,
+    )
+    reasoning = resp.get("reasoning")
+    return bool(reasoning)
 
 
 def run_verified_case(
@@ -485,6 +515,7 @@ def run_verified_case(
         symbol_records=symbol_records,
         max_tokens=settings.explorer_max_tokens,
         enable_thinking=settings.explorer_enable_thinking,
+        think=settings.explorer_think,
     )
 
     # Run the explorer loop. A typed degrade is captured OUTSIDE the except
@@ -550,6 +581,9 @@ def run_verified_case(
         # (submitted>0, surviving=0) is distinguishable in the persisted artifact.
         "citations_submitted": last_trajectory.get("citations_submitted"),
         "citations_surviving": last_trajectory.get("citations_surviving"),
+        # Spec 0034: per-turn reasoning observability — durable in the artifact.
+        "per_turn": last_trajectory.get("per_turn", []),
+        "think_mode": last_trajectory.get("think_mode"),
         "timestamp": datetime.utcnow().isoformat(),
         "case": case_name,
     }

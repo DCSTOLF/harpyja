@@ -528,8 +528,9 @@ def test_build_trajectory_record_valid_multitool_names_preserved():
 
 def test_verifier_schema_version_and_failure_codes_frozen():
     """AC5: schema version, the six codes, and their precedence are byte-frozen."""
-    # 0031/1 -> 0033/1: spec 0033 additive bump (citation counts), reconciled here.
-    assert VERIFIER_SCHEMA_VERSION == "0033/1"
+    # 0031/1 -> 0033/1 -> 0034/1: spec 0034 additive bump (per_turn/think_mode),
+    # reconciled here (same-change amendment discipline).
+    assert VERIFIER_SCHEMA_VERSION == "0034/1"
     assert FAILURE_CODES == frozenset([
         "model-unknown",
         "model-mismatch",
@@ -557,7 +558,7 @@ def test_verify_result_field_by_field_stable_on_valid_trajectory():
     got.pop("timestamp")
 
     assert got == {
-        "schema_version": "0033/1",
+        "schema_version": "0034/1",
         "status": "PASSED",
         "failure_reason": None,
         "model_identity": "served_present_and_matching",
@@ -807,3 +808,173 @@ def test_run_verified_case_artifact_carries_citation_counts(tmp_path, monkeypatc
     artifact = _json.loads(Path(artifact_path).read_text())
     assert artifact["citations_submitted"] == 1
     assert artifact["citations_surviving"] == 0
+
+
+# --- Spec 0034: per-turn reasoning observability (AC2/AC4/AC5) ---
+
+
+def test_valid_fixture_verify_outcome_pinned():
+    """PIN (0034 T1): outcome tuple over the valid fixture — the AC4 baseline.
+
+    Outcome-EQUALITY is the contract (status, failure_reason, four facts);
+    artifact-byte identity is explicitly NOT claimed (to_dict stamps the
+    current schema version).
+    """
+    r = verify_trajectory(_traj())
+    assert (
+        r.status, r.failure_reason, r.model_identity, r.model_invoked,
+        r.tool_names_invoked, r.terminal_bucket,
+    ) == ("PASSED", None, "served_present_and_matching", True,
+          ["grep", "symbols"], "correct")
+
+
+def test_build_trajectory_record_carries_per_turn():
+    """AC2: a per_turn list lands verbatim under the record's per_turn key."""
+    pt = [{"reasoning_chars": 51, "completion_tokens": 20, "finish_reason": "length"}]
+    record = build_trajectory_record(_multitool_history(), 1, per_turn=pt)
+    assert record["per_turn"] == pt
+
+
+def test_build_trajectory_record_carries_think_mode():
+    """AC2: think_mode lands on the record."""
+    record = build_trajectory_record(_multitool_history(), 1, think_mode="default-omitted")
+    assert record["think_mode"] == "default-omitted"
+
+
+def test_build_trajectory_record_per_turn_defaults_when_omitted():
+    """AC2: legacy callers unbroken — omitted params default safely."""
+    record = build_trajectory_record(_multitool_history(), 1)
+    assert record["per_turn"] == []
+    assert record.get("think_mode") is None
+
+
+def test_record_discriminates_reasoning_truncated_from_content_truncated_and_clean():
+    """AC2: probe A's reasoning-first shape is distinguishable IN THE RECORD from a
+    content-truncated turn AND a clean turn."""
+    reasoning_trunc = {"reasoning_chars": 51, "completion_tokens": 20,
+                       "finish_reason": "length"}
+    content_trunc = {"reasoning_chars": 0, "completion_tokens": 20,
+                     "finish_reason": "length"}
+    clean = {"reasoning_chars": 2833, "completion_tokens": 642,
+             "finish_reason": "tool_calls"}
+    record = build_trajectory_record(
+        _multitool_history(), 3, per_turn=[reasoning_trunc, content_trunc, clean]
+    )
+    shapes = [(t["finish_reason"], t["reasoning_chars"] and t["reasoning_chars"] > 0)
+              for t in record["per_turn"]]
+    assert shapes == [("length", True), ("length", 0), ("tool_calls", True)]
+    assert len(set(map(str, record["per_turn"]))) == 3  # three distinct shapes
+
+
+def test_schema_version_is_0034_1():
+    """AC2: 0033/1 -> 0034/1 — spec 0034 additive bump (per_turn/think_mode)."""
+    assert VERIFIER_SCHEMA_VERSION == "0034/1"
+
+
+def test_legacy_0031_and_0033_artifacts_still_validate():
+    """AC2: the version gate accepts BOTH legacy versions with no reasoning fields."""
+    base = {
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "correct",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+    }
+    validate_verifier_artifact(dict(base, schema_version="0031/1"))
+    validate_verifier_artifact(dict(base, schema_version="0033/1",
+                                    citations_submitted=1, citations_surviving=1))
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(dict(base, schema_version="9999/9"))
+
+
+def test_0034_artifact_reasoning_fields_optional():
+    """AC2: a 0034/1 artifact WITHOUT per_turn/think_mode still validates — a
+    non-reasoning model legitimately produces none (defaulted, never rejected)."""
+    artifact = {
+        "schema_version": "0034/1",
+        "requested_model": "m",
+        "endpoint": "http://localhost:11434",
+        "served_model": "m",
+        "configured_endpoint_models": ["m"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "empty",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+    }
+    validate_verifier_artifact(artifact)
+
+
+def test_written_artifact_carries_per_turn_and_think_mode(tmp_path, monkeypatch):
+    """AC2 (the 0033 written-JSON lesson): the fields survive run_verified_case's
+    HAND-ASSEMBLED artifact — asserted against the written JSON, not the record."""
+    import json as _json
+
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+
+    per_turn = [{"reasoning_chars": 51, "completion_tokens": 20,
+                 "finish_reason": "length"}]
+
+    class _StubBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [{"function": {"name": "grep"}}]},
+                ],
+                "tool_names_invoked": ["grep"],
+                "tool_names_failure": None,
+                "served_model": "qwen3:14b",
+                "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 1,
+                "citations_submitted": 0,
+                "citations_surviving": 0,
+                "per_turn": per_turn,
+                "think_mode": "default-omitted",
+            }
+            return []
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _StubBackend)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    _res, artifact_path = run_verified_case(
+        case_name="fake-case", settings=_Settings(), gateway=object(),
+        gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir, repo_path=str(tmp_path / "repo"), query="find it",
+    )
+    artifact = _json.loads(Path(artifact_path).read_text())
+    assert artifact["per_turn"] == per_turn
+    assert artifact["think_mode"] == "default-omitted"
+
+
+def test_verify_trajectory_outcome_equality_over_valid_fixtures():
+    """AC4: outcome-EQUALITY over the valid fixture set, post-0034-bump.
+
+    Byte-identity is explicitly DISCLAIMED — VerifierResult.to_dict() stamps the
+    CURRENT schema version, so re-serialized artifacts differ by design. What
+    must hold is the outcome tuple + the frozen codes.
+    """
+    r = verify_trajectory(_traj())
+    assert (
+        r.status, r.failure_reason, r.model_identity, r.model_invoked,
+        r.tool_names_invoked, r.terminal_bucket,
+    ) == ("PASSED", None, "served_present_and_matching", True,
+          ["grep", "symbols"], "correct")
+    # Four-facts contract + six failure codes untouched by 0034.
+    assert len(FAILURE_CODES) == 6
+    assert FAILURE_PRECEDENCE[0] == "artifact-incomplete"
+    # A failing trajectory still fails identically.
+    bad = verify_trajectory(_traj(served_model="wrong"))
+    assert (bad.status, bad.failure_reason) == ("FAILED", "model-mismatch")

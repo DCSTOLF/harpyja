@@ -193,3 +193,69 @@ def test_astropy_live_scoped_grep_survives_or_not_exercised():
             print("[0033 AC7] NOT-EXERCISED: model submitted no citations this run "
                   "(hermetic AC3 fixture carries the deterministic proof)")
         assert isinstance(traj, list)
+
+
+@pytest.mark.integration
+def test_live_records_nonzero_reasoning_or_not_exercised():
+    """Spec 0034 AC5: live recording proof with the 0023 precondition fallback.
+
+    Preflight-probe the stack (does THIS served model emit `reasoning` by
+    default?). If yes → a live explorer run must record ≥1 per_turn entry with
+    reasoning_chars > 0 (the hidden variable is now visible). If no → record
+    NOT-EXERCISED (never a silent pass) — AC1/AC2's hermetic fixtures carry the
+    mechanism proof. Skip-not-fail on absent stack.
+    """
+    import dataclasses
+
+    import requests
+
+    from harpyja.eval.live_verifier import probe_reasoning_default
+
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
+        served = {m.get("name") for m in resp.json().get("models", [])}
+        if "qwen3:14b" not in served:
+            pytest.skip(f"qwen3:14b not served: {sorted(served)}")
+    except Exception as e:
+        pytest.skip(f"Ollama not reachable: {e}")
+
+    settings = dataclasses.replace(
+        Settings(),
+        lm_api_base="http://127.0.0.1:11434/v1",
+        lm_model="qwen3:14b",
+        scout_max_turns=10,
+        scout_wall_clock_s=600.0,
+        lm_http_timeout_s=300.0,
+    )
+    gateway = ModelGateway(api_base=settings.lm_api_base, model=settings.lm_model)
+
+    if not probe_reasoning_default(gateway):
+        print("\n[0034 AC5] NOT-EXERCISED: served model emits no default reasoning "
+              "(hermetic AC1/AC2 fixtures carry the mechanism proof)")
+        return
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            _result, artifact_path = run_verified_case(
+                case_name="astropy__astropy-12907",
+                settings=settings,
+                gateway=gateway,
+                gold_span={"file": "astropy/modeling/separable.py",
+                           "start_line": 242, "end_line": 248},
+                out_dir=Path(tmpdir),
+            )
+        except ValueError as e:
+            pytest.skip(f"case setup/degrade: {e}")
+
+        with open(artifact_path) as f:
+            artifact = json.load(f)
+
+        per_turn = artifact.get("per_turn", [])
+        lens = [t.get("reasoning_chars") for t in per_turn]
+        print(f"\n[0034 AC5] think_mode={artifact.get('think_mode')} "
+              f"per-turn reasoning_chars={lens}")
+        assert per_turn, "per_turn missing from the written artifact"
+        assert any(c and c > 0 for c in lens), (
+            "precondition says the model reasons by default, but no per-turn "
+            "reasoning was recorded — the hidden variable is still invisible"
+        )

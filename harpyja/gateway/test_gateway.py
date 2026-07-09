@@ -410,3 +410,83 @@ def _socket_reachable(host, port, timeout=1.0):
             return True
     except OSError:
         return False
+
+
+# --- Spec 0034: reasoning + completion_tokens surfaced additively (AC1) ---
+
+
+def test_complete_with_tools_existing_return_keys_pinned():
+    """PIN (0034 T1): the pre-0034 return keys all present — the additive floor."""
+    def transport(url, payload):
+        return {"choices": [{"finish_reason": "stop", "message": {"content": "hi"}}],
+                "model": "m1"}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert {"content", "tool_calls", "finish_reason", "model"} <= set(out)
+
+
+def test_complete_with_tools_surfaces_reasoning():
+    """AC1: message.reasoning surfaces verbatim in the return dict."""
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "", "reasoning": "step by step..."}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert out["reasoning"] == "step by step..."
+
+
+def test_complete_with_tools_reasoning_absent_is_none():
+    """AC1: no reasoning key on the message → None (never fabricated)."""
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert out["reasoning"] is None
+
+
+def test_complete_with_tools_reasoning_present_empty_is_empty_string():
+    """AC1: present-but-empty reasoning is "" — the honest 0-vs-None source."""
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": "done", "reasoning": ""}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert out["reasoning"] == ""
+
+
+def test_complete_with_tools_surfaces_completion_tokens():
+    """AC1: usage.completion_tokens (the cap's currency) surfaces additively."""
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": ""}}],
+                "usage": {"prompt_tokens": 147, "completion_tokens": 642, "total_tokens": 789}}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert out["completion_tokens"] == 642
+
+
+def test_complete_with_tools_completion_tokens_absent_is_none():
+    """AC1: no usage block → completion_tokens is None."""
+    def transport(url, payload):
+        return {"choices": [{"message": {"content": ""}}]}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert out["completion_tokens"] is None
+
+
+def test_complete_with_tools_existing_keys_unchanged_by_additions():
+    """AC1: content/tool_calls/finish_reason/model identical pre/post-0034."""
+    tcs = [{"id": "c1", "type": "function", "function": {"name": "grep", "arguments": "{}"}}]
+
+    def transport(url, payload):
+        return {"choices": [{"finish_reason": "tool_calls",
+                             "message": {"content": "x", "tool_calls": tcs, "reasoning": "r"}}],
+                "model": "m2", "usage": {"completion_tokens": 5}}
+
+    gw = ModelGateway(api_base="http://127.0.0.1:11434/v1")
+    out = gw.complete_with_tools([{"role": "user", "content": "q"}], _TOOLS, transport=transport)
+    assert out["content"] == "x" and out["tool_calls"] == tcs
+    assert out["finish_reason"] == "tool_calls" and out["model"] == "m2"

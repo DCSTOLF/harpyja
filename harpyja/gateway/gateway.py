@@ -199,4 +199,9 @@ class ModelGateway:
             "tool_calls": message.get("tool_calls") or [],
             "finish_reason": str(finish_reason) if finish_reason is not None else "unknown",
             "model": response.get("model"),
+            # Spec 0034 (AC1): reasoning + the cap's token currency, surfaced
+            # ADDITIVELY. reasoning: absent → None, present-empty → "" (the honest
+            # 0-vs-None source); completion_tokens: absent usage → None.
+            "reasoning": message.get("reasoning"),
+            "completion_tokens": (response.get("usage") or {}).get("completion_tokens"),
         }

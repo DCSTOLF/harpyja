@@ -598,3 +598,190 @@ def test_backend_threads_citation_counts_into_trajectory(tmp_path):
     assert backend.last_trajectory is not None
     assert backend.last_trajectory["citations_submitted"] == 1
     assert backend.last_trajectory["citations_surviving"] == 0
+
+
+# --- Spec 0034: reasoning observability — pins, think_mode, accumulator ---
+
+from harpyja.scout.explorer_backend import derive_think_mode  # noqa: E402
+
+
+def test_default_outbound_request_body_pinned(tmp_path):
+    """PIN (0034 T1) + AC3 baseline: default Settings send EXACTLY max_tokens=2048 —
+    no think param, no chat_template_kwargs. The byte-identity floor."""
+    captured = {}
+
+    class _Gw:
+        api_base = "http://127.0.0.1:11434/v1"
+
+        def assert_local(self, resolver=None):
+            pass
+
+        def complete_with_tools(self, messages, tools, **params):
+            captured.update(params)
+            return {"content": "", "tool_calls": [_tc(
+                "submit_citations", citations=[])], "finish_reason": "tool_calls",
+                "model": "m", "reasoning": None, "completion_tokens": 7}
+
+    backend = ExplorerBackend(
+        gateway=_Gw(), repo_path=str(tmp_path), settings=Settings(),
+        manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert captured == {"max_tokens": 2048}
+
+
+def test_think_mode_default_omitted():
+    assert derive_think_mode(None, True) == "default-omitted"
+
+
+def test_think_mode_native_think_true():
+    assert derive_think_mode(True, True) == "native-think-true"
+
+
+def test_think_mode_native_think_false():
+    assert derive_think_mode(False, True) == "native-think-false"
+
+
+def test_think_mode_chat_template_disabled():
+    assert derive_think_mode(None, False) == "chat-template-disabled"
+
+
+def test_think_mode_native_wins_over_chat_template():
+    """Double-set (think=False + enable_thinking=False): native precedence — the
+    record is never ambiguous."""
+    assert derive_think_mode(False, False) == "native-think-false"
+    assert derive_think_mode(True, False) == "native-think-true"
+
+
+def test_run_accumulates_per_turn_reasoning_and_finish(tmp_path):
+    """AC2: a two-turn run lands two per_turn entries on last_trajectory."""
+    _file(tmp_path, "real.py", n=50)
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="n")],
+         "finish_reason": "tool_calls", "reasoning": "let me look", "completion_tokens": 300},
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+         "finish_reason": "tool_calls", "reasoning": "submitting now", "completion_tokens": 120},
+    )
+    backend = _backend(tmp_path, model_call=model)
+    backend.run("q", [])
+    pt = backend.last_trajectory["per_turn"]
+    assert [t["reasoning_chars"] for t in pt] == [len("let me look"), len("submitting now")]
+    assert [t["completion_tokens"] for t in pt] == [300, 120]
+    assert [t["finish_reason"] for t in pt] == ["tool_calls", "tool_calls"]
+
+
+def test_accumulator_captures_final_length_truncated_turn(tmp_path):
+    """AC2 (the turn the history route can't reach): a finish="length" final
+    response gets a per_turn entry even though it never enters model_turns."""
+    model = _scripted(
+        {"content": "", "tool_calls": [], "finish_reason": "length",
+         "reasoning": "x" * 51, "completion_tokens": 20},
+    )
+    backend = _backend(tmp_path, model_call=model)
+    with pytest.raises(ScoutUnavailable):
+        backend.run("q", [])
+    pt = backend.last_trajectory["per_turn"]
+    assert pt == [{"reasoning_chars": 51, "completion_tokens": 20,
+                   "finish_reason": "length"}]
+    # The intrinsic skew: the truncated turn is NOT in model_turns.
+    assert all("length" != t.get("finish_reason") for t in
+               backend.last_trajectory["model_turns"] if isinstance(t, dict))
+
+
+def test_accumulator_reset_per_run(tmp_path):
+    """AC2: per_turn from run 1 does not leak into run 2."""
+    _file(tmp_path, "real.py", n=50)
+    model1 = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="n")],
+         "finish_reason": "tool_calls", "reasoning": "a", "completion_tokens": 1},
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+         "finish_reason": "tool_calls", "reasoning": "b", "completion_tokens": 2},
+    )
+    backend = _backend(tmp_path, model_call=model1)
+    backend.run("q", [])
+    assert len(backend.last_trajectory["per_turn"]) == 2
+    backend._model_call = _scripted(
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+         "finish_reason": "tool_calls", "reasoning": "c", "completion_tokens": 3},
+    )
+    backend.run("q", [])
+    assert len(backend.last_trajectory["per_turn"]) == 1  # replaced, not accumulated
+
+
+def test_per_turn_reasoning_chars_none_when_absent_zero_when_empty(tmp_path):
+    """AC2: no reasoning key → None; reasoning="" → 0 — never fabricated."""
+    _file(tmp_path, "real.py", n=50)
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("grep", pattern="n")],
+         "finish_reason": "tool_calls"},  # no reasoning key at all
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+         "finish_reason": "tool_calls", "reasoning": ""},  # present-but-empty
+    )
+    backend = _backend(tmp_path, model_call=model)
+    backend.run("q", [])
+    pt = backend.last_trajectory["per_turn"]
+    assert pt[0]["reasoning_chars"] is None
+    assert pt[1]["reasoning_chars"] == 0
+
+
+def test_last_trajectory_carries_think_mode(tmp_path):
+    """AC2: last_trajectory records the derived effective thinking mode."""
+    _file(tmp_path, "real.py", n=50)
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+         "finish_reason": "tool_calls"},
+    )
+    backend = _backend(tmp_path, model_call=model)
+    backend.run("q", [])
+    assert backend.last_trajectory["think_mode"] == "default-omitted"
+
+
+def _capturing_gateway(captured):
+    class _Gw:
+        api_base = "http://127.0.0.1:11434/v1"
+
+        def assert_local(self, resolver=None):
+            pass
+
+        def complete_with_tools(self, messages, tools, **params):
+            captured.update(params)
+            return {"content": "", "tool_calls": [_tc(
+                "submit_citations", citations=[])], "finish_reason": "tool_calls",
+                "model": "m", "reasoning": None, "completion_tokens": 7}
+
+    return _Gw()
+
+
+def test_default_outbound_carries_no_think_param(tmp_path):
+    """AC3: default Settings → NO think key (byte-identical to the T1 pin)."""
+    captured = {}
+    backend = ExplorerBackend(
+        gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+        settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert "think" not in captured
+
+
+def test_explorer_think_true_sends_think_true(tmp_path):
+    """AC3: explorer_think=True rides the outbound request as think=True."""
+    captured = {}
+    backend = ExplorerBackend(
+        gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+        settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+        think=True,
+    )
+    backend.run("q", [])
+    assert captured.get("think") is True
+
+
+def test_explorer_think_false_sends_think_false(tmp_path):
+    """AC3: explorer_think=False rides as think=False (explicit disable)."""
+    captured = {}
+    backend = ExplorerBackend(
+        gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+        settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+        think=False,
+    )
+    backend.run("q", [])
+    assert captured.get("think") is False

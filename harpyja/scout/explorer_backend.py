@@ -49,6 +49,23 @@ _EXHAUSTION_CAUSE = {
 }
 
 
+def derive_think_mode(think: bool | None, enable_thinking: bool) -> str:
+    """The ONE canonical effective-thinking-mode label (spec 0034).
+
+    Native (`think` explicitly set) wins over the chat-template mechanism so a
+    double-set configuration can never produce an ambiguous record.
+    """
+    if think is True:
+        return "native-think-true"
+    if think is False:
+        return "native-think-false"
+    if enable_thinking is False:
+        return "chat-template-disabled"
+    if enable_thinking is True:
+        return "default-omitted"
+    return "unknown"
+
+
 def _tool_schemas() -> list[dict[str, Any]]:
     """Minimal OpenAI function schemas for the five navigation tools + the terminal action."""
     return [
@@ -164,6 +181,7 @@ class ExplorerBackend:
         clock: Callable[[], float] = time.monotonic,
         max_tokens: int = 2048,
         enable_thinking: bool = True,
+        think: bool | None = None,
     ) -> None:
         self._gateway = gateway
         self._repo_path = repo_path
@@ -182,6 +200,10 @@ class ExplorerBackend:
         # Spec 0028 (AC1) — the thinking knob. False ⇒ send
         # chat_template_kwargs={"enable_thinking": False}; True ⇒ omit it.
         self._enable_thinking = enable_thinking
+        # Spec 0034 — the native think knob (tri-state). None ⇒ OMIT the param ⇒
+        # the outbound request is byte-identical to pre-0034 (observability-only
+        # default). True/False are operator opt-in generation control.
+        self._think = think
         # Degrade-rate is a first-class reported field (the "every floor reports its
         # rate" convention): a run that raises ScoutUnavailable counts as a degrade;
         # a clean run — including an honest-empty submission — does not.
@@ -199,6 +221,10 @@ class ExplorerBackend:
         self.last_trajectory: dict[str, Any] | None = None
         # Track the served model from the last response for trajectory capture
         self._last_served_model: str | None = None
+        # Spec 0034 — per-turn (reasoning_chars, completion_tokens, finish_reason)
+        # accumulator: the ONE seam that sees every response, including a
+        # finish="length" final turn that never enters the loop history.
+        self._per_turn: list[dict[str, Any]] = []
 
     @property
     def degrade_rate(self) -> float:
@@ -213,6 +239,10 @@ class ExplorerBackend:
         params: dict[str, Any] = {"max_tokens": self._max_tokens}
         if not self._enable_thinking:
             params["chat_template_kwargs"] = {"enable_thinking": False}
+        # Spec 0034: the native think knob rides ONLY when explicitly set —
+        # None omits the param and the request stays byte-identical (AC3 pin).
+        if self._think is not None:
+            params["think"] = self._think
 
         def call(messages: list[dict[str, Any]]) -> Mapping[str, Any]:
             return self._gateway.complete_with_tools(messages, schemas, **params)
@@ -228,6 +258,7 @@ class ExplorerBackend:
         self.run_count += 1
         self.last_turns_used = None  # reset per run
         self._last_served_model = None  # reset per run
+        self._per_turn = []  # reset per run (spec 0034)
         try:
             return self._run_loop(query)
         except ScoutUnavailable:
@@ -258,6 +289,12 @@ class ExplorerBackend:
         def wrapped_model_call(messages: list[dict[str, Any]]) -> Mapping[str, Any]:
             response = model_call(messages)
             self._last_served_model = response.get("model")
+            reasoning = response.get("reasoning")
+            self._per_turn.append({
+                "reasoning_chars": len(reasoning) if reasoning is not None else None,
+                "completion_tokens": response.get("completion_tokens"),
+                "finish_reason": response.get("finish_reason"),
+            })
             return response
 
         try:
@@ -295,6 +332,8 @@ class ExplorerBackend:
             endpoint=self._gateway.api_base,
             citations_submitted=result.citations_submitted,
             citations_surviving=result.citations_surviving,
+            per_turn=list(self._per_turn),
+            think_mode=derive_think_mode(self._think, self._enable_thinking),
         )
 
         if result.outcome == SUBMITTED:

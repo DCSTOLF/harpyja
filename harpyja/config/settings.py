@@ -163,6 +163,13 @@ class Settings:
     # `/no_think` query token. Provisional default True (thinking-ON+cap measured
     # cleanest at 2.5s); AC6 finalizes against localization quality. `explorer_`-scoped.
     explorer_enable_thinking: bool = True
+    # Spec 0034 — `explorer_think` — the NATIVE think knob (Ollama `think` request
+    # param), tri-state: None ⇒ OMIT the param ⇒ the outbound request is
+    # byte-identical to pre-0034 (the observability-only default); True/False are
+    # operator opt-in generation control. Coexists with `explorer_enable_thinking`
+    # (the llama.cpp chat-template-era mechanism); the recorded `think_mode` on the
+    # trajectory disambiguates (native wins on double-set). `explorer_`-scoped.
+    explorer_think: bool | None = None
 
     def __post_init__(self) -> None:
         # Fires on every construction path — defaults, toml/env merge, and
@@ -191,7 +198,7 @@ def _coerce(name: str, raw: Any) -> Any:
         else:
             items = [part.strip() for part in str(raw).split(",")]
         return tuple(p for p in items if p)
-    if target is bool or target_str == "bool":
+    if target is bool or target_str in ("bool", "bool | None"):
         if isinstance(raw, bool):
             return raw
         return str(raw).strip().lower() in {"1", "true", "yes", "on"}
