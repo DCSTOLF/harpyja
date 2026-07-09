@@ -1,7 +1,7 @@
 ---
 id: "0033"
 title: "scoped-grep-paths"
-status: reviewed
+status: planned
 started_at_sha: f736bde
 created: 2026-07-08
 authors: [claude]
