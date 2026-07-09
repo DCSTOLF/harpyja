@@ -253,7 +253,10 @@ def test_live_records_nonzero_reasoning_or_not_exercised():
         per_turn = artifact.get("per_turn", [])
         lens = [t.get("reasoning_chars") for t in per_turn]
         print(f"\n[0034 AC5] think_mode={artifact.get('think_mode')} "
-              f"per-turn reasoning_chars={lens}")
+              f"per-turn reasoning_chars={lens} "
+              f"bucket={artifact.get('terminal_bucket')} "
+              f"submitted={artifact.get('citations_submitted')} "
+              f"surviving={artifact.get('citations_surviving')}")
         assert per_turn, "per_turn missing from the written artifact"
         assert any(c and c > 0 for c in lens), (
             "precondition says the model reasons by default, but no per-turn "
