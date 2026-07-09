@@ -61,10 +61,36 @@ paths (`grep`, `glob`, `ls`, `symbols`, `read_span`) returns repo-relative paths
 as one contract test over the tool suite, not per-tool prose.
 
 **INVARIANT (found-then-dropped is visible forever):** the trajectory/verifier record carries
-a submitted-vs-surviving citation count (e.g. `citations_submitted` / `citations_surviving`
-or a dropped count), so a normalization drop is DISTINGUISHABLE from an honest-empty
-submission in the artifact. This class of defect must never again hide inside `empty`.
-Additive fields, `VERIFIER_SCHEMA_VERSION` bumped per the additive-last-with-defaults rule.
+a submitted-vs-surviving citation count (`citations_submitted` / `citations_surviving`),
+so a normalization drop is DISTINGUISHABLE from an honest-empty submission in the artifact.
+This class of defect must never again hide inside `empty`. Additive fields,
+`VERIFIER_SCHEMA_VERSION` bumped per the additive-last-with-defaults rule.
+
+**DECIDED (count at the drop seam — `fc_citation_dropped_count` is NOT this measurement):**
+there are TWO normalize passes and the existing field watches the wrong one. The explorer's
+drop happens inside the loop's terminal action — `submit.submit_citations` →
+`normalize_spans` — where the count is currently DISCARDED (no tally). `ScoutEngine.search`
+then re-normalizes the backend's ALREADY-normalized survivors via
+`normalize_spans_with_tally`, and THAT pass feeds `ScoutTally.dropped` →
+`fc_citation_dropped_count` — structurally ~0 for submit-time drops in the explorer era
+(the 0032 astropy drop was invisible to it). Therefore: (a) the counts are captured AT the
+submit seam (`submitted = len(citations)` in, `surviving = len(normalized)` out — the one
+pass where the explorer drop occurs), threaded as data `LoopResult` → `ExplorerBackend` →
+`build_trajectory_record` → verifier artifact, mirroring the `last_turns_used` /
+`last_trajectory` side-channel discipline; (b) `fc_citation_dropped_count` is NOT overloaded,
+repurposed, or duplicated — its actual scope (engine-pass drops, ~0 for the explorer) is
+documented as part of this spec's conventions entry, extending the 0025 backend-neutral
+naming-debt record; the eval-report schema is NOT touched (the bake-off consumes verifier
+artifacts, where the per-case counts now live).
+
+**DECIDED (fold the cause-swallowing fix in — same file, same function, tiny diff):**
+`run_verified_case` (live_verifier.py) currently catches `ScoutUnavailable` without binding
+it and then raises a cause-less `ValueError("Explorer did not capture trajectory")` when the
+explorer degraded before producing a `LoopResult` — the 0031 diagnosability gap that cost a
+masked-cause debugging round in 0032's AC6 run. Since 0033's AC6 re-run drives this exact
+function, the fix folds in: bind the exception, carry the typed cause in the raise
+(`... (scout cause: {e.cause})`, `raise ... from e`). No behavior change on any path that
+captures a trajectory; only the failure message/chain improves.
 
 **INVARIANT (behavior-preserving on unscoped input):** `grep(pattern)` with no scope (or
 scope=".") returns byte-identical results to today. The fix changes ONLY the path prefix of
@@ -81,8 +107,12 @@ scoped results; match content, bounds, and clamps are untouched.
 - Regression-pin the 0032 evidence pair as a unit fixture: a scoped grep whose hit is cited
   through `submit_citations` must now survive `normalize_spans` (the astropy shape), and the
   unscoped path stays byte-identical (the django shape).
-- Add the submitted-vs-surviving count to `build_trajectory_record` / the verifier artifact
-  (additive, schema-bumped), so found-then-dropped is a first-class recorded fact.
+- Add the submitted-vs-surviving count at the SUBMIT seam (the decided design above):
+  `submit_citations` surfaces `(submitted, surviving)`, threaded through `LoopResult` →
+  `ExplorerBackend` → `build_trajectory_record` → the verifier artifact (additive,
+  schema-bumped), so found-then-dropped is a first-class recorded fact.
+- Fix `run_verified_case`'s cause-swallowing: bind the caught `ScoutUnavailable` and carry
+  its typed cause into the "Explorer did not capture trajectory" raise (`from e`).
 - Re-run the 0032 AC6 astropy case live: the scoped-grep citation should now survive
   normalization and the bucket should reflect the model's actual output (expected:
   wrong-file for the historical cite, but the RUN's bucket is whatever the model does —
@@ -98,16 +128,23 @@ scoped results; match content, bounds, and clamps are untouched.
    survives `normalize_spans` (no drop); the django shape unchanged.
 4. **[unit]** Blast radius: the Deep `search` host tool and the Tier-0 locate path are
    asserted unaffected on unscoped input (shared-engine consumers enumerated + each pinned).
-5. **[unit]** Verifier carries submitted-vs-surviving: `build_trajectory_record` (and the
-   artifact) record the counts additively; a found-then-dropped fixture is distinguishable
-   from an honest-empty fixture in the artifact; `VERIFIER_SCHEMA_VERSION` bumped,
-   legacy artifacts still validate.
-6. **[integration]** The 0032 astropy case re-run live: the scoped-grep citation is no longer
+5. **[unit]** Verifier carries submitted-vs-surviving, counted AT THE SUBMIT SEAM:
+   `submit_citations` surfaces `(submitted, surviving)`; the counts thread LoopResult →
+   backend → `build_trajectory_record` → artifact (additive); a found-then-dropped fixture
+   (submitted=1, surviving=0) is distinguishable from an honest-empty fixture
+   (submitted=0, surviving=0) in the artifact; `VERIFIER_SCHEMA_VERSION` bumped, legacy
+   artifacts still validate. `fc_citation_dropped_count` and the eval-report schema are
+   byte-untouched (asserted), its engine-pass-only scope documented.
+6. **[unit]** `run_verified_case` carries the typed cause: when the explorer degrades
+   pre-trajectory, the raise names `e.cause` and chains `from e` — pinned by a unit test
+   with a raising fake backend; behavior on trajectory-capturing paths unchanged.
+7. **[integration]** The 0032 astropy case re-run live: the scoped-grep citation is no longer
    dropped (surviving count > 0 when the model cites a scoped-grep hit), and the artifact
    records both counts. Skip-not-fail on absent stack; the deliverable run fails loud.
-7. **[doc]** conventions.md: the tool-contract rule (every path-returning tool emits
+8. **[doc]** conventions.md: the tool-contract rule (every path-returning tool emits
    repo-relative paths; fix path-shape defects at the engine seam, never per-caller, never
-   by downstream repair) + the 0012→0025→0033 history recorded.
+   by downstream repair) + the 0012→0025→0033 history + the two-normalize-passes scope note
+   for `fc_citation_dropped_count` recorded.
 
 ## Out of Scope
 
@@ -115,8 +152,9 @@ scoped results; match content, bounds, and clamps are untouched.
   at the producer.
 - The bake-off / eval set themselves (they run AFTER this clears).
 - Any change to normalize_spans' validation rules (repo-confine + is_file stay the gate).
-- `run_verified_case` cause-swallowing diagnosability gap (0031 debt, noted in 0032
-  ac6-findings.md — separate line item, fold in only if trivially adjacent).
+- Any eval-report schema change (`fc_citation_dropped_count` et al. byte-untouched — the
+  per-case counts live on the verifier artifact, where the bake-off reads).
+- Renaming the `fc_`-prefixed report fields (0025 naming debt — stays debt).
 
 ## Open Questions
 
@@ -127,6 +165,3 @@ scoped results; match content, bounds, and clamps are untouched.
 2. Does the engine need the repo root threaded as a constructor field, or can the wrapper
    (`explorer_tools.grep`) re-prefix — and if the wrapper does it, does the Deep `search`
    host tool have the same defect today (check: does Deep pass subdirectory scopes)?
-3. Where exactly does submitted-vs-surviving live: on the trajectory record only, or also
-   surfaced into the eval report schema (a `fc_citation_dropped`-adjacent field already
-   exists — reconcile rather than duplicate)?
