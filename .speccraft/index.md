@@ -7,7 +7,7 @@ A read-only, offline MCP server that turns a natural-language query into exact `
 - Python 3.12+
 - FastMCP (MCP server; stdio + streamable HTTP)
 - Tree-sitter (symbol layer: Go, Rust, Python, JS/TS, C#, Java, C/C++) + ripgrep fallback
-- Tier 1 "Scout": native explorer loop (a general OpenAI-compatible tool-calling model over four read-only tools `{grep,glob,read_span,ls}`) — as of spec 0024 (+`ls` spec 0027); FastContext is FULLY REMOVED as of spec 0025 (no external finder dependency; the explorer is the sole Scout backend, running on `lm_model`)
+- Tier 1 "Scout": native explorer loop (a general OpenAI-compatible tool-calling model over five read-only tools `{grep,glob,read_span,ls,symbols}`) — as of spec 0024 (+`ls` spec 0027, +`symbols` spec 0030); FastContext is FULLY REMOVED as of spec 0025 (no external finder dependency; the explorer is the sole Scout backend, running on `lm_model`)
 - DSPy `dspy.RLM` over Deno/Pyodide WASM sandbox (Tier 2 "Deep")
 - Local OpenAI-compatible model endpoint: llama.cpp (`llama-server`) or Ollama. As of spec 0025 the default `lm_model` (`hf.co/Qwen/Qwen3-8B-GGUF:latest`) serves BOTH the Scout explorer loop and Deep; any OpenAI-compatible tool-calling model is swappable. ⚠️ **8 GB footprint NOT validated**: an 8B-class model co-loaded with Deep + the Deno/Pyodide sandbox under `mode=auto` exceeds a small GPU — treat "8 GB" as aspirational, not a validated minimum
 - `uv` for env/deps

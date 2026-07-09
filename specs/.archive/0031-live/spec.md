@@ -1,7 +1,7 @@
 ---
 id: "0031"
 title: "live"
-status: ready-for-operator
+status: closed
 started_at_sha: 78e7d07
 created: 2026-07-08
 authors: [claude]

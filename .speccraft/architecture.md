@@ -129,8 +129,8 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    driven over a bounded read-only loop to a citation list: `context_map.build_context_map`
    renders a pre-model filtered tree from the manifest (no file bytes; the
    vendor/test/generated exclusion is a DISPLAY concern only, tool scope unaffected);
-   `explorer_tools.build_explorer_tools` returns (as of spec 0027) EXACTLY FOUR `confine_path`-guarded,
-   Settings-bounded, read-only navigation closures `{grep, glob, read_span, ls}` (`ls` added spec 0027) mirroring
+   `explorer_tools.build_explorer_tools` returns (as of spec 0030) EXACTLY FIVE `confine_path`-guarded,
+   Settings-bounded, read-only navigation closures `{grep, glob, read_span, ls, symbols}` (`ls` added spec 0027, `symbols` added spec 0030) mirroring
    `deep/host_tools.build_host_tools` — `grep`/`glob` share the SAME `symbols.ripgrep.RipgrepEngine`
    the Deep `search` tool wraps (one bounded rg source of truth), `read_span` reuses
    `server.tools.read_snippet`, `glob` normalizes to file-level `CodeSpan`s bounded by
@@ -527,7 +527,7 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
   precondition. See history.md 2026-06-26.
 - Tier 1 (Scout) is live and additive on the Tier-0 floor. **As of spec 0024 the
   production Tier-1 backend is the native `ExplorerBackend` (a general tool-calling
-  model over four read-only tools — `{grep,glob,read_span,ls}` as of spec 0027 — to a `submit_citations` terminal action), which
+  model over five read-only tools — `{grep,glob,read_span,ls,symbols}` as of spec 0030 — to a `submit_citations` terminal action), which
   RETIRED and replaced the FastContext adapter described below; as of spec 0025
   FastContext is FULLY REMOVED (single canonical `build_scout_engine` factory over
   `ExplorerBackend`, running on `lm_model`) and the FastContext description below is
@@ -588,6 +588,28 @@ Tiers are adapters behind stable interfaces (`Locator` protocol) and stay statel
 - Filesystem: read-only access to the target repo's **source**; manifest + symbol
   index are derived artifacts written to `<repo>/.harpyja/` (self-ignoring) or, when
   the repo is unwritable, `${XDG_CACHE_HOME:-~/.cache}/harpyja/<repo-hash>/`.
+
+## Spec 0030 architecture updates — Tier-0 `symbols` as the fifth explorer tool
+
+**As of spec 0030 `explorer_tools.build_explorer_tools` returns EXACTLY FIVE tools** —
+`{grep, glob, read_span, ls, symbols}` — the exact-tool-count convention amended 4 → 5
+IN LOCKSTEP (convention text + both hard-count tests, same commit). The fifth tool
+`symbols(path)` is a Tier-0 FILE-LOCAL wrapper over the existing symbol index (NO new
+parser): it returns kind+span `CodeSpan`s for one file, path-normalized and
+confined-after-resolution, clamped by the new `Settings.scout_symbols_max_entries`
+(default 400). When the manifest marks the file's symbols `degraded`, the tool falls back
+to a ripgrep def-scan with a VISIBLE `degraded: true` marker (never a silent downgrade).
+Wiring threads `symbol_records` + `manifest` into the tool builder via
+`load_symbols_or_none`; a shared `record_to_codespan` projection was extracted for the
+symbols tool and its consumers. A version-stamped lift-report schema shipped
+(`symbols_lift_report.py`, `"0030/1"`). Honest close status: the TOOL is PROVEN (20+
+unit tests, clean live run to terminal with the 5-tool suite, no degrade) but the LIFT
+HYPOTHESIS IS NOT MEASURED — recorded inconclusive-and-inconsistent (the live bucket
+oracle was a `has_citations→CORRECT` proxy, the astropy control moved via a mechanism a
+file-local tool cannot produce, symbols invocation unconfirmed, N=2); the real lift run
+with a ground-truth oracle was the follow-up that became specs 0031–0033. First
+proof-of-mechanism (a live `symbols` invocation on astropy) landed in the 0033 adjacent
+think-experiment, causal claim withheld. See history.md 2026-07-08 (spec 0030).
 
 ## Spec 0031 architecture updates — trajectory-verified live measurement
 

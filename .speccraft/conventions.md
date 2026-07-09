@@ -3,7 +3,11 @@
 ## Naming
 
 - Modules/functions/variables: `snake_case`. Classes: `PascalCase`. Constants: `UPPER_SNAKE_CASE`.
-- Test functions: `test_<subject>_<scenario>`. <!-- enforce: regex pattern="^def test_" scope="**/test_*.py" -->
+- Test functions: `test_<subject>_<scenario>`. <!-- enforce: regex pattern="^def test_[a-z0-9]+\(" scope="harpyja/" -->
+  (Enforce-tag semantics: speccraft-drift treats a pattern MATCH as a VIOLATION, so the
+  pattern must match BAD code — here a single-segment `def test_foo(` missing the
+  `_<scenario>` part. Scope uses the tool's directory-prefix form (`harpyja/`) because
+  its globber (`filepath.Match`) has no `**` recursion; RE2 has no lookahead.)
 
 ## Types & interfaces
 
@@ -736,6 +740,22 @@
 - **A citation drop is counted AT the seam where it happens, and the count rides the verifier artifact — `fc_citation_dropped_count` does NOT measure the explorer's submit-time drop** (spec 0033). There are TWO normalize passes: `submit_citations` → `normalize_spans` (the loop's terminal action — the ONE pass where an explorer citation drops; pre-0033 the count was discarded) and `ScoutEngine.search` → `normalize_spans_with_tally` (re-normalizes the backend's ALREADY-normalized survivors — its `ScoutTally.dropped` → `fc_citation_dropped_count` is structurally ~0 for submit-time drops; scope documented, field byte-untouched). `submit_citations` returns `SubmitResult(spans, submitted, surviving)`; the counts thread `LoopResult` → `ExplorerBackend` → `build_trajectory_record` → the verifier artifact as `citations_submitted`/`citations_surviving` (`VERIFIER_SCHEMA_VERSION "0031/1" → "0033/1"`, version-GATED validator so legacy artifacts still validate), making found-then-dropped `(1, 0)` structurally distinguishable from honest-empty `(0, 0)` — this class can never hide inside an `empty` bucket again. (See `harpyja/scout/submit.py` `SubmitResult`, `harpyja/eval/live_verifier.py` `_KNOWN_VERIFIER_SCHEMA_VERSIONS`, spec 0033 AC5.)
 - **One parser, strict-wins: tool-call-name extraction from a trajectory has exactly ONE implementation** (spec 0032). `extract_tool_names` in `harpyja/eval/live_verifier.py` is the canonical parser; BOTH the verify path (`verify_trajectory`) and the live builder (`build_trajectory_record`, called by `ExplorerBackend`) route through it — never a second inline copy (the 0031 T20 divergence: the inline copy silently SKIPPED a nameless tool_call the verify path FAILED, a false measurement waiting for the first downstream consumer of the builder's list). The strict behavior wins: a tool_call lacking `function.name` is a `tool-names-unextractable` typed failure, never a silent skip — surfaced as raised-into-status in the verify path and as DATA (`tool_names_failure` on the record) in the live builder, which must never raise mid-loop. Pinned by an import-identity test (monkeypatch the canonical symbol; only a true delegate observes it) plus a source-audit test that rots false if an inline `seen = set()` name loop reappears. The 0032 OQ2 audit confirmed the other three facts (model identity / tiers_run / terminal bucket) are each single-sourced — tool-names was the only duplicated parse. (See `harpyja/eval/live_verifier.py` `extract_tool_names` / `build_trajectory_record`, `test_live_verifier.py` spec-0032 block, spec 0032 AC1/AC2/AC8.)
 - **Every live capability measurement is accompanied by a durable trajectory-verified artifact** (spec 0031). A live run's result is trustworthy only when paired with a **verifier artifact** that **proves** the four facts: (1) model identity (the model that ran), (2) model invocation (Tier-1 was engaged), (3) tool names (which tools were invoked), and (4) terminal outcome (the gold-span classification). The verifier artifact carries a machine-readable `status ∈ {PASSED, FAILED}` and, if FAILED, a precise `failure_reason ∈ {artifact-incomplete, model-unknown, model-mismatch, model-not-invoked, tool-names-unextractable, terminal-bucket-missing}` — deterministic precedence order when multiple facts are unprovable. A live capability claim unaccompanied by the artifact is inadmissible (the no-silent-capability rule applied to measurement provenance). Bind all future live measurement specs (bake-off, eval set, capability reports) to this convention: `harpyja/eval/live_verifier.py` defines `VERIFIER_SCHEMA_VERSION`, the `verify_trajectory` function, the six failure codes, and the `VerifierResult` shape that carries all four facts. (See `harpyja/eval/live_verifier.py`, spec 0031 AC1/AC5/AC7.)
+
+## Speccraft memory & spec-ledger process
+
+- **Every `.speccraft/history.md` ADR header ends with a trailing `(spec NNNN)` provenance
+  suffix** (`(specs A, B)` for multi-spec entries). The spec-0024 history parser
+  (`history_provenance_ids`) recovers per-decision provenance ONLY from that suffix; without
+  it, `consolidate_backfill_order` cannot order by history chronology and silently falls back
+  to `created:`-then-ID. Discovered at the 2026-07-09 sync: 24 of 25 live entries lacked the
+  suffix (only the 0021 entry carried it). Applies to every new entry; back-annotating old
+  headers is optional.
+- **Spec frontmatter uses the canonical schema and nothing else**: `id: "NNNN"` (quoted,
+  zero-padded), `title:`, `status:`, `started_at_sha:`, `created: YYYY-MM-DD`. Never
+  `spec_id:`/`date:` (the 0030 variant, normalized at the 2026-07-09 sync) — alternate keys
+  break consolidate-backfill's `created:` ordering and the id parser. A spec's terminal
+  `status:` must be flipped at close (`ready-for-operator` left stale on 0031 hid it from
+  backfill candidacy).
 
 ## Logging
 

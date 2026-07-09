@@ -1,8 +1,9 @@
 ---
-spec_id: 0030
+id: "0030"
 title: Tier-0 symbols as a callable explorer tool (the pull affordance for span precision)
-date: 2026-07-07
 status: closed
+started_at_sha: dd193a1
+created: 2026-07-07
 ---
 
 # Spec 0030: Tier-0 symbols as a callable explorer tool
