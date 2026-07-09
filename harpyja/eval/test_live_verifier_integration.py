@@ -178,7 +178,8 @@ def test_astropy_live_scoped_grep_survives_or_not_exercised():
         traj = artifact.get("model_turns", [])
         submitted = artifact.get("citations_submitted")
         surviving = artifact.get("citations_surviving")
-        print(f"\n[0033 AC7] citations_submitted={submitted} surviving={surviving}")
+        print(f"\n[0033 AC7] citations_submitted={submitted} surviving={surviving} "
+              f"terminal_bucket={artifact.get('terminal_bucket')}")
 
         if submitted is not None and submitted > 0:
             # The model cited something: the fix means a scoped-grep cite SURVIVES —
