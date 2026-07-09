@@ -119,3 +119,87 @@ def test_terse_floor_requires_multiple_repos():
 
     multi = [_case(f"c{i}", repo=["x/a", "x/b", "x/c"][i % 3]) for i in range(12)]
     assert validate_terse_set_floor(_ds(multi)).ok
+
+
+# --- spec 0036 AC7/OQ3: full-set target + conceptual-stratum reportability -------
+
+
+def _tagged_case(cid: str, repo: str, reachability: str) -> EvalCase:
+    return EvalCase(
+        case_id=cid,
+        query="q",
+        repo=repo,
+        expected_spans=(ExpectedSpan(path="a.py", start_line=1, end_line=2),),
+        classification="point",
+        schema_version="0036/1",
+        gold_withheld=True,
+        query_provenance="model-authored-blind",
+        classification_provenance="hand-labeled-by-intent",
+        reachability=reachability,
+        reachability_provenance="mechanical",
+        concept_patch_relation="same",
+    )
+
+
+def test_full_set_meets_frozen_full_n_target():
+    # The static min_n=12 floor is NOT the representative-set size gate: the full
+    # set must ALSO clear the governing frozen config's full_n_target (30).
+    from harpyja.eval.ac8_pilot import PREREGISTERED_AC8_CONFIG
+    from harpyja.eval.terse_dataset import meets_full_n_target
+
+    repos = ["x/a", "x/b", "x/c"]
+    thirty = [_tagged_case(f"c{i}", repos[i % 3], "lexical") for i in range(30)]
+    twelve = [_tagged_case(f"c{i}", repos[i % 3], "lexical") for i in range(12)]
+    assert meets_full_n_target(_ds(thirty), PREREGISTERED_AC8_CONFIG) is True
+    assert meets_full_n_target(_ds(twelve), PREREGISTERED_AC8_CONFIG) is False
+
+
+def test_conceptual_stratum_reportability_floor():
+    # OQ3's PRE-DECLARED floor: the conceptual stratum must hold >= 5 cases for the
+    # axis to be reported as a split; below that it is UNDER_POPULATED — a typed
+    # finding, never a silent merge into the aggregate.
+    from harpyja.eval.terse_dataset import (
+        STRATUM_REPORTABLE,
+        STRATUM_UNDER_POPULATED,
+        conceptual_stratum_report,
+    )
+
+    repos = ["x/a", "x/b", "x/c"]
+
+    def _mix(conceptual_n: int, total: int) -> list[EvalCase]:
+        return [
+            _tagged_case(
+                f"c{i}", repos[i % 3], "conceptual" if i < conceptual_n else "lexical"
+            )
+            for i in range(total)
+        ]
+
+    lex_n, con_n, status = conceptual_stratum_report(_ds(_mix(5, 30)))
+    assert (lex_n, con_n, status) == (25, 5, STRATUM_REPORTABLE)
+
+    lex_n, con_n, status = conceptual_stratum_report(_ds(_mix(4, 30)))
+    assert (lex_n, con_n, status) == (26, 4, STRATUM_UNDER_POPULATED)
+
+
+def test_conceptual_stratum_pilot_floor_is_two():
+    # The pilot-sized floor (>= 2) — pre-declared alongside the full-set floor.
+    from harpyja.eval.terse_dataset import (
+        STRATUM_REPORTABLE,
+        STRATUM_UNDER_POPULATED,
+        conceptual_stratum_report,
+    )
+
+    repos = ["x/a", "x/b"]
+    pilot = [
+        _tagged_case(f"c{i}", repos[i % 2], "conceptual" if i < 2 else "lexical")
+        for i in range(10)
+    ]
+    _, con_n, status = conceptual_stratum_report(_ds(pilot), pilot_sized=True)
+    assert (con_n, status) == (2, STRATUM_REPORTABLE)
+
+    thin = [
+        _tagged_case(f"c{i}", repos[i % 2], "conceptual" if i < 1 else "lexical")
+        for i in range(10)
+    ]
+    _, con_n, status = conceptual_stratum_report(_ds(thin), pilot_sized=True)
+    assert (con_n, status) == (1, STRATUM_UNDER_POPULATED)

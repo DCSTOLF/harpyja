@@ -63,6 +63,20 @@ def config_hash(cfg: Ac8PilotConfig) -> str:
 
 AC8_CONFIG_HASH = config_hash(PREREGISTERED_AC8_CONFIG)
 
+# spec 0036: the 0026 freeze's arm A (hf.co/Qwen/Qwen3-8B-GGUF:latest) is NOT
+# servable on the live stack, so running the pilot under the old config as-frozen is
+# impossible — and silently substituting a model under the old hash is exactly the
+# post-hoc steering the freeze prevents. This NEW pre-registered config swaps ONLY
+# the arm identities to servable models with a real capability contrast
+# (qwen3:14b strong vs qwen3:4b-instruct weak); every threshold is copied verbatim.
+# Committed BEFORE the 0036 pilot fires; the pilot artifact cites this hash.
+PREREGISTERED_AC8_CONFIG_0036 = Ac8PilotConfig(
+    reference_model_a="qwen3:14b",
+    reference_model_b="qwen3:4b-instruct",
+)
+
+AC8_CONFIG_HASH_0036 = config_hash(PREREGISTERED_AC8_CONFIG_0036)
+
 
 @dataclasses.dataclass(frozen=True)
 class PilotPair:

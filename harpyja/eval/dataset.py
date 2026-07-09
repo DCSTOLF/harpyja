@@ -31,6 +31,21 @@ CLASSIFICATIONS = frozenset({"point", "broad"})
 # introduced, not bumped — it is distinct from report.SCHEMA_VERSION.
 DATASET_SCHEMA_VERSION = "0026/1"
 
+# spec 0036: the tagged-case version. Detection is known-versions-SET membership
+# (the live_verifier version-gate pattern), so 0026/1 legacy rows keep loading with
+# the new fields defaulted while 0036/1 rows are held to the tag-required rule.
+DATASET_SCHEMA_VERSION_0036 = "0036/1"
+_KNOWN_TERSE_SCHEMA_VERSIONS = frozenset({DATASET_SCHEMA_VERSION, DATASET_SCHEMA_VERSION_0036})
+
+# spec 0036 tag enums. The reachability tag is what lets bake-off results split
+# "model can't localize" from "lexical tools can't reach conceptual gold"; its
+# provenance keeps the mechanical/hand-labeled mix auditable. concept_patch_relation
+# is mandatory on every 0036/1 row; the concept span exists ONLY on divergent rows
+# (the hand-labeled, audited exemption from join-only labels — never the authority).
+REACHABILITIES = frozenset({"lexical", "conceptual"})
+REACHABILITY_PROVENANCES = frozenset({"mechanical", "hand-labeled"})
+CONCEPT_PATCH_RELATIONS = frozenset({"same", "divergent"})
+
 # Terse-schema (0026) cases MUST carry these leakage-guard provenance fields, so AC2's
 # guard is enforced by the loud loader and never rides as an unvalidated passenger.
 # (`label_provenance` and `leaked_tokens` are populated at JOIN time, not required here.)
@@ -72,6 +87,14 @@ class EvalCase:
     gold_withheld: bool = False
     leaked_tokens: tuple[str, ...] = ()
     classification_provenance: str | None = None
+    # spec 0036: additive tag fields, mandatory on 0036/1 rows (loud loader),
+    # defaulted on 0026/1/legacy rows. concept_span(+provenance) exist only when
+    # concept_patch_relation == "divergent".
+    reachability: str | None = None
+    reachability_provenance: str | None = None
+    concept_patch_relation: str | None = None
+    concept_span: ExpectedSpan | None = None
+    concept_span_provenance: str | None = None
 
 
 def _require(row: dict[str, Any], key: str, line_no: int) -> Any:
@@ -120,7 +143,7 @@ def _parse_case(row: Any, line_no: int) -> EvalCase:
         )
 
     schema_version = row.get("schema_version")
-    is_terse = schema_version == DATASET_SCHEMA_VERSION
+    is_terse = schema_version in _KNOWN_TERSE_SCHEMA_VERSIONS
 
     # Version gate (AC3/AC5): a terse (0026) row MAY omit expected_spans (they are
     # joined by case_id from the pinned raw fixture) but MUST carry the leakage-guard
@@ -134,6 +157,8 @@ def _parse_case(row: Any, line_no: int) -> EvalCase:
                 raise DatasetError(f"line {line_no}: 'expected_spans' must be a list")
             spans = tuple(_parse_span(s, line_no) for s in spans_raw)
         guard = _parse_terse_guard(row, line_no)
+        if schema_version == DATASET_SCHEMA_VERSION_0036:
+            guard.update(_parse_0036_tags(row, line_no))
     else:
         spans_raw = _require(row, "expected_spans", line_no)
         if not isinstance(spans_raw, list) or not spans_raw:
@@ -181,6 +206,54 @@ def _parse_terse_guard(row: dict[str, Any], line_no: int) -> dict[str, Any]:
             )
         guard["classification_provenance"] = cp
     return guard
+
+
+def _parse_0036_tags(row: dict[str, Any], line_no: int) -> dict[str, Any]:
+    """Validate + extract the spec-0036 mandatory tags (loud, version-gated).
+
+    Two distinct validation contracts: the axis tags (reachability + provenance,
+    concept_patch_relation) are MANDATORY on every 0036/1 row; the concept span
+    (+ its provenance) is REQUIRED iff relation == "divergent" and FORBIDDEN on
+    "same" — a `same` row carrying a span is a contradiction, rejected.
+    """
+    for key, allowed in (
+        ("reachability", REACHABILITIES),
+        ("reachability_provenance", REACHABILITY_PROVENANCES),
+        ("concept_patch_relation", CONCEPT_PATCH_RELATIONS),
+    ):
+        if key not in row:
+            raise DatasetError(
+                f"line {line_no}: 0036/1 case missing required tag {key!r}"
+            )
+        if row[key] not in allowed:
+            raise DatasetError(
+                f"line {line_no}: {key}={row[key]!r} not in {sorted(allowed)}"
+            )
+    tags: dict[str, Any] = {
+        "reachability": row["reachability"],
+        "reachability_provenance": row["reachability_provenance"],
+        "concept_patch_relation": row["concept_patch_relation"],
+    }
+    if row["concept_patch_relation"] == "divergent":
+        for key in ("concept_span", "concept_span_provenance"):
+            if key not in row:
+                raise DatasetError(
+                    f"line {line_no}: divergent 0036/1 case missing required {key!r}"
+                )
+        tags["concept_span"] = _parse_span(row["concept_span"], line_no)
+        csp = row["concept_span_provenance"]
+        if not isinstance(csp, str) or not csp:
+            raise DatasetError(
+                f"line {line_no}: 'concept_span_provenance' must be a non-empty string"
+            )
+        tags["concept_span_provenance"] = csp
+    else:
+        for key in ("concept_span", "concept_span_provenance"):
+            if key in row:
+                raise DatasetError(
+                    f"line {line_no}: relation=same forbids {key!r} (contradictory row)"
+                )
+    return tags
 
 
 def load_dataset(path: str | Path) -> list[EvalCase]:

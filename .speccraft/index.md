@@ -36,7 +36,7 @@ A FastMCP server exposes three tools (`locate` / `read` / `index`) and holds no 
 
 ## Active spec
 
-None
+specs/0036-terse-query/
 
 ## Recent decisions (last 3)
 

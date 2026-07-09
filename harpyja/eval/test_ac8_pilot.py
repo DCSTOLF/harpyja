@@ -39,6 +39,31 @@ def test_preregistered_ac8_config_is_frozen_and_hashed():
     assert isinstance(AC8_CONFIG_HASH, str) and len(AC8_CONFIG_HASH) == 64
 
 
+def test_preregistered_0036_config_is_frozen_hashed_and_servable():
+    # spec 0036: the frozen 0026 arm A (hf.co/Qwen/Qwen3-8B-GGUF:latest) is not
+    # servable on the live stack, so the pilot runs under a NEW pre-registered
+    # frozen+hashed config — arms swapped to servable models with a real capability
+    # contrast, EVERY threshold copied verbatim, its own hash, committed before the
+    # pilot fires (the freeze predates the data).
+    from harpyja.eval.ac8_pilot import AC8_CONFIG_HASH_0036, PREREGISTERED_AC8_CONFIG_0036
+
+    cfg = PREREGISTERED_AC8_CONFIG_0036
+    assert cfg.reference_model_a == "qwen3:14b"
+    assert cfg.reference_model_b == "qwen3:4b-instruct"
+    assert cfg.reference_model_a != cfg.reference_model_b  # a capability contrast
+    # thresholds copied verbatim from the 0026 freeze — only the arms differ.
+    base = PREREGISTERED_AC8_CONFIG
+    assert cfg.pilot_n == base.pilot_n == 10
+    assert cfg.full_n_target == base.full_n_target == 30
+    assert cfg.min_discordant_pairs == base.min_discordant_pairs == 8
+    # frozen, with its OWN stable hash (distinct from the 0026 hash).
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        cfg.pilot_n = 5  # type: ignore[misc]
+    assert AC8_CONFIG_HASH_0036 == config_hash(cfg)
+    assert isinstance(AC8_CONFIG_HASH_0036, str) and len(AC8_CONFIG_HASH_0036) == 64
+    assert AC8_CONFIG_HASH_0036 != AC8_CONFIG_HASH
+
+
 def _pair(a: LocateBucket, b: LocateBucket) -> PilotPair:
     return PilotPair(case_id="c", bucket_a=a, bucket_b=b)
 

@@ -180,3 +180,128 @@ def test_parse_case_legacy_no_version_tag_loads_with_defaults(tmp_path):
     assert c.leaked_tokens == ()
     assert c.classification_provenance is None
     assert c.label_provenance is None
+
+
+# --- spec 0036: version-gated tag fields (reachability + concept-vs-patch) -------
+
+# A 0036/1 row: everything a 0026/1 terse row carries PLUS the two mandatory tags
+# (reachability + provenance, concept_patch_relation); concept_span(+provenance)
+# appear ONLY on divergent rows.
+_TERSE_0036_ROW = {
+    "schema_version": "0036/1",
+    "case_id": "astropy__astropy-12907",
+    "query": "nested compound models report wrong separability",
+    "repo": "astropy/astropy",
+    "classification": "point",
+    "gold_withheld": True,
+    "query_provenance": "model-authored-blind",
+    "classification_provenance": "hand-labeled-by-intent",
+    "reachability": "conceptual",
+    "reachability_provenance": "mechanical",
+    "concept_patch_relation": "same",
+}
+
+_TERSE_0036_DIVERGENT_ROW = {
+    **_TERSE_0036_ROW,
+    "case_id": "astropy__astropy-12907-div",
+    "concept_patch_relation": "divergent",
+    "concept_span": {
+        "path": "astropy/modeling/separable.py",
+        "start_line": 66,
+        "end_line": 102,
+    },
+    "concept_span_provenance": "hand-labeled-concept-span",
+}
+
+
+def test_dataset_known_terse_schema_versions_set(tmp_path):
+    # Detection is known-versions-SET membership, not exact match: a 0026/1 legacy
+    # row and a 0036/1 row BOTH load down the terse branch (spans omitted OK).
+    from harpyja.eval.dataset import (
+        DATASET_SCHEMA_VERSION_0036,
+        _KNOWN_TERSE_SCHEMA_VERSIONS,
+    )
+
+    assert DATASET_SCHEMA_VERSION_0036 == "0036/1"
+    assert _KNOWN_TERSE_SCHEMA_VERSIONS == frozenset({"0026/1", "0036/1"})
+    f = _write_jsonl(tmp_path / "both.jsonl", [_TERSE_ROW, _TERSE_0036_ROW])
+    cases = load_dataset(f)
+    assert [c.schema_version for c in cases] == ["0026/1", "0036/1"]
+    assert all(c.expected_spans == () for c in cases)
+
+
+def test_parse_case_0036_requires_reachability_and_provenance(tmp_path):
+    for missing in ("reachability", "reachability_provenance"):
+        bad = {k: v for k, v in _TERSE_0036_ROW.items() if k != missing}
+        f = _write_jsonl(tmp_path / f"bad-{missing}.jsonl", [bad])
+        with pytest.raises(DatasetError):
+            load_dataset(f)
+
+
+def test_parse_case_0036_requires_concept_patch_relation(tmp_path):
+    bad = {k: v for k, v in _TERSE_0036_ROW.items() if k != "concept_patch_relation"}
+    f = _write_jsonl(tmp_path / "bad-relation.jsonl", [bad])
+    with pytest.raises(DatasetError):
+        load_dataset(f)
+
+
+def test_parse_case_0036_divergent_requires_concept_span_and_provenance(tmp_path):
+    for missing in ("concept_span", "concept_span_provenance"):
+        bad = {k: v for k, v in _TERSE_0036_DIVERGENT_ROW.items() if k != missing}
+        f = _write_jsonl(tmp_path / f"bad-{missing}.jsonl", [bad])
+        with pytest.raises(DatasetError):
+            load_dataset(f)
+
+
+def test_parse_case_0036_same_forbids_concept_span(tmp_path):
+    # relation=same with a concept_span present is a contradiction — rejected, the
+    # two validation contracts (mandatory tag vs conditional span) stay loud.
+    bad = {
+        **_TERSE_0036_ROW,
+        "concept_span": {"path": "a.py", "start_line": 1, "end_line": 2},
+    }
+    f = _write_jsonl(tmp_path / "bad-same-span.jsonl", [bad])
+    with pytest.raises(DatasetError):
+        load_dataset(f)
+
+
+def test_parse_case_0036_rejects_bad_tag_enums(tmp_path):
+    for field, bad_value in (
+        ("reachability", "easy"),
+        ("reachability_provenance", "vibes"),
+        ("concept_patch_relation", "sorta"),
+    ):
+        bad = {**_TERSE_0036_ROW, field: bad_value}
+        f = _write_jsonl(tmp_path / f"bad-enum-{field}.jsonl", [bad])
+        with pytest.raises(DatasetError):
+            load_dataset(f)
+
+
+def test_parse_case_0036_valid_rows_load_with_tags(tmp_path):
+    f = _write_jsonl(
+        tmp_path / "good.jsonl", [_TERSE_0036_ROW, _TERSE_0036_DIVERGENT_ROW]
+    )
+    same, divergent = load_dataset(f)
+    assert same.reachability == "conceptual"
+    assert same.reachability_provenance == "mechanical"
+    assert same.concept_patch_relation == "same"
+    assert same.concept_span is None
+    assert same.concept_span_provenance is None
+    assert divergent.concept_patch_relation == "divergent"
+    assert divergent.concept_span.path == "astropy/modeling/separable.py"
+    assert divergent.concept_span.start_line == 66
+    assert divergent.concept_span.end_line == 102
+    assert divergent.concept_span_provenance == "hand-labeled-concept-span"
+
+
+def test_legacy_0026_row_defaults_new_fields(tmp_path):
+    # A 0026/1 row (no 0036 tags) keeps loading; the new fields read back as their
+    # defaults — the gate binds the tag-required rule to 0036/1+ rows only.
+    f = _write_jsonl(tmp_path / "legacy-terse.jsonl", [_TERSE_ROW])
+    c = load_dataset(f)[0]
+    assert c.schema_version == "0026/1"
+    assert c.reachability is None
+    assert c.reachability_provenance is None
+    assert c.concept_patch_relation is None
+    assert c.concept_span is None
+    assert c.concept_span_provenance is None

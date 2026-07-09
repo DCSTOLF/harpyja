@@ -175,6 +175,39 @@ def load_terse_dataset(
     )
 
 
+# spec 0036 (OQ3, pre-declared BEFORE any sample was drawn): the conceptual
+# (lexically-unreachable) stratum must hold >= 5 cases in the full set (>= 2 in the
+# pilot) for the reachability axis to be reported as a split; below that the axis is
+# UNDER_POPULATED — a typed finding (the split would be anecdotal), never a silent
+# merge into the aggregate.
+STRATUM_REPORTABLE = "reportable"
+STRATUM_UNDER_POPULATED = "under-populated"
+_CONCEPTUAL_FLOOR_FULL = 5
+_CONCEPTUAL_FLOOR_PILOT = 2
+
+
+def meets_full_n_target(dataset: TerseDataset, cfg) -> bool:
+    """AC7: the full set must ALSO clear the governing frozen config's
+    ``full_n_target`` (upward-only; the static ``min_n`` floor is not the
+    representative-set size gate)."""
+    return len(dataset.cases) >= cfg.full_n_target
+
+
+def conceptual_stratum_report(
+    dataset: TerseDataset, *, pilot_sized: bool = False
+) -> tuple[int, int, str]:
+    """Count the reachability strata: ``(lexical_n, conceptual_n, status)``.
+
+    ``status`` is `STRATUM_REPORTABLE` when the conceptual stratum meets the
+    pre-declared floor (5 full / 2 pilot), else `STRATUM_UNDER_POPULATED`.
+    """
+    lexical_n = sum(1 for c in dataset.cases if c.reachability == "lexical")
+    conceptual_n = sum(1 for c in dataset.cases if c.reachability == "conceptual")
+    floor = _CONCEPTUAL_FLOOR_PILOT if pilot_sized else _CONCEPTUAL_FLOOR_FULL
+    status = STRATUM_REPORTABLE if conceptual_n >= floor else STRATUM_UNDER_POPULATED
+    return lexical_n, conceptual_n, status
+
+
 def validate_terse_set_floor(dataset: TerseDataset) -> FloorResult:
     """AC4: the set clears the paired-ranking floor — ≥ `min_n` usable cases across
     multiple repos with no single-repo domination. Cites the committed
