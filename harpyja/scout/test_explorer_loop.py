@@ -16,6 +16,7 @@ from harpyja.scout.explorer_loop import (
     WALLCLOCK_EXHAUSTED,
     run_explorer_loop,
 )
+from harpyja.scout.submit import SubmitResult
 from harpyja.server.types import CodeSpan
 
 
@@ -55,7 +56,8 @@ def _recording_tools():
 
 
 def _submit_ok(citations):
-    return [CodeSpan(path="a.py", start_line=1, end_line=1)]
+    spans = [CodeSpan(path="a.py", start_line=1, end_line=1)]
+    return SubmitResult(spans=spans, submitted=len(citations), surviving=len(spans))
 
 
 def test_loop_terminates_on_submit_citations():
@@ -141,7 +143,7 @@ def _submit_echo(citations):
         out.append(
             CodeSpan(path=c["path"], start_line=c.get("start_line"), end_line=c.get("end_line"))
         )
-    return out
+    return SubmitResult(spans=out, submitted=len(citations), surviving=len(out))
 
 
 def test_exact_repeat_no_new_span_triggers_corrective_injection():
@@ -619,3 +621,40 @@ def test_parallel_determinism_n4_astropy_shape_identical_trace():
     assert trace_1 == trace_2, f"Traces diverged:\n{trace_1}\n---vs---\n{trace_2}"
     assert result_1.turns_used == result_2.turns_used
     assert result_1.outcome == result_2.outcome == SUBMITTED
+
+
+# --- Spec 0033: LoopResult carries the submit-seam counts (AC5) ---
+
+
+def test_loop_result_carries_submitted_and_surviving_counts(tmp_path):
+    """AC5: a found-then-dropped submission threads (1, 0) onto LoopResult."""
+    def submit(citations):
+        return SubmitResult(spans=[], submitted=1, surviving=0)
+
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("submit_citations",
+         citations=[{"path": "modeling/core.py", "start_line": 812, "end_line": 812}])]}
+    )
+    result = run_explorer_loop(
+        model_call=model, tools={}, submit=submit, context_map="", settings=Settings()
+    )
+    assert result.outcome == SUBMITTED
+    assert result.spans == []
+    assert result.citations_submitted == 1
+    assert result.citations_surviving == 0
+
+
+def test_loop_honest_empty_counts_zero_zero(tmp_path):
+    """AC5: an honest-empty submission threads (0, 0) — distinguishable from
+    found-then-dropped."""
+    def submit(citations):
+        return SubmitResult(spans=[], submitted=0, surviving=0)
+
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])]}
+    )
+    result = run_explorer_loop(
+        model_call=model, tools={}, submit=submit, context_map="", settings=Settings()
+    )
+    assert result.outcome == SUBMITTED
+    assert (result.citations_submitted, result.citations_surviving) == (0, 0)

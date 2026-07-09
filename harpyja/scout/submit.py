@@ -24,6 +24,7 @@ happens downstream in the unchanged orchestrator path.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from harpyja.config.settings import Settings
@@ -32,6 +33,21 @@ from harpyja.server.types import CodeSpan
 
 # The ONLY fields a citation arg may carry (strict — anything else is a schema error).
 ALLOWED_CITATION_FIELDS = frozenset({"path", "start_line", "end_line"})
+
+
+@dataclass(frozen=True)
+class SubmitResult:
+    """The submit seam's outcome WITH its submitted-vs-surviving counts (spec 0033).
+
+    This is the ONE normalize pass where an explorer citation can drop, so the
+    counts are captured here — a found-then-dropped run (submitted=1,
+    surviving=0) is structurally distinguishable from honest-empty (0, 0),
+    and the drop can never again hide inside an "empty" terminal bucket.
+    """
+
+    spans: list[CodeSpan]
+    submitted: int
+    surviving: int
 
 
 class SubmitCitationsSchemaError(ValueError):
@@ -61,12 +77,18 @@ def submit_citations(
     citations: Sequence[Mapping[str, Any]],
     repo_root: str,
     settings: Settings,
-) -> list[CodeSpan]:
-    """Validate + normalize the model's terminal citation args into safe spans."""
+) -> SubmitResult:
+    """Validate + normalize the model's terminal citation args into safe spans.
+
+    Returns a :class:`SubmitResult` carrying the surviving spans AND the
+    submitted-vs-surviving counts (spec 0033) — the counts are captured at this
+    seam because it is the one pass where an explorer citation drops.
+    """
     raw = [_to_span(ref) for ref in citations]
-    return normalize_spans(
+    normalized = normalize_spans(
         raw,
         repo_root,
         max_citations=settings.scout_max_citations,
         max_span_lines=settings.scout_max_span_lines,
     )
+    return SubmitResult(spans=normalized, submitted=len(raw), surviving=len(normalized))

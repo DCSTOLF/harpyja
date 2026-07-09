@@ -21,7 +21,7 @@ class _FakeEngine:
     def __init__(self, spans):
         self._spans = spans
 
-    def search(self, pattern, scope=None):
+    def search(self, pattern, scope=None, *, repo_root=None):
         return list(self._spans)
 
 

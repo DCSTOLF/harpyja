@@ -6,7 +6,13 @@ from typing import Any, Mapping
 
 from harpyja.eval.report import atomic_write_json
 
-VERIFIER_SCHEMA_VERSION = "0031/1"
+VERIFIER_SCHEMA_VERSION = "0033/1"
+
+# Spec 0033: the version GATE (0026 DATASET_SCHEMA_VERSION pattern) — a legacy
+# 0031/1 artifact (no citation-count fields) still validates; an unknown version
+# fails loud. The 0033/1 additions are OPTIONAL fields (citations_submitted /
+# citations_surviving), so no legacy artifact is invalidated by the bump.
+_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1"})
 
 # Six enumerated failure reasons (when facts cannot be proven)
 FAILURE_CODES = frozenset([
@@ -83,9 +89,10 @@ def validate_verifier_artifact(artifact: Mapping[str, Any]) -> None:
     if missing:
         raise ValueError(f"Artifact missing required keys: {missing}")
 
-    if artifact.get("schema_version") != VERIFIER_SCHEMA_VERSION:
+    if artifact.get("schema_version") not in _KNOWN_VERIFIER_SCHEMA_VERSIONS:
         raise ValueError(
-            f"Schema version mismatch: expected {VERIFIER_SCHEMA_VERSION}, "
+            f"Unknown schema version: expected one of "
+            f"{sorted(_KNOWN_VERIFIER_SCHEMA_VERSIONS)}, "
             f"got {artifact.get('schema_version')}"
         )
 
@@ -311,6 +318,8 @@ def build_trajectory_record(
     requested_model: str | None = None,
     configured_endpoint_models: list[str] | None = None,
     terminal_bucket: str | None = None,
+    citations_submitted: int | None = None,
+    citations_surviving: int | None = None,
 ) -> dict[str, Any]:
     """Build trajectory artifact record from captured explorer loop data.
 
@@ -349,6 +358,10 @@ def build_trajectory_record(
         "served_model": served_model,
         "endpoint": endpoint,
         "turns_used": turns_used,
+        # Spec 0033: the submit-seam counts — found-then-dropped (1, 0) is
+        # structurally distinguishable from honest-empty (0, 0).
+        "citations_submitted": citations_submitted,
+        "citations_surviving": citations_surviving,
     }
 
     # Add optional fields if provided
@@ -474,18 +487,24 @@ def run_verified_case(
         enable_thinking=settings.explorer_enable_thinking,
     )
 
-    # Run the explorer loop
+    # Run the explorer loop. A typed degrade is captured OUTSIDE the except
+    # block's variable lifetime (spec 0033) so the no-trajectory raise below can
+    # NAME the cause and chain it — never the 0031 cause-less ValueError.
+    degrade: ScoutUnavailable | None = None
     try:
         citations = backend.run(query, [])  # empty seed
     except ScoutUnavailable as e:
-        # Explorer degraded - capture what we can
+        # Explorer degraded — record the typed cause; trajectory may still exist.
         citations = []
-        last_trajectory = backend.last_trajectory
+        degrade = e
 
     # Capture trajectory
     last_trajectory = backend.last_trajectory
     if last_trajectory is None:
-        raise ValueError("Explorer did not capture trajectory")
+        cause = degrade.cause if degrade is not None else "unknown"
+        raise ValueError(
+            f"Explorer did not capture trajectory (scout cause: {cause})"
+        ) from degrade
 
     # Derive terminal_bucket from locate_accuracy
     gold_span_obj = CodeSpan(
@@ -527,6 +546,10 @@ def run_verified_case(
         "terminal_bucket": traj["terminal_bucket"],
         "verifier_status": result.status,
         "failure_reason": result.failure_reason,
+        # Spec 0033: the submit-seam counts are DURABLE — found-then-dropped
+        # (submitted>0, surviving=0) is distinguishable in the persisted artifact.
+        "citations_submitted": last_trajectory.get("citations_submitted"),
+        "citations_surviving": last_trajectory.get("citations_surviving"),
         "timestamp": datetime.utcnow().isoformat(),
         "case": case_name,
     }

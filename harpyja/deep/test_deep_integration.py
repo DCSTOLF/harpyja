@@ -233,7 +233,7 @@ def test_deep_auto_parse_error_degrades_not_crash(tmp_path):
     )
 
     class _Tier0:
-        def search(self, pattern, scope=None):
+        def search(self, pattern, scope=None, *, repo_root=None):
             return []
 
     class _Scout:

@@ -528,7 +528,8 @@ def test_build_trajectory_record_valid_multitool_names_preserved():
 
 def test_verifier_schema_version_and_failure_codes_frozen():
     """AC5: schema version, the six codes, and their precedence are byte-frozen."""
-    assert VERIFIER_SCHEMA_VERSION == "0031/1"
+    # 0031/1 -> 0033/1: spec 0033 additive bump (citation counts), reconciled here.
+    assert VERIFIER_SCHEMA_VERSION == "0033/1"
     assert FAILURE_CODES == frozenset([
         "model-unknown",
         "model-mismatch",
@@ -556,7 +557,7 @@ def test_verify_result_field_by_field_stable_on_valid_trajectory():
     got.pop("timestamp")
 
     assert got == {
-        "schema_version": "0031/1",
+        "schema_version": "0033/1",
         "status": "PASSED",
         "failure_reason": None,
         "model_identity": "served_present_and_matching",
@@ -619,6 +620,27 @@ def test_extract_tool_names_is_strict_on_nameless_calls():
     assert reason == "tool-names-unextractable"
 
 
+def test_verifier_artifact_0031_shape_pin():
+    """PIN (0033 T1): a literal 0031/1 artifact (no citation-count fields) validates.
+
+    This is the legacy shape the 0033 version gate must keep accepting after the
+    schema bump — written against the LITERAL version string, not the constant.
+    """
+    artifact = {
+        "schema_version": "0031/1",
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "correct",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+    }
+    validate_verifier_artifact(artifact)  # must not raise, today and post-0033
+
+
 def test_single_tool_name_parser_definition_by_symbol_audit():
     """AC8 consumer audit: exactly ONE tool-name parser definition exists.
 
@@ -636,3 +658,152 @@ def test_single_tool_name_parser_definition_by_symbol_audit():
     assert _lv.extract_tool_names is extract_tool_names
     verify_src = inspect.getsource(verify_trajectory)
     assert "extract_tool_names(" in verify_src
+
+
+# --- Spec 0033: citation counts on the trajectory record + schema 0033/1 (AC5) ---
+
+
+def test_build_trajectory_record_carries_citation_counts():
+    """AC5: the record carries the submit-seam counts as data."""
+    record = build_trajectory_record(
+        _multitool_history(), 3, citations_submitted=1, citations_surviving=0
+    )
+    assert record["citations_submitted"] == 1
+    assert record["citations_surviving"] == 0
+
+
+def test_found_then_dropped_distinct_from_honest_empty_in_artifact():
+    """AC5: (1, 0) found-then-dropped is structurally distinguishable from
+    (0, 0) honest-empty in the trajectory record — this class can't hide in
+    'empty' again."""
+    dropped = build_trajectory_record(
+        _multitool_history(), 3, citations_submitted=1, citations_surviving=0
+    )
+    empty = build_trajectory_record(
+        _multitool_history(), 3, citations_submitted=0, citations_surviving=0
+    )
+    assert (dropped["citations_submitted"], dropped["citations_surviving"]) == (1, 0)
+    assert (empty["citations_submitted"], empty["citations_surviving"]) == (0, 0)
+    assert dropped["citations_submitted"] != empty["citations_submitted"]
+
+
+def test_legacy_0031_artifact_still_validates_post_bump():
+    """AC5: after the 0033/1 bump, a literal 0031/1 artifact (no count fields)
+    still validates via the version gate — additive, never a breaking bump."""
+    artifact = {
+        "schema_version": "0031/1",
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "correct",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+    }
+    validate_verifier_artifact(artifact)
+    # And the NEW version validates too (the gate accepts exactly the known set).
+    artifact_new = dict(artifact, schema_version="0033/1",
+                        citations_submitted=1, citations_surviving=0)
+    validate_verifier_artifact(artifact_new)
+    # An unknown version still fails loud.
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(dict(artifact, schema_version="9999/9"))
+
+
+def test_fc_citation_dropped_count_and_report_schema_untouched():
+    """AC5: the eval-report schema is byte-untouched by this spec — the per-case
+    counts live on the VERIFIER artifact, not the report."""
+    from harpyja.eval import report as _report
+
+    assert _report.SCHEMA_VERSION == "0028/1"  # not bumped by 0033
+    assert "fc_citation_dropped_count" in _report._AGGREGATE_DEFAULTS
+    assert "citations_submitted" not in _report._AGGREGATE_DEFAULTS
+    assert "citations_surviving" not in _report._AGGREGATE_DEFAULTS
+
+
+# --- Spec 0033: run_verified_case names + chains the typed degrade cause (AC6) ---
+
+
+def test_run_verified_case_names_and_chains_degrade_cause(tmp_path, monkeypatch):
+    """AC6: an explorer degrade BEFORE trajectory capture raises a ValueError that
+    NAMES the typed ScoutUnavailable cause and chains it as __cause__ — never the
+    0031 cause-less 'Explorer did not capture trajectory'."""
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+    from harpyja.scout import errors as _serrors
+    from harpyja.scout.errors import ScoutUnavailable
+
+    class _DegradingBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            raise ScoutUnavailable(_serrors.MODEL_UNREACHABLE)
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _DegradingBackend)
+    (tmp_path / ".harpyja").mkdir()
+
+    with pytest.raises(ValueError) as ei:
+        run_verified_case(
+            case_name="fake-case",
+            settings=_Settings(),
+            gateway=object(),
+            gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+            out_dir=tmp_path,
+            repo_path=str(tmp_path),
+            query="find it",
+        )
+    assert _serrors.MODEL_UNREACHABLE in str(ei.value)  # the cause is NAMED
+    assert isinstance(ei.value.__cause__, ScoutUnavailable)  # and CHAINED
+
+
+def test_run_verified_case_artifact_carries_citation_counts(tmp_path, monkeypatch):
+    """AC5 (persisted-artifact half): the counts reach the WRITTEN artifact JSON,
+    not only the in-memory trajectory record — found-then-dropped is durable."""
+    import json as _json
+
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+
+    class _SubmittingBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [{"function": {"name": "grep"}}]},
+                ],
+                "tool_names_invoked": ["grep"],
+                "tool_names_failure": None,
+                "served_model": "qwen3:14b",
+                "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 1,
+                "citations_submitted": 1,
+                "citations_surviving": 0,  # found-then-dropped
+            }
+            return []
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _SubmittingBackend)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    _result, artifact_path = run_verified_case(
+        case_name="fake-case",
+        settings=_Settings(),
+        gateway=object(),
+        gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir,
+        repo_path=str(tmp_path / "repo"),
+        query="find it",
+    )
+    artifact = _json.loads(Path(artifact_path).read_text())
+    assert artifact["citations_submitted"] == 1
+    assert artifact["citations_surviving"] == 0

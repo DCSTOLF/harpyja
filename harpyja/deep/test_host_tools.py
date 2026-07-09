@@ -23,7 +23,7 @@ class _FakeSearch:
         self.spans = spans
         self.calls = []
 
-    def search(self, pattern, scope=None):
+    def search(self, pattern, scope=None, *, repo_root=None):
         self.calls.append((pattern, scope))
         return list(self.spans)
 
@@ -111,3 +111,41 @@ def test_list_manifest_bounded_by_manifest_page(tmp_path):
     tools = _tools(tmp_path, settings=Settings(manifest_page=3), manifest=entries)
     out = tools["list_manifest"](None)
     assert len(out) == 3
+
+
+# --- Spec 0033: Deep search inherits the repo-relative fix (AC4) ---
+
+from harpyja.symbols.ripgrep import RipgrepEngine  # noqa: E402
+from harpyja.symbols.test_ripgrep import _match_line, _runner_returning  # noqa: E402
+
+
+def _engine_tools(tmp_path, runner, *, settings=None):
+    settings = settings or Settings()
+    engine = RipgrepEngine(settings, rg_runner=runner, which=lambda _n: "/usr/bin/rg")
+    return build_host_tools(
+        str(tmp_path),
+        settings,
+        search_engine=engine,
+        symbol_records=[],
+        manifest=[],
+        budget=DeepBudget(settings),
+    )
+
+
+def test_deep_search_scoped_returns_repo_relative(tmp_path):
+    """AC4: Deep's scoped search POSITIVELY changes to repo-relative — the
+    inherited engine-seam fix, not just unscoped non-regression."""
+    (tmp_path / "astropy").mkdir()
+    runner, _ = _runner_returning(_match_line("modeling/core.py", 812))
+    tools = _engine_tools(tmp_path, runner)
+    out = tools["search"]("needle", scope="astropy")
+    assert [s.path for s in out] == ["astropy/modeling/core.py"]
+
+
+def test_deep_search_unscoped_byte_identical(tmp_path):
+    """AC4: Deep's unscoped search output is byte-identical (repo-root prefix
+    collapses to '.')."""
+    runner, _ = _runner_returning(_match_line("django/db/models/query.py", 693))
+    tools = _engine_tools(tmp_path, runner)
+    out = tools["search"]("in_bulk")
+    assert [s.path for s in out] == ["django/db/models/query.py"]

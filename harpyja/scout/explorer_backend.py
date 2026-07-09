@@ -37,7 +37,7 @@ from harpyja.scout.explorer_loop import (
     run_explorer_loop,
 )
 from harpyja.scout.explorer_tools import build_explorer_tools
-from harpyja.scout.submit import submit_citations
+from harpyja.scout.submit import SubmitResult, submit_citations
 from harpyja.server.types import CodeSpan
 from harpyja.symbols.ripgrep import RipgrepMissingError
 
@@ -248,7 +248,7 @@ class ExplorerBackend:
             manifest=self._manifest,
         )
 
-        def submit(citations: Sequence[Mapping[str, Any]]) -> list[CodeSpan]:
+        def submit(citations: Sequence[Mapping[str, Any]]) -> SubmitResult:
             return submit_citations(citations, self._repo_path, self._settings)
 
         model_call = self._model_call or self._default_model_call()
@@ -293,6 +293,8 @@ class ExplorerBackend:
             result.turns_used,
             served_model=self._last_served_model,
             endpoint=self._gateway.api_base,
+            citations_submitted=result.citations_submitted,
+            citations_surviving=result.citations_surviving,
         )
 
         if result.outcome == SUBMITTED:

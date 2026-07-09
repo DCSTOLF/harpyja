@@ -25,7 +25,7 @@ class _FakeSearch:
         self.spans = spans
         self.calls = []
 
-    def search(self, pattern, scope=None):
+    def search(self, pattern, scope=None, *, repo_root=None):
         self.calls.append((pattern, scope))
         return list(self.spans)
 
@@ -413,3 +413,92 @@ def test_symbols_tool_degraded_never_raises(tmp_path):
     assert isinstance(out, dict)
     assert out["degraded"] is True
     assert out["symbols"] == []
+
+
+# --- Spec 0033: repo-relative tool contract (AC2/AC3/AC4) ---
+
+from harpyja.symbols.ripgrep import RipgrepEngine  # noqa: E402
+from harpyja.symbols.test_ripgrep import _match_line, _runner_returning  # noqa: E402
+
+_RG_PRESENT = lambda _name: "/usr/bin/rg"  # noqa: E731 - test stub
+
+
+def _real_engine(runner):
+    return RipgrepEngine(Settings(), rg_runner=runner, which=_RG_PRESENT)
+
+
+def test_all_path_discovering_tools_emit_repo_relative_paths(tmp_path):
+    """AC2 contract: every path-DISCOVERING tool emits repo-relative paths.
+
+    Covers grep (scoped + unscoped), glob, ls, and the symbols clean branch.
+    `read_span` is EXCLUDED from this producer contract with rationale: it echoes
+    the caller-supplied path and discovers nothing, so it has no path-shape
+    authority of its own.
+    """
+    _file(tmp_path, "astropy/modeling/core.py")
+    # rg (cwd-relative) reports the path relative to its scope dir.
+    runner, _ = _runner_returning(_match_line("modeling/core.py", 812))
+    tools = _tools(tmp_path, search=_real_engine(runner))
+
+    scoped = tools["grep"]("needle", scope="astropy/")
+    assert [s.path for s in scoped] == ["astropy/modeling/core.py"]
+
+    # Unscoped grep: rg runs from the repo root, so its cwd-relative path IS
+    # repo-relative already ("modeling/core.py" would be a root-level dir here).
+    unscoped_runner, _ = _runner_returning(_match_line("astropy/modeling/core.py", 812))
+    tools2 = _tools(tmp_path, search=_real_engine(unscoped_runner))
+    unscoped = tools2["grep"]("needle")
+    assert [s.path for s in unscoped] == ["astropy/modeling/core.py"]
+
+    globbed = tools["glob"]("astropy/**/*.py")
+    assert [s.path for s in globbed] == ["astropy/modeling/core.py"]
+
+    listed = tools["ls"]("astropy")
+    assert [s.path for s in listed] == ["astropy/modeling/"]
+
+    record = SymbolRecord(
+        path="astropy/modeling/core.py", name="f", kind="function",
+        start_line=1, end_line=2, language="python", parent=None,
+    )
+    symres = _tools(tmp_path, symbol_records=[record])["symbols"]("astropy/modeling/core.py")
+    assert [s.path for s in symres["symbols"]] == ["astropy/modeling/core.py"]
+
+
+def test_ls_directory_entries_are_repo_relative_noncitable(tmp_path):
+    """AC2: ls dir entries are repo-relative trailing-'/' LISTINGS (non-citable)."""
+    _file(tmp_path, "astropy/modeling/core.py")
+    listed = _tools(tmp_path)["ls"]("astropy")
+    assert listed == [CodeSpan(path="astropy/modeling/", start_line=None, end_line=None)]
+    assert listed[0].is_file_level  # no fabricated line range on a listing
+
+
+def test_grep_scoped_hit_is_repo_relative(tmp_path):
+    """AC3 (the astropy shape at the tool seam): a scoped grep hit carries the
+    repo-relative path, not the scope-relative one that normalization drops."""
+    _file(tmp_path, "astropy/modeling/core.py")
+    runner, _ = _runner_returning(_match_line("modeling/core.py", 812))
+    tools = _tools(tmp_path, search=_real_engine(runner))
+    out = tools["grep"]("separability matrix", scope="astropy/")
+    assert [s.path for s in out] == ["astropy/modeling/core.py"]
+
+
+def test_symbols_degraded_fallback_file_scope_repo_relative_no_crash(tmp_path):
+    """AC4: the symbols degraded fallback (a FILE scope through the shared engine)
+    returns repo-relative spans and never NotADirectoryError."""
+    _file(tmp_path, "astropy/modeling/core.py")
+    manifest = [
+        ManifestEntry(
+            path="astropy/modeling/core.py",
+            language="python",
+            size=100,
+            hash="abc123",
+            mtime=0.0,
+            prior=0.0,
+            degraded="PARSE_ERROR",
+        )
+    ]
+    runner, captured = _runner_returning(_match_line("core.py", 5))
+    tools = _tools(tmp_path, search=_real_engine(runner), manifest=manifest)
+    out = tools["symbols"]("astropy/modeling/core.py")
+    assert out["degraded"] is True
+    assert [s.path for s in out["symbols"]] == ["astropy/modeling/core.py"]

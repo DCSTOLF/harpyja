@@ -38,8 +38,10 @@ from harpyja.symbols.extract import SymbolRecord
 from harpyja.symbols.symbols_io import record_to_codespan
 
 
-class _Search:  # structural: anything with .search(pattern, scope)
-    def search(self, pattern: str, scope: str | None = None) -> list[CodeSpan]: ...
+class _Search:  # structural: anything with .search(pattern, scope, repo_root=)
+    def search(
+        self, pattern: str, scope: str | None = None, *, repo_root: str | None = None
+    ) -> list[CodeSpan]: ...
 
 
 def build_explorer_tools(
@@ -64,7 +66,9 @@ def build_explorer_tools(
         scoped_path = confine_path(repo_path, scope) if scope else Path(repo_path)
         if scope and not scoped_path.is_dir():
             return []  # grep on a file → empty (use read_span for file contents)
-        spans = search_engine.search(pattern, scope=str(scoped_path))
+        # repo_root threads the repo-relative output contract (spec 0033): the
+        # engine re-prefixes scoped results so a cited hit survives normalization.
+        spans = search_engine.search(pattern, scope=str(scoped_path), repo_root=repo_path)
         return spans[: settings.search_max_matches]
 
     def glob(pattern: str) -> list[CodeSpan]:
@@ -135,7 +139,9 @@ def build_explorer_tools(
         # AC3: Check if this file is degraded (parse failure at index build).
         if normalized_str in degraded_paths:
             # Fallback to ripgrep (Tier-0's existing fallback) for this file.
-            ripgrep_results = search_engine.search("", scope=str(candidate))
+            ripgrep_results = search_engine.search(
+                "", scope=str(candidate), repo_root=repo_path
+            )
             clamped = ripgrep_results[: settings.scout_symbols_max_entries]
             return {"symbols": clamped, "degraded": True}
 

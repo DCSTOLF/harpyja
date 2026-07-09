@@ -28,7 +28,7 @@ class _FakeSearch:
     def __init__(self, spans=None):
         self.spans = spans or []
 
-    def search(self, pattern, scope=None):
+    def search(self, pattern, scope=None, *, repo_root=None):
         return list(self.spans)
 
 
@@ -119,7 +119,7 @@ class _RaisingSearch:
     def __init__(self, exc):
         self._exc = exc
 
-    def search(self, pattern, scope=None):
+    def search(self, pattern, scope=None, *, repo_root=None):
         raise self._exc
 
 
@@ -581,3 +581,20 @@ def test_last_trajectory_is_reset_per_run(tmp_path):
     # Verify it's replaced, not accumulated
     assert traj2 is not traj1  # Different object
     assert len(traj2.get("model_turns", [])) != 2 * initial_turn_count  # Not accumulated
+
+
+def test_backend_threads_citation_counts_into_trajectory(tmp_path):
+    """Spec 0033 AC5: the loop's submit-seam counts land on last_trajectory."""
+    _file(tmp_path, "real.py", n=50)
+    model = _scripted(
+        # Submits one ref that will NOT resolve in-repo → found-then-dropped (1, 0).
+        {"content": "", "tool_calls": [_tc(
+            "submit_citations",
+            citations=[{"path": "modeling/core.py", "start_line": 812, "end_line": 812}])]},
+    )
+    backend = _backend(tmp_path, model_call=model)
+    out = backend.run("q", [])
+    assert out == []  # the drop still yields honest-empty spans
+    assert backend.last_trajectory is not None
+    assert backend.last_trajectory["citations_submitted"] == 1
+    assert backend.last_trajectory["citations_surviving"] == 0

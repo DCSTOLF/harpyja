@@ -73,5 +73,5 @@ def test_excluded_file_still_reachable_via_tools(tmp_path):
 
 
 class _FakeSearch:
-    def search(self, pattern, scope=None):
+    def search(self, pattern, scope=None, *, repo_root=None):
         return [CodeSpan(path="tests/test_core.py", start_line=1, end_line=1)]

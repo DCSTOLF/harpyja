@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from harpyja.gateway.gateway import AirGapError
+from harpyja.scout.submit import SubmitResult
 from harpyja.server.types import CodeSpan
 from harpyja.symbols.ripgrep import RipgrepMissingError
 
@@ -63,6 +64,11 @@ class LoopResult:
     spans: list[CodeSpan] | None
     turns_used: int
     history: list[dict[str, Any]] = field(default_factory=list)
+    # Spec 0033: the submit seam's submitted-vs-surviving counts, threaded so a
+    # found-then-dropped submission (1, 0) never reads as honest-empty (0, 0).
+    # None on non-submit terminals (exhaustion/truncation — nothing was submitted).
+    citations_submitted: int | None = None
+    citations_surviving: int | None = None
 
 
 def _parse_arguments(raw: Any) -> dict[str, Any]:
@@ -115,7 +121,7 @@ def _loc_str(s: CodeSpan) -> str:
 def _answer_tool_call(
     call: Mapping[str, Any],
     tools: Mapping[str, Callable[..., Any]],
-    submit: Callable[[Sequence[Mapping[str, Any]]], list[CodeSpan]],
+    submit: Callable[[Sequence[Mapping[str, Any]]], SubmitResult],
     session: _Session,
     settings: Any,
 ) -> LoopResult | None:
@@ -127,8 +133,15 @@ def _answer_tool_call(
     call_id = call.get("id", "")
 
     if name == SUBMIT_TOOL:
-        spans = submit(args.get("citations", []))
-        return LoopResult(SUBMITTED, spans, None, session.messages())  # type: ignore
+        res = submit(args.get("citations", []))
+        return LoopResult(  # type: ignore
+            SUBMITTED,
+            res.spans,
+            None,
+            session.messages(),
+            citations_submitted=res.submitted,
+            citations_surviving=res.surviving,
+        )
 
     if name not in tools:
         session.add(
@@ -252,7 +265,7 @@ def run_explorer_loop(
     *,
     model_call: ModelCall,
     tools: Mapping[str, Callable[..., Any]],
-    submit: Callable[[Sequence[Mapping[str, Any]]], list[CodeSpan]],
+    submit: Callable[[Sequence[Mapping[str, Any]]], SubmitResult],
     context_map: str,
     settings: Any,
     clock: Clock = time.monotonic,

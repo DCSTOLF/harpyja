@@ -21,6 +21,7 @@ def test_proof_of_instrument_astropy_django_produce_verifier_artifacts():
     Skips gracefully if the live stack is unavailable or invalid.
     """
     import dataclasses
+
     import requests
 
     # Preflight: check gateway availability
@@ -119,3 +120,75 @@ def test_proof_of_instrument_astropy_django_produce_verifier_artifacts():
             except Exception as e:
                 # Case execution error: skip this case but continue
                 pytest.skip(f"Case {case_name} execution failed: {e}")
+
+
+@pytest.mark.integration
+def test_astropy_live_scoped_grep_survives_or_not_exercised():
+    """Spec 0033 AC7: the 0032 astropy case re-run through the repo-relative
+    scoped-grep fix.
+
+    IF the model cites a scoped-grep hit this run, the citation must SURVIVE
+    normalization (citations_surviving > 0) — the 0032 found-then-dropped shape
+    is closed. The condition is MODEL-BEHAVIOR-CONTINGENT (0023 input-validity
+    rule): a run where the model never greps scoped, or honestly submits an
+    empty list, records the condition NOT-EXERCISED (printed, never a silent
+    pass) — the hermetic AC3 fixture in test_submit_citations.py carries the
+    deterministic proof. Both counts must be recorded in the artifact either way.
+    """
+    import dataclasses
+
+    import requests
+
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
+        tags_payload = resp.json()
+        served = {m.get("name") for m in tags_payload.get("models", [])}
+        if "qwen3:14b" not in served:
+            pytest.skip(f"qwen3:14b not served: {sorted(served)}")
+    except Exception as e:
+        pytest.skip(f"Ollama not reachable: {e}")
+
+    settings = dataclasses.replace(
+        Settings(),
+        lm_api_base="http://127.0.0.1:11434/v1",
+        lm_model="qwen3:14b",
+        scout_max_turns=10,
+        scout_wall_clock_s=600.0,
+        lm_http_timeout_s=300.0,
+    )
+    gateway = ModelGateway(api_base=settings.lm_api_base, model=settings.lm_model)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            result, artifact_path = run_verified_case(
+                case_name="astropy__astropy-12907",
+                settings=settings,
+                gateway=gateway,
+                gold_span={"file": "astropy/modeling/separable.py",
+                           "start_line": 242, "end_line": 248},
+                out_dir=Path(tmpdir),
+            )
+        except ValueError as e:
+            pytest.skip(f"case setup/degrade: {e}")
+
+        with open(artifact_path) as f:
+            artifact = json.load(f)
+
+        # Both counts are RECORDED in the trajectory regardless of model behavior.
+        traj = artifact.get("model_turns", [])
+        submitted = artifact.get("citations_submitted")
+        surviving = artifact.get("citations_surviving")
+        print(f"\n[0033 AC7] citations_submitted={submitted} surviving={surviving}")
+
+        if submitted is not None and submitted > 0:
+            # The model cited something: the fix means a scoped-grep cite SURVIVES —
+            # found-then-dropped (submitted>0, surviving=0) would be the 0032 defect.
+            assert surviving is not None and surviving > 0, (
+                f"found-then-dropped resurfaced: submitted={submitted}, "
+                f"surviving={surviving} — a cited hit was dropped at normalize"
+            )
+            print("[0033 AC7] EXERCISED: cited hit(s) survived normalization")
+        else:
+            print("[0033 AC7] NOT-EXERCISED: model submitted no citations this run "
+                  "(hermetic AC3 fixture carries the deterministic proof)")
+        assert isinstance(traj, list)

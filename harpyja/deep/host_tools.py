@@ -21,8 +21,10 @@ from harpyja.symbols.extract import SymbolRecord
 from harpyja.symbols.symbols_io import record_to_codespan
 
 
-class _Search:  # structural: anything with .search(pattern, scope)
-    def search(self, pattern: str, scope: str | None = None) -> list[CodeSpan]: ...
+class _Search:  # structural: anything with .search(pattern, scope, repo_root=)
+    def search(
+        self, pattern: str, scope: str | None = None, *, repo_root: str | None = None
+    ) -> list[CodeSpan]: ...
 
 
 def build_host_tools(
@@ -53,7 +55,9 @@ def build_host_tools(
     def search(pattern: str, scope: str | None = None) -> list[CodeSpan]:
         _charge()
         scoped = str(confine_path(repo_path, scope)) if scope else repo_path
-        spans = search_engine.search(pattern, scope=scoped)
+        # repo_root threads the repo-relative output contract (spec 0033) — the
+        # inherited engine-seam fix, same contract as the explorer grep.
+        spans = search_engine.search(pattern, scope=scoped, repo_root=repo_path)
         return spans[: settings.search_max_matches]  # defensive bound on untrusted loop
 
     def symbols(path: str) -> list[CodeSpan]:
