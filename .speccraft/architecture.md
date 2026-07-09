@@ -785,3 +785,51 @@ shared `ModelGateway` stays param-driven with no default, and the Deep-tier outb
 (`deep/test_rlm.py`) is extended so Deep carries neither the knob nor a `think` param (rots
 false on leak). Coexists with `explorer_enable_thinking` (0028, the llama.cpp era) — the one
 `think_mode` field disambiguates. See history.md 2026-07-09 (spec 0034).
+
+## Spec 0035 architecture updates — honest tool-scope affordances (three converged wrapper contracts, the deleted grep redirect guard, the persistent live-artifacts helper)
+
+**As of spec 0035 three tool wrappers separate three scope states that all collapsed
+to a silent `[]` — and each guard fires BEFORE delegation.** The shared contract:
+`grep` (`harpyja/scout/explorer_tools.py`), `ls` (same file), and Deep's `search`
+(`harpyja/deep/host_tools.py`) each return a bare marker STRING for an UNSEARCHABLE
+(nonexistent) scope — `grep-scope-not-found: '<scope>'` / `ls-path-not-found:
+'<path>'` / `search-scope-not-found: '<scope>'` (`<id>: {scope!r}`, the
+cause-taxonomy `<id>: '<scope>'` shape) — via an `if ... not <path>.exists(): return
+<marker>` guard placed BEFORE the `search_engine.search(...)` call. Ordering is
+load-bearing, not cosmetic: a nonexistent cwd crashes the engine's subprocess with an
+uncaught `FileNotFoundError` (the exact defect this replaced on the Deep side). The
+return annotations widened `list[CodeSpan] -> list[CodeSpan] | str` (success list
+shape untouched; the marker is an additive return the loop/RLM consume dynamically —
+`_spans_of` yields no spans for a non-list, `session.add`/`dspy.RLM` stringify it
+model/RLM-visibly). Deep's `search` keeps `_charge()` FIRST — a bad-scope call is a
+real, charged tool call.
+
+**As of spec 0035 the `grep` file-scope redirect guard is DELETED — explorer `grep`,
+Deep `search`, and the `symbols` fallback CONVERGE on the one `RipgrepEngine`
+contract.** The obsolete `if scope and not scoped_path.is_dir(): return []` early-return
+is gone; an existing FILE scope now falls through to `search_engine.search(...,
+repo_root=repo_path)` and the engine searches it for real (the 0033 parent-dir cwd +
+filename-arg mechanism, repo-relative results). A file scope therefore DELEGATES (real
+matches) rather than redirecting — the 0033 astropy right-file grep is a positive
+delegated-match fixture, not a marker case. `ls` keeps its distinct second branch
+(`if not target.is_dir(): return []`) reached only for an existing FILE, because "list
+children" of a file is honestly empty (distinct from path-absent). The three-way split
+is: searchable-but-empty → plain `[]`; unsearchable → marker; existing file →
+delegate. `confine_path`'s NON-STRICT resolve (a nonexistent in-repo path passes
+confinement without raising) is pinned by `harpyja/server/test_tools.py` (NEW) — the
+marker branches detect absence via the wrapper's `exists()` guard, NOT via
+confinement, so a future strict/exists switch cannot silently alter the contract.
+
+**As of spec 0035 `harpyja/eval/live_artifacts.py` (NEW, harness/non-SUT) gives live
+integration tests a persistent artifact home.** `live_artifact_dir(test_name, *, now=,
+pid=)` returns `<harpyja-root>/eval_work/live_artifacts/<test>/<YYYYMMDDTHHMMSSZ>-<pid>/`
+(basic UTC ISO-8601 stamp; pid suffix as the collision rule; root via
+`Path(__file__).resolve().parents[2]`); `write_live_artifact(payload, *, test_name,
+repo_path, filename, ...)` writes through the SAME outside-repo
+`atomic_write_json` (inside-repo refusal + atomic same-dir-temp semantics inherited,
+never re-implemented). The measurement TARGET (`repo_path`, the worktree) MUST be a
+separate tree from the artifact dir or the inside-repo refusal fires (pinned both
+directions). The base path is deliberately NOT a `Settings` field
+(eval-knobs-disjoint, asserted over `dataclasses.fields(Settings)`) — a harness
+location, not a knob the SUT reads — so a following measurement spec can still claim
+SUT-byte-frozen against this close. See history.md 2026-07-09 (spec 0035).

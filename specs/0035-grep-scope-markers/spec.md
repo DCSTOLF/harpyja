@@ -1,7 +1,7 @@
 ---
 id: "0035"
 title: "grep-scope-markers"
-status: in-progress
+status: closed
 started_at_sha: 2d6843f
 created: 2026-07-09
 authors: [claude]
