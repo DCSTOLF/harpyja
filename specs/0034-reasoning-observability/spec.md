@@ -25,6 +25,21 @@ trajectory record (per-turn lengths at minimum) and make `think` a RECORDED,
 `explorer_*`-scoped knob — exposing and controlling a thing that is ALREADY HAPPENING,
 not adding a feature.
 
+**The cap mechanics are empirically pinned (2026-07-09 probes):** Ollama's `/v1`
+compat layer translates our `max_tokens` into `num_predict` and enforces it exactly —
+`max_tokens=20` → `completion_tokens: 20`, `finish_reason: length`, identical to native
+`options.num_predict=20` (`eval_count: 20`, `done_reason: length`). So
+`explorer_max_tokens` IS a real hard bound on Ollama (no unbounded-generation gap behind
+the naming difference) — AND the probe showed the budget is consumed REASONING-FIRST:
+with the cap at 20, all 20 tokens went to `reasoning` (51 chars of thinking, zero
+content) before any content/tool_call could be emitted. A hard turn under the 2048 cap
+therefore starves the ACTING tokens after thinking takes its cut, the loop types it
+`generation-truncated`, and pre-0034 nothing in the artifact shows reasoning was the
+consumer. Per-turn reasoning lengths alongside the existing `finish_reason` make
+cap-pressure attribution possible for the first time. (Note the cap is per-TURN — each
+loop turn gets a fresh `max_tokens`; whole-run bounds remain the turn cap + wall-clock
+ceiling, unchanged.)
+
 This is NOT the causation experiment. The think-experiment's verdict stands: mechanism
 UNESTABLISHED, most likely variance (both tested knobs measured inert — thinking already
 default-on, cap never bound at max 1041 tokens/turn). Run 2's first-ever right-file +
@@ -83,7 +98,10 @@ available via an opt-in side-channel for debugging, decided at plan). Additive f
    pinned (both directions, the 0028 finish_reason test pattern).
 2. [unit] Per-turn reasoning lengths + effective think-mode land in the trajectory
    record and the persisted artifact; schema bumped, version gate extended, legacy
-   artifacts still validate (fixture-pinned).
+   artifacts still validate (fixture-pinned). Cap-pressure attribution pinned: a
+   truncated-by-reasoning turn (finish_reason="length", reasoning length > 0, empty
+   content/tool_calls — the probe-established reasoning-first consumption shape) is
+   distinguishable IN THE RECORD from a content-truncated turn.
 3. [unit] `explorer_think` is explorer-scoped by construction: Deep's outbound request
    carries neither the knob nor a think param (outbound-field guard extended, rots false
    on leak).
