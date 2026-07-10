@@ -1,0 +1,49 @@
+{
+  "schema_version": "0037/1",
+  "probed_at": "2026-07-10",
+  "model": "qwen3:14b",
+  "endpoint": "http://localhost:11434/v1/chat/completions",
+  "outcome": "no-op",
+  "arms": {
+    "think_true": {
+      "completion_tokens": 60,
+      "finish_reason": "length",
+      "content_present": false,
+      "think_in_content": false,
+      "reasoning_chars": 246
+    },
+    "think_false": {
+      "completion_tokens": 60,
+      "finish_reason": "length",
+      "content_present": false,
+      "think_in_content": false,
+      "reasoning_chars": 205
+    },
+    "omitted": {
+      "completion_tokens": 60,
+      "finish_reason": "length",
+      "content_present": false,
+      "think_in_content": false,
+      "reasoning_chars": 256
+    }
+  },
+  "supplementary": {
+    "chat_template_disabled": {
+      "note": "chat_template_kwargs{enable_thinking:false} on /v1 — ALSO no-op",
+      "completion_tokens": 60,
+      "finish_reason": "length",
+      "content_present": false,
+      "think_in_content": false,
+      "reasoning_chars": 197
+    },
+    "native_api_think_false": {
+      "note": "control: /api/chat with think:false — thinking GENUINELY off (content='391', thinking_len=0, done_reason=stop, eval_count=4). The param and mechanism are right; the /v1 OpenAI-compat path drops the field.",
+      "endpoint": "http://localhost:11434/api/chat",
+      "eval_count": 4,
+      "done_reason": "stop",
+      "content_present": true,
+      "thinking_chars": 0
+    }
+  },
+  "adjudication": "All three /v1 arms are behaviorally IDENTICAL under the tiny-cap discriminator (max_tokens=60): reasoning generated (205-256 chars), empty content, finish_reason=length, all 60 completion_tokens consumed reasoning-first. think:false did not suppress generation-level thinking, nor even the reasoning field. chat_template_kwargs{enable_thinking:false} equally ineffective (supplementary). The native /api/chat control PROVES the mechanism works one path over — the /v1 compat layer silently ignores the top-level think field. Typed outcome: no-op. Per the spec's terminal-close invariant this is NO_OP_BLOCKED: the thinking A/B cannot construct a thinking-off arm through the gateway as wired; reconciliation (e.g. routing think via the native API path) is a follow-up revision, never a silent re-point."
+}

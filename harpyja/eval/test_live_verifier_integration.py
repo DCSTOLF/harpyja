@@ -372,3 +372,129 @@ def test_pilot_cases_produced_verifier_clean_persisted_artifacts():
     print(f"\n[0036 AC5] verifier-clean={clean} recorded-degrades={degraded} "
           f"config_hash={ledger.get('config_hash')}")
     assert clean + degraded == len(entries)
+
+
+@pytest.mark.integration
+def test_live_think_knob_three_factor_effectiveness():
+    """Spec 0037 AC3 — live per-mode effectiveness proof, THREE-FACTOR, conditional.
+
+    CONDITIONAL on the committed probe outcome being `native-think-effective`
+    (skips with the recorded outcome otherwise — the NO_OP_BLOCKED /
+    reconciliation branches close via findings.md, not here) and GATED on
+    `probe_reasoning_default` (a non-default-thinking served model is an
+    input-validity skip, never a false "knob ineffective" finding — the 0023
+    rule).
+
+    Effectiveness is asserted at the GENERATION level as three SEPARATE,
+    non-collapsible factors (`reasoning_chars` alone is a reporting signal —
+    a serialization-only `think:false` must FAIL here, not pass):
+      (a) per-turn reasoning_chars — on/default arms >=1 turn > 0; off arm
+          {None, 0} across ALL turns;
+      (b) tiny-cap generation-level discriminator — the small-cap off run
+          produces content and/or finish_reason != "length" (not a
+          reasoning-first cap exhaustion);
+      (c) completion_tokens cross-check across arms + a <think>-in-content
+          leak scan on the off arm.
+
+    Off-arm evidence strength is N=1 (one run per mode, a handful of turns) —
+    stated explicitly as acceptable for an API-level mechanism toggle, and
+    nothing stronger is claimed.
+    """
+    import dataclasses
+    from pathlib import Path
+
+    import requests
+
+    from harpyja.eval.live_verifier import probe_reasoning_default
+    from harpyja.eval.think_probe import load_probe_result
+
+    probe_path = (
+        Path(__file__).resolve().parents[2]
+        / "specs" / "0037-explorer-think-knob" / "probes" / "probe_result.json"
+    )
+    probe = load_probe_result(probe_path)
+    if probe["outcome"] != "native-think-effective":
+        pytest.skip(
+            f"probe outcome is {probe['outcome']!r} (not native-think-effective): "
+            "AC3 conditional per spec 0037 — terminal close via findings.md"
+        )
+
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
+        served = {m.get("name") for m in resp.json().get("models", [])}
+        if "qwen3:14b" not in served:
+            pytest.skip(f"qwen3:14b not served: {sorted(served)}")
+    except Exception as e:
+        pytest.skip(f"Ollama not reachable: {e}")
+
+    base = dataclasses.replace(
+        Settings(),
+        lm_api_base="http://127.0.0.1:11434/v1",
+        lm_model="qwen3:14b",
+        scout_max_turns=10,
+        scout_wall_clock_s=600.0,
+        lm_http_timeout_s=300.0,
+    )
+    gateway = ModelGateway(api_base=base.lm_api_base, model=base.lm_model)
+    if not probe_reasoning_default(gateway):
+        pytest.skip(
+            "served model emits no default reasoning — on/default arms are "
+            "input-invalid for this proof (0023 precondition)"
+        )
+
+    gold = {"file": "astropy/modeling/separable.py",
+            "start_line": 242, "end_line": 248}
+    artifacts = {}
+    for mode, think in (("on", True), ("off", False), ("default", None)):
+        settings = dataclasses.replace(base, explorer_think=think)
+        if mode == "off":
+            # tiny-cap discriminator: a genuinely-off arm answers within a
+            # small cap; a still-thinking one exhausts it reasoning-first.
+            settings = dataclasses.replace(settings, explorer_max_tokens=256)
+        try:
+            _result, artifact_path = run_verified_case(
+                case_name="astropy__astropy-12907",
+                settings=settings,
+                gateway=gateway,
+                gold_span=gold,
+                out_dir=live_artifact_dir(f"think_effectiveness_{mode}"),
+            )
+        except ValueError as e:
+            pytest.skip(f"case setup/degrade ({mode} arm): {e}")
+        with open(artifact_path) as f:
+            artifacts[mode] = json.load(f)
+
+    # Factor (a): per-turn reasoning_chars.
+    for mode in ("on", "default"):
+        lens = [t.get("reasoning_chars") for t in artifacts[mode]["per_turn"]]
+        assert any(c and c > 0 for c in lens), (
+            f"{mode} arm shows no reasoning in any turn: {lens}")
+    off_lens = [t.get("reasoning_chars") for t in artifacts["off"]["per_turn"]]
+    assert all(c in (None, 0) for c in off_lens), (
+        f"off arm still reports reasoning: {off_lens}")
+
+    # Factor (b): tiny-cap generation-level discriminator on the off arm.
+    off_turns = artifacts["off"]["per_turn"]
+    assert any(
+        t.get("finish_reason") != "length" for t in off_turns
+    ), ("off arm exhausted the tiny cap on every turn (reasoning-first "
+        "consumption) — thinking NOT genuinely off at the generation level")
+
+    # Factor (c): completion_tokens cross-check + <think> leak scan (off arm).
+    def _tokens(a):
+        return [t.get("completion_tokens") for t in a["per_turn"]
+                if t.get("completion_tokens") is not None]
+    off_tok, on_tok = _tokens(artifacts["off"]), _tokens(artifacts["on"])
+    assert off_tok and on_tok, "completion_tokens missing from per_turn"
+    assert min(off_tok) < max(on_tok), (
+        "off arm token spend indistinguishable from the on arm — thinking "
+        "may still be burning tokens invisibly")
+    off_contents = [t.get("content") or "" for t in
+                    artifacts["off"].get("model_turns", [])]
+    assert not any("<think>" in c for c in off_contents), (
+        "off arm leaks <think> blocks into content — reporting-only suppression")
+
+    # Secondary (NOT the effectiveness signal): recording matches the setting.
+    assert artifacts["on"]["think_mode"] == "native-think-true"
+    assert artifacts["off"]["think_mode"] == "native-think-false"
+    assert artifacts["default"]["think_mode"] == "default-omitted"

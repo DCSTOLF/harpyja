@@ -433,6 +433,27 @@
   running clean with it present is NOT the same as its lift being measured. (See
   `harpyja/eval/test_symbols_lift_live.py` deviation vs the 0022/0026 oracle-reuse
   discipline, spec 0030 deviations.)
+- **Proving a GENERATION-CONTROL knob works is a GENERATION-level claim, not a
+  REPORTING-level one — never assert only on the response FIELD the knob is
+  supposed to suppress.** A knob that suppresses output (a `think:false`, a
+  reasoning-off flag) is proven effective only by evidence the MODEL's behavior
+  changed, because a knob that merely stops SERIALIZING the field in the reply —
+  while the model still generates and burns budget invisibly, or leaks `<think>`
+  into content — would satisfy a "field is now `{None, 0}`" assertion and read as a
+  working knob (the 0028 `/no_think`-was-inferior hole one level down: a control
+  believed effective that never took effect). The proof is therefore MULTI-FACTOR
+  and non-collapsible — for a thinking knob: (a) the per-turn field itself
+  (`reasoning_chars`), (b) a GENERATION-level discriminator (the tiny-cap
+  technique — small `max_tokens` + suppress → content appears / `finish≠length`
+  iff generation genuinely stopped, vs a still-generating model exhausting the cap
+  suppressed-stream-first), and (c) a budget cross-check (`completion_tokens`
+  across arms) + a leak scan (`<think>`-in-content). None may substitute for
+  another, and it must not quietly collapse back to single-factor field-presence.
+  This is the sibling of the presence-proxy false-capability rule above (a
+  `has_citations→CORRECT` proxy measures PRESENCE, not correctness) applied to
+  suppression: field-absent ≠ generation-stopped. (See spec 0037's probe
+  three-factor discriminator + `test_live_think_knob_three_factor_effectiveness`,
+  `specs/0037-explorer-think-knob/probes/run_probes.sh`, spec 0037 AC1/AC3.)
 - A **measurement spec closes on a recorded, SUT-observing typed outcome that names the
   next spec — skip-not-fail is never a close**, and a typed null (including an
   *unmeasurable* / DEFERRED metric with a zero-count denominator) is a **complete, valid
@@ -682,6 +703,36 @@
   recovered-from-a-persisted-artifact rule. (See `specs/0036-terse-query/pilot/run_pilot.py`
   `_preflight` / resumable `pilot_results.json` ledger,
   `specs/0034-reasoning-observability/probes/run_probes.sh`, spec 0034/0036.)
+- A **live probe that ADJUDICATES a capability question returns exactly one value of
+  a committed TYPED-OUTCOME enum (the total answer space), persisted as a
+  schema-versioned SPEC-LOCAL artifact pinned by a unit test, with downstream ACs
+  made CONDITIONAL on the recorded outcome — a TRIPWIRE: the conditional tests skip
+  with the machine-recorded outcome as the reason and AUTO-ACTIVATE, zero edits,
+  when a future run flips the outcome.** When a spec's work depends on an unproven
+  capability (does this knob/endpoint actually do X?), do not pre-commit to the
+  happy path: enumerate every possible answer as a typed enum (the 0023
+  named-outcome discipline — e.g. `{native-think-effective, chat-template-effective,
+  no-op}`), run the probe FIRST, and commit the one outcome the evidence supports as
+  a `<spec>/N` spec-local artifact (NOT a verifier-schema field — it adds no
+  persisted product field) validated loudly and DRIFT-PINNED by a unit test, so the
+  claim cannot exist without the recorded evidence backing it. The downstream ACs
+  (a request-body pin, a live effectiveness proof) load the committed outcome and
+  are authored as conditional pins: a non-target outcome is a legitimate terminal
+  close via `skip`-with-the-recorded-reason (the two-terminal-paths shape — a blocked
+  result is a valid recorded close, not a failure to paper over and never a
+  pass-by-default), and a reconciliation spec that RE-RUNS the probe and flips the
+  outcome makes the withheld pins enforce themselves with no test change. A
+  non-target outcome NEVER silently re-points the mechanism the spec was probing —
+  that is its own reviewed follow-up with the probe re-run as its acceptance gate.
+  This composes the committed-driver rule (the probe is a committed operator driver),
+  the drift-pin (claim bound to evidence), and the measurement-close rule
+  (skip-not-fail is a close only because the outcome is machine-recorded and gates
+  the ACs). (See `harpyja/eval/think_probe.py` `PROBE_OUTCOMES` /
+  `PROBE_RESULT_SCHEMA_VERSION="0037/1"` / `load_probe_result`,
+  `specs/0037-explorer-think-knob/probes/probe_result.json` pinned by
+  `test_think_probe_result.py`, the conditional
+  `test_explorer_think_pin_gated_on_native_probe_outcome` /
+  `test_live_think_knob_three_factor_effectiveness`, spec 0037 AC1/AC2/AC3.)
 - A **load-bearing guarantee whose mechanism is EXECUTABLE-BUT-NOT-STRUCTURAL carries
   its proof in a loud-validated shape, NAMES its residual risk, RETAINS a
   model-independent floor, and is labelled exactly "executable + reviewable" — never

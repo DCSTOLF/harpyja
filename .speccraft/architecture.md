@@ -788,6 +788,27 @@ shared `ModelGateway` stays param-driven with no default, and the Deep-tier outb
 false on leak). Coexists with `explorer_enable_thinking` (0028, the llama.cpp era) — the one
 `think_mode` field disambiguates. See history.md 2026-07-09 (spec 0034).
 
+**As of spec 0037 `explorer_think` as wired is a LIVE-VERIFIED NO-OP on the Ollama `/v1`
+path — the compat layer DROPS the top-level `think` field.** Probed 2026-07-10 against
+`qwen3:14b` on `http://localhost:11434/v1/chat/completions` (evidence:
+`specs/0037-explorer-think-knob/probes/`, typed outcome `no-op` in `probe_result.json`
+schema `0037/1`, pinned by `harpyja/eval/test_think_probe_result.py`): under a tiny-cap
+discriminator all three `/v1` arms (`think:true`/`think:false`/omitted) are behaviorally
+identical (reasoning generated, cap exhausted reasoning-first), and the
+`chat_template_kwargs{enable_thinking:false}` arm is equally inert — so the gateway's
+`params["think"]` sets a field the endpoint ignores. The `/api/chat` control (`think:false`
+→ real content, zero thinking) proves the param name and the model-side mechanism are RIGHT;
+only the `/v1` OpenAI-compat layer silently drops it. NET: **thinking is effectively ALWAYS
+ON through the gateway regardless of `explorer_think`**, and the thinking A/B is BLOCKED (no
+thinking-off arm is constructible as wired). The 0034 knob's tri-state THREADING and
+recording remain correct and green (regression-verified) — the defect is the endpoint's
+handling, not the wiring — so nothing is reverted; `explorer_think=None` (default) is
+byte-identical to pre-0034 and the observability half is untouched. Reconciliation — routing
+`explorer_think` via a `/v1`-honoring path or the native `/api/chat` transport — is a NAMED
+FOLLOW-UP SPEC (with this probe re-run as its acceptance gate), never a silent gateway-transport
+swap or re-point of the knob at `explorer_enable_thinking`'s mechanism. See history.md
+2026-07-10 (spec 0037).
+
 ## Spec 0035 architecture updates — honest tool-scope affordances (three converged wrapper contracts, the deleted grep redirect guard, the persistent live-artifacts helper)
 
 **As of spec 0035 three tool wrappers separate three scope states that all collapsed

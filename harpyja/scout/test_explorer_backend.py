@@ -785,3 +785,46 @@ def test_explorer_think_false_sends_think_false(tmp_path):
     )
     backend.run("q", [])
     assert captured.get("think") is False
+
+
+def test_explorer_think_pin_gated_on_native_probe_outcome(tmp_path):
+    """Spec 0037 AC2 — tri-state pin CONDITIONAL on the probe's typed outcome.
+
+    Loads the committed probes/probe_result.json (spec 0037). If the recorded
+    outcome is not `native-think-effective`, this pin skips WITH the recorded
+    outcome as the reason — the conditionality is machine-recorded, not
+    assumed. On the native outcome it re-asserts the tri-state outbound pin
+    against the probe-confirmed native `think` param, with the earlier
+    `chat_template_kwargs`/"measured-correct param" hedge dropped.
+    """
+    from pathlib import Path
+
+    from harpyja.eval.think_probe import load_probe_result
+
+    probe_path = (
+        Path(__file__).resolve().parents[2]
+        / "specs" / "0037-explorer-think-knob" / "probes" / "probe_result.json"
+    )
+    result = load_probe_result(probe_path)
+    if result["outcome"] != "native-think-effective":
+        pytest.skip(
+            f"probe outcome is {result['outcome']!r} (not native-think-effective): "
+            "AC2 pin conditional per spec 0037 — see findings.md (A/B blocked)"
+        )
+    for think, expect in ((True, True), (False, False)):
+        captured = {}
+        backend = ExplorerBackend(
+            gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+            settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+            think=think,
+        )
+        backend.run("q", [])
+        assert captured.get("think") is expect
+        assert "chat_template_kwargs" not in captured  # native arm, hedge dropped
+    captured = {}
+    backend = ExplorerBackend(
+        gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+        settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert "think" not in captured  # None ⇒ omitted, byte-identical floor
