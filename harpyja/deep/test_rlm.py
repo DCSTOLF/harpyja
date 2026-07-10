@@ -63,3 +63,15 @@ def test_deep_outbound_carries_no_think_param():
     kwargs = _run_deep_and_capture(settings)
     assert "think" not in kwargs
     assert "explorer_think" not in kwargs
+
+
+def test_deep_outbound_carries_no_reasoning_effort():
+    # spec 0038 (AC5): explorer_think now routes as `reasoning_effort` on the
+    # explorer's /v1 call (the reconciled honoring mechanism). The Deep forward
+    # call must NOT carry it, in EITHER direction of the knob — the reconciled
+    # transport change is explorer-scoped. Green on introduction; ROTS FALSE on
+    # any future leak of the 0038 wiring into Deep.
+    for value in (True, False):
+        settings = dataclasses.replace(Settings(), explorer_think=value)
+        kwargs = _run_deep_and_capture(settings)
+        assert "reasoning_effort" not in kwargs

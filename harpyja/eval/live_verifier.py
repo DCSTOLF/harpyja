@@ -6,13 +6,14 @@ from typing import Any, Mapping
 
 from harpyja.eval.report import atomic_write_json
 
-VERIFIER_SCHEMA_VERSION = "0034/1"
+VERIFIER_SCHEMA_VERSION = "0038/1"
 
-# Spec 0033 (+0034): the version GATE (0026 DATASET_SCHEMA_VERSION pattern) — a legacy
-# 0031/1 artifact (no citation-count fields) still validates; an unknown version
-# fails loud. The 0033/1 additions are OPTIONAL fields (citations_submitted /
-# citations_surviving), so no legacy artifact is invalidated by the bump.
-_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1"})
+# Spec 0033 (+0034, +0038): the version GATE (0026 DATASET_SCHEMA_VERSION pattern) —
+# a legacy 0031/1 artifact (no citation-count fields) still validates; an unknown
+# version fails loud. The 0033/1, 0034/1, and 0038/1 additions are all OPTIONAL
+# fields (citations counts; per_turn/think_mode; serving_transport), so no legacy
+# artifact is invalidated by any bump.
+_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1", "0038/1"})
 
 # Six enumerated failure reasons (when facts cannot be proven)
 FAILURE_CODES = frozenset([
@@ -322,6 +323,7 @@ def build_trajectory_record(
     citations_surviving: int | None = None,
     per_turn: list[dict[str, Any]] | None = None,
     think_mode: str | None = None,
+    serving_transport: str | None = None,
 ) -> dict[str, Any]:
     """Build trajectory artifact record from captured explorer loop data.
 
@@ -370,6 +372,10 @@ def build_trajectory_record(
         # DOES get a per_turn entry — consumers must not zip the lists positionally.
         "per_turn": per_turn or [],
         "think_mode": think_mode,
+        # Spec 0038: the endpoint-mechanism identity the run was served through
+        # (e.g. "v1-chat-completions"), so the four-facts invariant is checkable
+        # per-transport. Present-and-None when unknown — never fabricated.
+        "serving_transport": serving_transport,
     }
 
     # Add optional fields if provided
@@ -584,6 +590,9 @@ def run_verified_case(
         # Spec 0034: per-turn reasoning observability — durable in the artifact.
         "per_turn": last_trajectory.get("per_turn", []),
         "think_mode": last_trajectory.get("think_mode"),
+        # Spec 0038: the transport identity the run was served through — durable,
+        # so the four-facts invariant is checkable per-transport.
+        "serving_transport": last_trajectory.get("serving_transport"),
         "timestamp": datetime.utcnow().isoformat(),
         "case": case_name,
     }

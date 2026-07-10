@@ -1,0 +1,58 @@
+{
+  "schema_version": "0038/1",
+  "date": "2026-07-10",
+  "model": "qwen3:14b",
+  "server_version": "0.31.1",
+  "endpoint": "http://localhost:11434/v1/chat/completions",
+  "chosen_path": "v1-reasoning-effort",
+  "outcome": "v1-variant",
+  "mechanism": "OpenAI-compat `reasoning_effort` on the existing /v1 path: \"none\" -> think off, \"high\" -> think on, omitted -> endpoint default (on). The top-level `think` field on /v1 remains a NO-OP (0037 re-confirmed on this server version, arm probe_arm_v1_think_false.json: 237 reasoning chars, finish=length, empty content under the tiny cap). The native /api/chat control also honors think:false (probe_arm_native_think_false.json: content '391', done_reason=stop, eval_count=4, zero thinking) but is NOT chosen: reasoning_effort achieves generation-level control with no endpoint migration (tool_calls/finish_reason/usage/reasoning shapes unchanged).",
+  "usage_mapping": {
+    "completion_tokens": "usage.completion_tokens"
+  },
+  "migration_cost": {
+    "tool_call_id_present": true,
+    "usage_field_name": "usage.completion_tokens",
+    "reasoning_field_name": "message.reasoning",
+    "tool_calls_evidence": "probe_arm_v1_tools_effort_none.json: finish_reason='tool_calls', tool_calls=[{id:'call_fm6faq33', type:'function', function:{name:'grep', arguments:'{\"pattern\":\"TODO\"}'}}], reasoning_chars=0, completion_tokens=19 — the explorer's existing /v1 parsing needs NO change; native /api/chat (unchosen) also carried an id ('call_bhqjb62m') on this server version"
+  },
+  "arms": {
+    "think_true": {
+      "request": "reasoning_effort: \"high\", max_tokens: 60",
+      "content_present": false,
+      "finish_reason": "length",
+      "completion_tokens": 60,
+      "reasoning_chars": 231,
+      "think_in_content": false,
+      "evidence": "probe_arm_v1_reasoning_effort_high.json"
+    },
+    "think_false": {
+      "request": "reasoning_effort: \"none\", max_tokens: 60",
+      "content_present": true,
+      "finish_reason": "stop",
+      "completion_tokens": 4,
+      "reasoning_chars": 0,
+      "think_in_content": false,
+      "content": "391",
+      "evidence": "probe_arm_v1_reasoning_effort.json"
+    },
+    "omitted": {
+      "request": "reasoning_effort omitted, max_tokens: 60",
+      "content_present": false,
+      "finish_reason": "length",
+      "completion_tokens": 60,
+      "reasoning_chars": 186,
+      "think_in_content": false,
+      "evidence": "probe_arm_v1_omitted.json"
+    }
+  },
+  "two_factor_verdict": "reasoning_effort toggles GENERATION, not just serialization: the off arm produces content within the tiny cap (finish=stop, 4 tokens, zero reasoning, no <think> leak) while on/default exhaust the cap reasoning-first (231/186 chars, empty content, 60/60 tokens) — the exact discriminator that exposed the 0037 no-op.",
+  "native_control": {
+    "path": "/api/chat",
+    "honors": true,
+    "think_true": {"reasoning_chars": 225, "done_reason": "length", "eval_count": 60, "content_present": false},
+    "think_false": {"reasoning_chars": 0, "done_reason": "stop", "eval_count": 4, "content": "391"},
+    "omitted": {"reasoning_chars": 232, "done_reason": "length", "eval_count": 60, "content_present": false},
+    "note": "0037's control re-confirmed live; unchosen because v1-reasoning-effort has the smaller blast radius (no endpoint migration)"
+  }
+}

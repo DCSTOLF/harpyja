@@ -733,6 +733,26 @@
   `test_think_probe_result.py`, the conditional
   `test_explorer_think_pin_gated_on_native_probe_outcome` /
   `test_live_think_knob_three_factor_effectiveness`, spec 0037 AC1/AC2/AC3.)
+- A **probe pricing a costly MIGRATION scopes the not-yet-ruled-out VARIANTS of the
+  INCUMBENT transport FIRST — the cheaper honoring path may already exist on the endpoint
+  you are about to leave, and probe-before-wire is the gate that finds it** (spec 0038).
+  When a spec's leading candidate is a big-blast-radius switch (a new endpoint, a new
+  adapter, a divergent transport), do NOT pre-commit to it: make the probe matrix include
+  a re-check of the incumbent's own not-yet-eliminated variants (a newer passthrough, an
+  alternate param on the SAME path), and price the migration only after those are ruled
+  out. 0037 proved `/v1` DROPS top-level `think` and named native `/api/chat` as the
+  leading reconciliation candidate; 0038's probe found `reasoning_effort` on the EXISTING
+  `/v1/chat/completions` path genuinely toggles generation — so the reconciliation shipped
+  as ONE mechanism line on the incumbent transport (True→`"high"` / False→`"none"` /
+  None→omit), with ZERO endpoint-migration blast radius (tool_calls shape, usage/finish
+  extraction, `assert_local`/`timeout_s` all unchanged) and zero divergent-transport debt
+  (explorer and Deep stay on one `/v1` path) — the full-migration steps the plan
+  pre-authored were recorded N/A-on-branch, never built. The migration you avoid by
+  probing is the cheapest migration of all. (See `harpyja/eval/reconcile_probe.py`
+  `RECONCILE_PROBE_OUTCOMES` `{native-api-chat, v1-variant, still-blocked}` /
+  `load_committed_reconcile_probe_result`, `specs/0038-reconciliation/probes/probe_result.json`
+  (outcome `v1-variant`) pinned by `test_reconcile_probe_result.py`,
+  `harpyja/scout/explorer_backend.py` `_default_model_call`, spec 0038 AC1/AC2.)
 - A **load-bearing guarantee whose mechanism is EXECUTABLE-BUT-NOT-STRUCTURAL carries
   its proof in a loud-validated shape, NAMES its residual risk, RETAINS a
   model-independent floor, and is labelled exactly "executable + reviewable" — never
@@ -862,6 +882,23 @@
 - **A citation drop is counted AT the seam where it happens, and the count rides the verifier artifact — `fc_citation_dropped_count` does NOT measure the explorer's submit-time drop** (spec 0033). There are TWO normalize passes: `submit_citations` → `normalize_spans` (the loop's terminal action — the ONE pass where an explorer citation drops; pre-0033 the count was discarded) and `ScoutEngine.search` → `normalize_spans_with_tally` (re-normalizes the backend's ALREADY-normalized survivors — its `ScoutTally.dropped` → `fc_citation_dropped_count` is structurally ~0 for submit-time drops; scope documented, field byte-untouched). `submit_citations` returns `SubmitResult(spans, submitted, surviving)`; the counts thread `LoopResult` → `ExplorerBackend` → `build_trajectory_record` → the verifier artifact as `citations_submitted`/`citations_surviving` (`VERIFIER_SCHEMA_VERSION "0031/1" → "0033/1"`, version-GATED validator so legacy artifacts still validate), making found-then-dropped `(1, 0)` structurally distinguishable from honest-empty `(0, 0)` — this class can never hide inside an `empty` bucket again. (See `harpyja/scout/submit.py` `SubmitResult`, `harpyja/eval/live_verifier.py` `_KNOWN_VERIFIER_SCHEMA_VERSIONS`, spec 0033 AC5.)
 - **One parser, strict-wins: tool-call-name extraction from a trajectory has exactly ONE implementation** (spec 0032). `extract_tool_names` in `harpyja/eval/live_verifier.py` is the canonical parser; BOTH the verify path (`verify_trajectory`) and the live builder (`build_trajectory_record`, called by `ExplorerBackend`) route through it — never a second inline copy (the 0031 T20 divergence: the inline copy silently SKIPPED a nameless tool_call the verify path FAILED, a false measurement waiting for the first downstream consumer of the builder's list). The strict behavior wins: a tool_call lacking `function.name` is a `tool-names-unextractable` typed failure, never a silent skip — surfaced as raised-into-status in the verify path and as DATA (`tool_names_failure` on the record) in the live builder, which must never raise mid-loop. Pinned by an import-identity test (monkeypatch the canonical symbol; only a true delegate observes it) plus a source-audit test that rots false if an inline `seen = set()` name loop reappears. The 0032 OQ2 audit confirmed the other three facts (model identity / tiers_run / terminal bucket) are each single-sourced — tool-names was the only duplicated parse. (See `harpyja/eval/live_verifier.py` `extract_tool_names` / `build_trajectory_record`, `test_live_verifier.py` spec-0032 block, spec 0032 AC1/AC2/AC8.)
 - **Every live capability measurement is accompanied by a durable trajectory-verified artifact** (spec 0031). A live run's result is trustworthy only when paired with a **verifier artifact** that **proves** the four facts: (1) model identity (the model that ran), (2) model invocation (Tier-1 was engaged), (3) tool names (which tools were invoked), and (4) terminal outcome (the gold-span classification). The verifier artifact carries a machine-readable `status ∈ {PASSED, FAILED}` and, if FAILED, a precise `failure_reason ∈ {artifact-incomplete, model-unknown, model-mismatch, model-not-invoked, tool-names-unextractable, terminal-bucket-missing}` — deterministic precedence order when multiple facts are unprovable. A live capability claim unaccompanied by the artifact is inadmissible (the no-silent-capability rule applied to measurement provenance). Bind all future live measurement specs (bake-off, eval set, capability reports) to this convention: `harpyja/eval/live_verifier.py` defines `VERIFIER_SCHEMA_VERSION`, the `verify_trajectory` function, the six failure codes, and the `VerifierResult` shape that carries all four facts. (See `harpyja/eval/live_verifier.py`, spec 0031 AC1/AC5/AC7.)
+
+- **A new trajectory-artifact field is threaded into BOTH seams that assemble the record —
+  `build_trajectory_record` AND `run_verified_case`'s HAND-ASSEMBLED written artifact — or it
+  silently vanishes from the persisted JSON** (spec 0033, recurring 0034 and 0038). The
+  in-memory record and the durable written artifact are TWO assembly points: `run_verified_case`
+  re-builds the persisted JSON from explicit fields, so a field added only to
+  `build_trajectory_record` reaches the record but NOT the file. Every additive field
+  (`citations_submitted`/`citations_surviving` in 0033, `per_turn`/`think_mode` in 0034,
+  `serving_transport` in 0038) must be wired at both seams and pinned by a WRITTEN-JSON test that
+  reads the file back — asserting the record alone proves nothing. History: 0033 DISCOVERED the
+  gap on its first live run (unit tests had asserted the record, not the file); 0034 PRE-EMPTED it
+  with a written-JSON test authored before the live run; 0038 RE-CAUGHT it mid-close when the
+  first live run's `serving_transport` was absent from the artifact — three recurrences make the
+  dual-seam threading a standing checklist item, not a per-spec rediscovery. (See
+  `harpyja/eval/live_verifier.py` `build_trajectory_record` + `run_verified_case`,
+  `test_live_verifier.py` `test_written_artifact_carries_per_turn_and_think_mode` (extended for
+  `serving_transport`), spec 0033/0034/0038.)
 
 ## Speccraft memory & spec-ledger process
 

@@ -239,10 +239,18 @@ class ExplorerBackend:
         params: dict[str, Any] = {"max_tokens": self._max_tokens}
         if not self._enable_thinking:
             params["chat_template_kwargs"] = {"enable_thinking": False}
-        # Spec 0034: the native think knob rides ONLY when explicitly set —
-        # None omits the param and the request stays byte-identical (AC3 pin).
+        # Spec 0038 (reconciliation): the tri-state knob rides ONLY when
+        # explicitly set — None omits everything and the request stays
+        # byte-identical (the surviving 0034 pin). True/False route through the
+        # PROBE-PROVEN honoring mechanism on this same /v1 transport:
+        # `reasoning_effort` ("high" ⇒ thinking on, "none" ⇒ genuinely off at
+        # generation level). The 0034 top-level `think` field is GONE — Ollama's
+        # /v1 layer silently drops it (0037's committed no-op finding); a dead
+        # field pretending to be a knob is the exact hole 0037 caught.
+        # Evidence: specs/0038-reconciliation/probes/probe_result.json
+        # (outcome=v1-variant, two-factor verdict).
         if self._think is not None:
-            params["think"] = self._think
+            params["reasoning_effort"] = "high" if self._think else "none"
 
         def call(messages: list[dict[str, Any]]) -> Mapping[str, Any]:
             return self._gateway.complete_with_tools(messages, schemas, **params)
@@ -334,6 +342,10 @@ class ExplorerBackend:
             citations_surviving=result.citations_surviving,
             per_turn=list(self._per_turn),
             think_mode=derive_think_mode(self._think, self._enable_thinking),
+            # Spec 0038: the explorer's ONE transport — /v1 chat/completions via
+            # ModelGateway.complete_with_tools (the reconciled reasoning_effort
+            # mechanism rides this same path; no per-value transport split).
+            serving_transport="v1-chat-completions",
         )
 
         if result.outcome == SUBMITTED:

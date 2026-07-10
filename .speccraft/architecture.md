@@ -809,6 +809,49 @@ FOLLOW-UP SPEC (with this probe re-run as its acceptance gate), never a silent g
 swap or re-point of the knob at `explorer_enable_thinking`'s mechanism. See history.md
 2026-07-10 (spec 0037).
 
+**As of spec 0038 `explorer_think` is RECONCILED onto a path the model honors — it now rides
+the `/v1` request as `reasoning_effort`, NOT the dropped top-level `think` field** (the 0034
+"rides as `params['think']`" and the 0037 "NO-OP/blocked" framings above are SUPERSEDED here).
+A committed 9-arm live probe (`specs/0038-reconciliation/probes/run_probes.sh`, Ollama 0.31.1 /
+`qwen3:14b`, typed outcome `v1-variant` in `probes/probe_result.json` schema `0038/1`, pinned
+by `harpyja/eval/test_reconcile_probe_result.py` via `load_committed_reconcile_probe_result`
+with archive-first path resolution) proved that the OpenAI-compat `reasoning_effort` param on
+the EXISTING `/v1/chat/completions` transport genuinely toggles GENERATION under the tiny-cap
+two-factor discriminator (`"none"` → thinking off: content, `finish=stop`, 0 reasoning;
+`"high"` → on; omitted → default-on). `ExplorerBackend._default_model_call` now maps
+`explorer_think {True → reasoning_effort:"high", False → "none", None → omit}` on the SAME
+`ModelGateway.complete_with_tools` `/v1` path — all three arms one method, NO per-value
+transport split — and the dead top-level `think` field (0034 wiring, proven dropped by 0037)
+is REMOVED. Because this is a param re-route on the incumbent transport, NOT an endpoint
+migration: the 0034 `None ⇒ outbound byte-identical (params == {"max_tokens": 2048})` pin
+SURVIVES intact, tool_calls shape / usage / `finish_reason` extraction are unchanged, and the
+`assert_local`-before-I/O + finite `timeout_s` on `complete_with_tools` are inherited — so
+explorer and Deep stay on ONE `/v1` gateway path (zero divergent-transport debt). The 0034
+True/False `think` pins were superseded same-change with rationale
+(`test_explorer_think_true_sends_reasoning_effort_high` / `_false_sends_reasoning_effort_none`),
+and a loud-FAIL tripwire (`test_explorer_think_wiring_matches_committed_probe_outcome`) fails
+(never skips) if the committed probe outcome ever stops matching the wired `v1-variant`
+mechanism. The native `/api/chat` control was re-confirmed working but UNCHOSEN (same control,
+larger blast radius); native `/api/chat` remains the fallback honoring path if a future server
+version regresses `reasoning_effort`. See history.md 2026-07-10 (spec 0038).
+
+**As of spec 0038 `VERIFIER_SCHEMA_VERSION` is `"0038/1"`** (supersedes the `"0034/1"` note
+above). `_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1", "0038/1"})`
+behind the same version GATE; the new `serving_transport` field is ADDITIVE and OPTIONAL, so
+legacy `0031/1`/`0033/1`/`0034/1` artifacts still validate. `build_trajectory_record` gained a
+`serving_transport: str | None = None` param (present-and-None when unknown, never fabricated),
+threaded from `ExplorerBackend` (`serving_transport="v1-chat-completions"`) AND through
+`run_verified_case`'s hand-assembled written artifact (the 0033 written-JSON dual-seam lesson
+re-applied — the first live run caught the assembly dropping it), so the four-facts invariant is
+checkable per-transport. The `derive_think_mode` enum is UNCHANGED — its labels
+(`native-think-true` / `native-think-false` / `default-omitted`) name OPERATOR INTENT while the
+transport mechanism the intent rides is now recorded separately in `serving_transport`; the audit
+that they still disambiguate post-switch is pinned by `test_derive_think_mode_disambiguates_post_switch`.
+The Deep-scope guard gained `test_deep_outbound_carries_no_reasoning_effort` (both knob
+directions, rots false on any leak of the 0038 wiring into Deep). No default flip:
+`explorer_think=None` (default-on) remains shipped; the thinking A/B is now UNBLOCKED (it has a
+constructible off-arm). See history.md 2026-07-10 (spec 0038).
+
 ## Spec 0035 architecture updates — honest tool-scope affordances (three converged wrapper contracts, the deleted grep redirect guard, the persistent live-artifacts helper)
 
 **As of spec 0035 three tool wrappers separate three scope states that all collapsed

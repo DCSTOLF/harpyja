@@ -753,7 +753,10 @@ def _capturing_gateway(captured):
 
 
 def test_default_outbound_carries_no_think_param(tmp_path):
-    """AC3: default Settings → NO think key (byte-identical to the T1 pin)."""
+    """AC3 (0034) + spec 0038 AC2: default Settings → NO thinking-control key at
+    all — no dead `think`, no `reasoning_effort`. None preserves the endpoint
+    default on the SAME transport (the 0034 byte-identity pin survives the 0038
+    reconciliation: this branch is v1-variant, not an endpoint switch)."""
     captured = {}
     backend = ExplorerBackend(
         gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
@@ -761,10 +764,21 @@ def test_default_outbound_carries_no_think_param(tmp_path):
     )
     backend.run("q", [])
     assert "think" not in captured
+    assert "reasoning_effort" not in captured
 
 
-def test_explorer_think_true_sends_think_true(tmp_path):
-    """AC3: explorer_think=True rides the outbound request as think=True."""
+# Spec 0038 (exact-pin reconciliation, recorded): the 0034 pins below asserted
+# `think=True/False` rode the outbound request — a field the /v1 layer silently
+# DROPS (0037's committed no-op finding). The knob now routes through the
+# probe-proven honoring mechanism, `reasoning_effort` ("high"/"none") on the
+# SAME /v1 transport (specs/0038-reconciliation/probes/probe_result.json,
+# outcome=v1-variant). The dead `think` field is no longer sent: a serialized
+# no-op field pretending to be a knob is the exact hole 0037 caught.
+
+
+def test_explorer_think_true_sends_reasoning_effort_high(tmp_path):
+    """Spec 0038 AC2: explorer_think=True rides as reasoning_effort="high"
+    (probe-observed thinking-ON arm); the dropped `think` field is gone."""
     captured = {}
     backend = ExplorerBackend(
         gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
@@ -772,11 +786,13 @@ def test_explorer_think_true_sends_think_true(tmp_path):
         think=True,
     )
     backend.run("q", [])
-    assert captured.get("think") is True
+    assert captured.get("reasoning_effort") == "high"
+    assert "think" not in captured
 
 
-def test_explorer_think_false_sends_think_false(tmp_path):
-    """AC3: explorer_think=False rides as think=False (explicit disable)."""
+def test_explorer_think_false_sends_reasoning_effort_none(tmp_path):
+    """Spec 0038 AC2: explorer_think=False rides as reasoning_effort="none"
+    (probe-observed genuinely-off arm: content, stop, zero reasoning)."""
     captured = {}
     backend = ExplorerBackend(
         gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
@@ -784,18 +800,69 @@ def test_explorer_think_false_sends_think_false(tmp_path):
         think=False,
     )
     backend.run("q", [])
-    assert captured.get("think") is False
+    assert captured.get("reasoning_effort") == "none"
+    assert "think" not in captured
+
+
+def test_explorer_think_wiring_matches_committed_probe_outcome(tmp_path):
+    """Spec 0038 AC2 tripwire: the WIRED mechanism must match the COMMITTED
+    probe outcome — a loud FAIL (not a skip) on mismatch.
+
+    The wiring below implements the `v1-variant` outcome (reasoning_effort on
+    the existing /v1 transport, all three arms on the SAME method — no
+    per-value transport split). If a future re-probe flips the committed
+    outcome, this pin fails loudly: wiring and evidence must be reconciled
+    explicitly, never allowed to drift apart (the 0037 lesson, mechanized).
+    """
+    from harpyja.eval.reconcile_probe import load_committed_reconcile_probe_result
+
+    result = load_committed_reconcile_probe_result()
+    assert result["outcome"] == "v1-variant", (
+        f"committed probe outcome {result['outcome']!r} no longer matches the "
+        "wired v1-variant mechanism — reconcile wiring and evidence explicitly"
+    )
+    # The tri-state translation, asserted on the outbound request of the ONE
+    # transport (complete_with_tools — the /v1 path the probe validated).
+    for think, expect in ((True, "high"), (False, "none")):
+        captured = {}
+        backend = ExplorerBackend(
+            gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+            settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+            think=think,
+        )
+        backend.run("q", [])
+        assert captured.get("reasoning_effort") == expect
+        assert "think" not in captured
+        assert "chat_template_kwargs" not in captured
+    captured = {}
+    backend = ExplorerBackend(
+        gateway=_capturing_gateway(captured), repo_path=str(tmp_path),
+        settings=Settings(), manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert captured == {"max_tokens": 2048}  # None: the 0034 byte-identity floor holds
 
 
 def test_explorer_think_pin_gated_on_native_probe_outcome(tmp_path):
     """Spec 0037 AC2 — tri-state pin CONDITIONAL on the probe's typed outcome.
 
-    Loads the committed probes/probe_result.json (spec 0037). If the recorded
-    outcome is not `native-think-effective`, this pin skips WITH the recorded
-    outcome as the reason — the conditionality is machine-recorded, not
-    assumed. On the native outcome it re-asserts the tri-state outbound pin
-    against the probe-confirmed native `think` param, with the earlier
-    `chat_template_kwargs`/"measured-correct param" hedge dropped.
+    SUPERSEDED-BY-0038 (recorded, not auto-armed): this pin is keyed to the
+    /v1 top-level `think` mechanism's machine-recorded `no-op` outcome, which
+    never legitimately flips — Ollama's /v1 layer keeps dropping the field
+    (re-confirmed live by the 0038 probe, arm probe_arm_v1_think_false.json),
+    and the knob now routes through the probe-proven `reasoning_effort`
+    mechanism instead (specs/0038-reconciliation/probes/probe_result.json,
+    outcome=v1-variant). The successor pins are
+    test_explorer_think_true_sends_reasoning_effort_high / _false_sends_
+    reasoning_effort_none / test_explorer_think_wiring_matches_committed_probe_
+    outcome (above). This test is KEPT, skipping forever with the archived
+    recorded reason: the archived 0037 evidence and its drift pin are never
+    edited (evidence-untouched supersede).
+
+    Original 0037 rationale: loads the committed probes/probe_result.json
+    (spec 0037). If the recorded outcome is not `native-think-effective`, this
+    pin skips WITH the recorded outcome as the reason — the conditionality is
+    machine-recorded, not assumed.
     """
     from pathlib import Path
 

@@ -528,9 +528,9 @@ def test_build_trajectory_record_valid_multitool_names_preserved():
 
 def test_verifier_schema_version_and_failure_codes_frozen():
     """AC5: schema version, the six codes, and their precedence are byte-frozen."""
-    # 0031/1 -> 0033/1 -> 0034/1: spec 0034 additive bump (per_turn/think_mode),
-    # reconciled here (same-change amendment discipline).
-    assert VERIFIER_SCHEMA_VERSION == "0034/1"
+    # 0031/1 -> 0033/1 -> 0034/1 -> 0038/1: spec 0038 additive bump
+    # (serving_transport), reconciled here (same-change amendment discipline).
+    assert VERIFIER_SCHEMA_VERSION == "0038/1"
     assert FAILURE_CODES == frozenset([
         "model-unknown",
         "model-mismatch",
@@ -558,7 +558,8 @@ def test_verify_result_field_by_field_stable_on_valid_trajectory():
     got.pop("timestamp")
 
     assert got == {
-        "schema_version": "0034/1",
+        # 0038 additive bump (serving_transport) — same-change amendment.
+        "schema_version": "0038/1",
         "status": "PASSED",
         "failure_reason": None,
         "model_identity": "served_present_and_matching",
@@ -867,8 +868,11 @@ def test_record_discriminates_reasoning_truncated_from_content_truncated_and_cle
 
 
 def test_schema_version_is_0034_1():
-    """AC2: 0033/1 -> 0034/1 — spec 0034 additive bump (per_turn/think_mode)."""
-    assert VERIFIER_SCHEMA_VERSION == "0034/1"
+    """AC2: 0033/1 -> 0034/1 — spec 0034 additive bump (per_turn/think_mode).
+    Amended by spec 0038 (additive serving_transport bump, same-change
+    reconciliation): the CURRENT version is 0038/1; 0034/1 stays a known
+    legacy version (see test_legacy_artifacts_without_serving_transport)."""
+    assert VERIFIER_SCHEMA_VERSION == "0038/1"
 
 
 def test_legacy_0031_and_0033_artifacts_still_validate():
@@ -941,6 +945,8 @@ def test_written_artifact_carries_per_turn_and_think_mode(tmp_path, monkeypatch)
                 "citations_surviving": 0,
                 "per_turn": per_turn,
                 "think_mode": "default-omitted",
+                # Spec 0038: the transport identity must survive assembly too.
+                "serving_transport": "v1-chat-completions",
             }
             return []
 
@@ -957,6 +963,9 @@ def test_written_artifact_carries_per_turn_and_think_mode(tmp_path, monkeypatch)
     artifact = _json.loads(Path(artifact_path).read_text())
     assert artifact["per_turn"] == per_turn
     assert artifact["think_mode"] == "default-omitted"
+    # Spec 0038: serving_transport is durable in the WRITTEN artifact (the 0033
+    # written-JSON lesson — the record alone proves nothing).
+    assert artifact["serving_transport"] == "v1-chat-completions"
 
 
 def test_verify_trajectory_outcome_equality_over_valid_fixtures():
@@ -978,3 +987,68 @@ def test_verify_trajectory_outcome_equality_over_valid_fixtures():
     # A failing trajectory still fails identically.
     bad = verify_trajectory(_traj(served_model="wrong"))
     assert (bad.status, bad.failure_reason) == ("FAILED", "model-mismatch")
+
+
+# --- Spec 0038: reconciliation — serving_transport + four-facts-survive + enum audit ---
+
+
+def test_trajectory_records_serving_transport():
+    """AC6 (0038): build_trajectory_record persists the serving transport
+    (endpoint-mechanism identity) as an ADDITIVE optional field, so the
+    four-facts invariant is checkable per-transport rather than assumed."""
+    record = build_trajectory_record(
+        _multitool_history(), 3, serving_transport="v1-reasoning-effort"
+    )
+    assert record["serving_transport"] == "v1-reasoning-effort"
+    # Omitted → present-and-None (the think_mode posture): never fabricated.
+    record = build_trajectory_record(_multitool_history(), 3)
+    assert record["serving_transport"] is None
+
+
+def test_legacy_artifacts_without_serving_transport_still_validate():
+    """AC6 (0038): the version GATE — a legacy 0034/1 artifact (no
+    serving_transport) still validates; 0038/1 is a known version; an unknown
+    version still fails loud."""
+    legacy = {
+        "schema_version": "0034/1",
+        "verifier_status": "PASSED",
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "tiers_run": [1],
+        "model_turns": [],
+    }
+    validate_verifier_artifact(legacy)  # no raise
+    current = dict(legacy, schema_version="0038/1")
+    validate_verifier_artifact(current)  # no raise
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(dict(legacy, schema_version="9999/1"))
+
+
+def test_four_facts_survive_reconciled_trajectory():
+    """AC6 (0038): the verifier's four facts remain provable on a trajectory
+    produced through the reconciled path (serving_transport recorded)."""
+    traj = _traj(serving_transport="v1-reasoning-effort")
+    result = verify_trajectory(traj)
+    assert result.status == "PASSED"
+    assert result.model_identity is not None
+    assert result.model_invoked is True
+    assert result.tool_names_invoked == ["grep", "symbols"]
+    assert result.terminal_bucket == "correct"
+
+
+def test_derive_think_mode_disambiguates_post_switch():
+    """AC6 (0038): the 0034 enum audit — with the knob now routed through the
+    honoring mechanism (reasoning_effort on /v1), the existing labels still
+    disambiguate the tri-state: three distinct values, native wins over the
+    chat-template knob, no new label needed. The labels name the OPERATOR
+    INTENT (native think on/off/default); the transport mechanism they ride is
+    recorded separately in serving_transport."""
+    from harpyja.scout.explorer_backend import derive_think_mode
+
+    labels = {
+        derive_think_mode(True, True),
+        derive_think_mode(False, True),
+        derive_think_mode(None, True),
+    }
+    assert labels == {"native-think-true", "native-think-false", "default-omitted"}
+    assert derive_think_mode(False, False) == "native-think-false"  # native wins
