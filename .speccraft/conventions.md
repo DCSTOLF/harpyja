@@ -878,6 +878,22 @@
   break consolidate-backfill's `created:` ordering and the id parser. A spec's terminal
   `status:` must be flipped at close (`ready-for-operator` left stale on 0031 hid it from
   backfill candidacy).
+- **A test that pins committed spec evidence points at `specs/.archive/NNNN-slug/` from the
+  moment it is authored — never at the live `specs/NNNN-slug/` path — and every spec close
+  ends with a path-pin sweep** (`grep -rn '"specs" / "' harpyja --include='*.py'`; any hit
+  not routed through `.archive` is drift). The close flow GUARANTEES the move: consolidation
+  relocates the spec dir to `specs/.archive/` at zero conflicts, so a pre-archive path pin is
+  a delayed test failure with three observed failure shapes (2026-07-10 sweep, 6 sites /
+  5 files): a hard FAIL on clean main (the 0036 `full_set_report` pin — the "1 failed" that
+  polluted 0037's close-run suite), a silent ALWAYS-SKIP that permanently disables the
+  assertion (the 0036 pilot-ledger integration test — worse than the failure, it looked
+  green), and an ERROR-instead-of-skip in conditional tripwire pins whose loader raises on a
+  missing file (the 0037 `probe_result` pins, broken by their own spec's close hours after
+  being written). Authoring against `.archive` is safe DURING the spec too: the pin test's
+  RED phase fails on file-absence either way, and the file lands at the archived path at
+  close without a follow-up edit. If evidence must be pinned while a spec is still live and
+  unarchived, resolve both locations explicitly — never bare `specs/NNNN-slug/` alone.
+  (Discovered closing spec 0037; fixed at `79f7bf2`.)
 
 ## Logging
 
