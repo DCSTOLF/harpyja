@@ -1,7 +1,7 @@
 ---
 id: "0036"
 title: "terse-query"
-status: in-progress
+status: closed
 started_at_sha: a983bcc
 created: 2026-07-09
 authors: [claude]

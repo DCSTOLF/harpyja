@@ -833,3 +833,73 @@ directions). The base path is deliberately NOT a `Settings` field
 (eval-knobs-disjoint, asserted over `dataclasses.fields(Settings)`) — a harness
 location, not a knob the SUT reads — so a following measurement spec can still claim
 SUT-byte-frozen against this close. See history.md 2026-07-09 (spec 0035).
+
+## Spec 0036 architecture updates — the populated terse eval set (schema 0036/1 tag fields, the mechanical reachability classifier, the frozen 0036 pilot config, pure pilot-aggregation glue)
+
+**As of spec 0036 the terse dataset schema is version-gated as a KNOWN-VERSIONS SET,
+and `0036/1` rows carry five additive, loud-validated tag fields.** `dataset.py` adds
+`DATASET_SCHEMA_VERSION_0036 = "0036/1"` and `_KNOWN_TERSE_SCHEMA_VERSIONS =
+frozenset({DATASET_SCHEMA_VERSION, DATASET_SCHEMA_VERSION_0036})`; `is_terse` widened
+from exact-match (`== DATASET_SCHEMA_VERSION`) to set membership (the `live_verifier`
+`_KNOWN_VERIFIER_SCHEMA_VERSIONS` pattern), so legacy `0026/1` rows keep loading down
+the terse branch with the new fields defaulted while `0036/1` rows are held to the
+tag-required rule. The five additive `EvalCase` fields (`reachability`,
+`reachability_provenance`, `concept_patch_relation`, `concept_span`,
+`concept_span_provenance`) all default `None`. `_parse_0036_tags` is the loud gate: the
+three axis tags (`reachability` ∈ `REACHABILITIES`, `reachability_provenance` ∈
+`REACHABILITY_PROVENANCES`, `concept_patch_relation` ∈ `CONCEPT_PATCH_RELATIONS`) are
+MANDATORY on every `0036/1` row; `concept_span`(+`concept_span_provenance`) is REQUIRED
+iff `concept_patch_relation == "divergent"` and FORBIDDEN on `same` (a `same` row
+carrying a span raises). Label authority is UNCHANGED: `expected_spans` stay JOIN-ONLY
+from the sha256-pinned raw fixture, and the join's `dataclasses.replace` never touches
+the new fields — so `concept_span` (the named, audited hand-labeled exemption,
+mirroring `classification_provenance = hand-labeled-by-intent`) never overwrites the
+patch-derived authority.
+
+**As of spec 0036 `harpyja/eval/terse_reachability.py` (NEW, operator-side, non-product)
+mechanically classifies gold-span reachability.** `classify_reachability(query,
+span_text)` returns `"lexical"` when the gold-span text contains any CODE-LIKE
+identifier from the query (case-insensitive), else `"conceptual"` — it reuses
+`_IDENTIFIER_RE` / `_is_code_like` from `terse_dataset`, so plain-English overlap
+deliberately does not count. `MECHANICAL` / `HAND_LABELED` constants mirror
+`dataset.REACHABILITY_PROVENANCES` (the OQ2 mixed-strategy stays auditable). It inherits
+the 0026 non-product posture: pure, no I/O, no `ModelGateway`/gateway import
+(ast-guarded in its tests), runs STRICTLY POST-authoring (it needs gold visibility) and
+is never surfaced to the author model — structurally unreachable from the authoring/SUT
+paths even though it lives in `harpyja/eval`.
+
+**As of spec 0036 the AC8 pilot machinery carries a SECOND pre-registered frozen+hashed
+config for servable arms.** `ac8_pilot.py` adds `PREREGISTERED_AC8_CONFIG_0036`
+(`reference_model_a="qwen3:14b"` vs `reference_model_b="qwen3:4b-instruct"`) and its own
+`AC8_CONFIG_HASH_0036 = config_hash(...)`. The 0026 `PREREGISTERED_AC8_CONFIG` (arm A
+`hf.co/Qwen/Qwen3-8B-GGUF:latest`) is NOT servable on the live stack; the new config
+swaps ONLY the arm identities to servable models with a real capability contrast and
+copies every threshold verbatim (`pilot_n`, `full_n_target`, `min_discordant_pairs`) —
+committed BEFORE the pilot fires, cited by hash in the pilot artifact. This is the
+sanctioned way a stale freeze is re-registered for a drifted stack: a NEW hashed config,
+never a silent substitution under the old hash.
+
+**As of spec 0036 `harpyja/eval/pilot_runner.py` (NEW, pure, no live I/O) is the
+pilot-aggregation glue between the live runner and the frozen gate.** `PilotCaseOutcome`
+carries one bucket per arm or a typed degrade cause where an arm produced no capability
+observation; `build_pilot_pairs` splits outcomes into scoreable `PilotPair`s and
+RECORDED exclusions (a bucket-less arm with NO degrade cause RAISES — a fabricated
+exclusion reason would mask what happened); `gate_report` applies `decide_from_pairs`
+under `PREREGISTERED_AC8_CONFIG_0036` and returns the citable report (verdict, config +
+its hash, pair/signal counts, exclusions). Degrades are excluded-and-recorded by cause,
+never counted clean and never silently absorbed — the report keeps the exclusions
+visible beside the verdict and the hash it ran under.
+
+**As of spec 0036 two additive floor helpers in `terse_dataset.py` split the full-set
+gate by altitude.** `meets_full_n_target(dataset, cfg)` enforces the governing frozen
+config's `full_n_target` (upward-only; the static `validate_terse_set_floor` `min_n=12`
+is the paired-ranking floor, NOT the representative-size gate). `conceptual_stratum_report(dataset, *, pilot_sized=)`
+counts the reachability strata and returns `STRATUM_REPORTABLE` when the conceptual
+stratum meets the pre-declared floor (`_CONCEPTUAL_FLOOR_FULL=5` / `_CONCEPTUAL_FLOOR_PILOT=2`,
+fixed before any sample was drawn) else `STRATUM_UNDER_POPULATED` — a typed finding, so
+the reachability split is reported only when powered, never silently merged into the
+aggregate. The committed set (19 blind-clean cases, 11 repos, 4 lexical / 15 conceptual)
+clears the static floor and the conceptual reportability floor but NOT the frozen
+`full_n_target=30` (raw-pool exhaustion); `full_set_report.json` records
+`representative_at_frozen_target: false`, test-pinned to computed truth. See history.md
+2026-07-09 (spec 0036).

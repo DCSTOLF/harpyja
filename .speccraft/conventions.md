@@ -688,7 +688,34 @@
   legitimate close rather than a tuned-until-favorable result, and its "located"
   predicate reuses the scoring oracle's own success buckets (one-oracle reuse). (See
   `harpyja/eval/ac8_pilot.py` `PREREGISTERED_AC8_CONFIG` / `is_signal_discordant` /
-  `decide_ac8` / `Ac8Outcome`, spec 0026 AC8.)
+  `decide_ac8` / `Ac8Outcome`, spec 0026 AC8.) A stale freeze whose reference arm is
+  UN-SERVABLE on the live stack is re-registered as a NEW frozen+hashed config with only
+  the arm identities swapped and every threshold verbatim, committed BEFORE the pilot
+  fires — never a silent substitution under the old hash. (See
+  `PREREGISTERED_AC8_CONFIG_0036`, spec 0036.)
+- A **pre-registered selection or eligibility rule may be AMENDED only while still
+  OUTCOME-BLIND — before any authored/measured output is seen — and the amendment is
+  RECORDED with the trigger that forced it.** Spec 0036 added a blind-ELIGIBILITY
+  precondition (a case whose issue text NAMES the gold-span path cannot be blind-authored
+  at all → SKIPPED AND RECORDED, exclude-and-count, never silently dropped) and upgraded
+  the leakage verdict parser to FAIL-CLOSED explicit-statement parsing after a live
+  ambiguous verdict — both decided query-blind and recorded in the committed operator
+  script. An amendment made after outcomes are visible is steering, not refinement. (See
+  `specs/0036-terse-query/authoring/run_authoring.py` docstring, spec 0036.)
+- A **committed CLAIM artifact is TEST-PINNED to the computed truth it claims.** A static
+  test re-derives the claimed values from the data at test time, so a claim file (a
+  representativeness/power report) can never silently drift from what the set actually
+  contains. Spec 0036's `full_set_report.json` (including
+  `representative_at_frozen_target: false`) is pinned by
+  `test_committed_full_set_report_matches_computed_truth` — the under-powered finding
+  cannot be quietly edited to read representative. (Spec 0036 AC7.)
+- **Under-powered-at-the-frozen-target is a RECORDED finding, never a re-derived
+  target.** When a natural pool cannot reach a pre-registered `full_n_target`, the result
+  is recorded (`meets_full_n_target: false`, `representative_at_frozen_target: false`) —
+  NOT papered over by lowering the target, which is the post-hoc steering the freeze
+  exists to prevent. Sizing UPWARD post-PROCEED is permitted; re-deriving the target down
+  is not. Enlarging the pool is a SEPARATE audited convert step of its own. (See
+  `harpyja/eval/terse_dataset.py` `meets_full_n_target`, spec 0036 Finding 1.)
 
 - A **load-bearing LIVE acceptance criterion blocked by a DOWNSTREAM/model factor ships
   the proven part and records the AC as a HOLD via an `xfail`-that-flips-to-`xpass` naming
