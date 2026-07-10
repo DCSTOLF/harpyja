@@ -25,7 +25,8 @@ from harpyja.eval.think_probe import (
 
 _HARPYJA_ROOT = Path(__file__).resolve().parents[2]
 COMMITTED_PROBE_RESULT = (
-    _HARPYJA_ROOT / "specs" / "0037-explorer-think-knob" / "probes" / "probe_result.json"
+    _HARPYJA_ROOT / "specs" / ".archive" / "0037-explorer-think-knob"
+    / "probes" / "probe_result.json"
 )
 
 _ARM_KEYS = {"completion_tokens", "finish_reason", "content_present", "think_in_content"}

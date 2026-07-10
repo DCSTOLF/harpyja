@@ -211,9 +211,10 @@ def test_committed_full_set_report_matches_computed_truth():
     from harpyja.eval.ac8_pilot import PREREGISTERED_AC8_CONFIG_0036
     from harpyja.eval.terse_dataset import conceptual_stratum_report, meets_full_n_target
 
+    # 0036's close archived the spec dir; the committed report lives under .archive.
     report_path = (
         Path(__file__).resolve().parents[2]
-        / "specs" / "0036-terse-query" / "full_set_report.json"
+        / "specs" / ".archive" / "0036-terse-query" / "full_set_report.json"
     )
     assert report_path.exists(), "full_set_report.json not committed"
     report = json.loads(report_path.read_text())

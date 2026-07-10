@@ -337,9 +337,10 @@ def test_pilot_cases_produced_verifier_clean_persisted_artifacts():
 
     from harpyja.eval.live_verifier import validate_verifier_artifact
 
+    # 0036's close archived the spec dir; the committed ledger lives under .archive.
     ledger_path = (
         Path(__file__).resolve().parents[2]
-        / "specs" / "0036-terse-query" / "pilot" / "pilot_results.json"
+        / "specs" / ".archive" / "0036-terse-query" / "pilot" / "pilot_results.json"
     )
     if not ledger_path.exists():
         pytest.skip("pilot ledger not present — pilot has not run here")
@@ -410,7 +411,8 @@ def test_live_think_knob_three_factor_effectiveness():
 
     probe_path = (
         Path(__file__).resolve().parents[2]
-        / "specs" / "0037-explorer-think-knob" / "probes" / "probe_result.json"
+        / "specs" / ".archive" / "0037-explorer-think-knob"
+        / "probes" / "probe_result.json"
     )
     probe = load_probe_result(probe_path)
     if probe["outcome"] != "native-think-effective":

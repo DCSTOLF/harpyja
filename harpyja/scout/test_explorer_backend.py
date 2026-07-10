@@ -803,7 +803,8 @@ def test_explorer_think_pin_gated_on_native_probe_outcome(tmp_path):
 
     probe_path = (
         Path(__file__).resolve().parents[2]
-        / "specs" / "0037-explorer-think-knob" / "probes" / "probe_result.json"
+        / "specs" / ".archive" / "0037-explorer-think-knob"
+        / "probes" / "probe_result.json"
     )
     result = load_probe_result(probe_path)
     if result["outcome"] != "native-think-effective":

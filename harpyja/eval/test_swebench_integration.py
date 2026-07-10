@@ -166,7 +166,8 @@ def test_swebench_sweep_live_recommendation_and_guard(tmp_path):
 
 # ---- Spec 0012 AC5: N=12 recovery re-measurement (operator-run) -------------
 
-_SPEC_DIR = Path(__file__).resolve().parents[2] / "specs" / "0012-path-prefix"
+# 0012's close archived the spec dir; the committed baseline lives under .archive.
+_SPEC_DIR = Path(__file__).resolve().parents[2] / "specs" / ".archive" / "0012-path-prefix"
 _BASELINE = _SPEC_DIR / "baseline_q8rl_n12.json"
 
 
