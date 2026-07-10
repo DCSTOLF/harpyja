@@ -484,11 +484,13 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    scoring; per-arm `dataclasses.replace(settings, lm_model=…)`; provisioning injected).
    Report schema bumped `0025/1 → 0026/1` (additive `run_metadata.representativeness_caveat`,
    pinned `REPRESENTATIVENESS_CAVEAT` naming the query-shape-only scope + the Python
-   language monoculture). **State: the INSTRUMENT is unit-complete but NOT yet usable —
-   the committed `swebench_verified.terse.jsonl` is PLACEHOLDERS; the offline
-   blind-authoring pilot (real queries) + the live AC8 go/no-go run are a delegated
-   operator deliverable, and a likely AC8 `UNDER_POWERED_STOP` is a scoped finding naming
-   the finder-capability next step.** See history.md 2026-07-06 (spec 0026).
+   language monoculture). **State (SUPERSEDED by spec 0036): the terse fixture is NO LONGER
+   placeholders — spec 0036 replaced `swebench_verified.terse.jsonl` with real blind-authored
+   queries (10 pilot cases; 19 blind-clean full-set cases) and RAN the pilot: AC8 = PROCEED
+   on real signal under the re-registered `PREREGISTERED_AC8_CONFIG_0036` (arm A swapped off
+   the non-servable `hf.co/Qwen/Qwen3-8B-GGUF:latest`). The full set is UNDER-POWERED at the
+   frozen `full_n_target=30` (raw-pool exhaustion), recorded not papered. See the spec 0036
+   section below and history.md 2026-07-09 (spec 0036).** See history.md 2026-07-06 (spec 0026).
 
    **As of spec 0027 the report surfaces PER-CAUSE Scout-degrade counts** (still
    measurement; the SUT change is the sibling spec-0027 explorer edit, not this layer).

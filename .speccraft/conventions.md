@@ -641,6 +641,47 @@
   loads-with-defaults), because the parser is shared and a naive unconditional guard
   breaks every existing fixture. (See `harpyja/eval/dataset.py` `DATASET_SCHEMA_VERSION`
   / version-gated `_parse_case` / `_parse_terse_guard`, spec 0026 AC3/AC5.)
+- **When a schema-version-gated validator gains its SECOND accepted version, the exact
+  `== VERSION` gate WIDENS to membership in a `_KNOWN_*_SCHEMA_VERSIONS` frozenset — the
+  new version is ADDED to the set, never chained as a second `==`, and a legacy row keeps
+  validating down the SAME branch rather than being silently reclassified as
+  non-terse/unknown-schema.** This is the multi-version successor to the single-version
+  gate above: the gate started as an exact match (`schema_version == DATASET_SCHEMA_VERSION`
+  → `is_terse`) and, when a new version was introduced, became `schema_version in
+  _KNOWN_TERSE_SCHEMA_VERSIONS` so the older tag still routes down the terse branch with the
+  new fields defaulted while the new tag is held to its added guard. The frozenset is the
+  single enumerated source of accepted versions (`not in → loud reject`), so a validator
+  cannot silently accept an unknown shape and an old artifact cannot silently fall off the
+  validated path. Widening the accepted set is deliberate and adds the new version WITH its
+  guard in the same change, never a silent `==`-to-`==` drift. (See
+  `harpyja/eval/live_verifier.py` `_KNOWN_VERIFIER_SCHEMA_VERSIONS` grown
+  `0031/1 → 0033/1 → 0034/1`, and `harpyja/eval/dataset.py` `_KNOWN_TERSE_SCHEMA_VERSIONS`
+  grown `0026/1 → 0036/1` with `is_terse` widened from `==` to `in`, spec 0033/0034/0036.
+  `authoring_provenance.py` remains single-version exact-match — correct until it gains a
+  second version.)
+- **The DRIVER script for a live/operator run — and its committed output artifacts — live
+  under `specs/NNNN/`, NOT in `harpyja/`, as the reproducible provenance of the finding;
+  every such driver is STOP-AND-WARN on infra (a loud abort naming the missing/unservable
+  dependency, NEVER a skip), and a long-running driver is additionally RESUMABLE.** A live
+  finding is only auditable if the exact script that produced it, plus its inputs and its
+  emitted artifacts, are committed beside the spec (e.g. `specs/0034-.../probes/run_probes.sh`
+  + `probe_*.json`; `specs/0036-.../authoring/run_authoring.py` + `authored_queries.json`;
+  `specs/0036-.../pilot/run_pilot.py` + `pilot_results.json` / `gate_report.json`) — the
+  driver imports the frozen SUT/harness modules from `harpyja/` but is itself operator
+  tooling, never product code (it never enters the runtime import graph, same posture as the
+  0026 authoring tool and the 0010 convert/provision stages). Two rules travel with it: (i)
+  a `_preflight()` probes the live dependency (Ollama `/api/tags`, arm servability) and
+  raises `SystemExit("STOP-AND-WARN: …")` naming the exact missing piece — an infra failure
+  loudly aborts, it is never absorbed as an empty/clean result (the BLOCKED-not-close cause
+  boundary applied to the driver); (ii) a driver whose run outlasts one invocation budget is
+  RESUMABLE — each per-unit outcome is written to a ledger IMMEDIATELY, completed units are
+  skipped on re-invocation, and it exits `3` while work remains / `0` when complete, so a
+  bounded-budget live run reaches a verdict across re-invocations without re-spending
+  completed work. This composes with the persistent live-artifacts home (a driver writes its
+  durable verifier artifacts through `live_artifact_dir`) and the
+  recovered-from-a-persisted-artifact rule. (See `specs/0036-terse-query/pilot/run_pilot.py`
+  `_preflight` / resumable `pilot_results.json` ledger,
+  `specs/0034-reasoning-observability/probes/run_probes.sh`, spec 0034/0036.)
 - A **load-bearing guarantee whose mechanism is EXECUTABLE-BUT-NOT-STRUCTURAL carries
   its proof in a loud-validated shape, NAMES its residual risk, RETAINS a
   model-independent floor, and is labelled exactly "executable + reviewable" — never
