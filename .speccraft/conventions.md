@@ -805,6 +805,52 @@
   the arm identities swapped and every threshold verbatim, committed BEFORE the pilot
   fires — never a silent substitution under the old hash. (See
   `PREREGISTERED_AC8_CONFIG_0036`, spec 0036.)
+- A **projection that GATES an expensive run is labeled by its EPISTEMIC KIND — an
+  upper-bound feasibility check is NOT a power estimate, and the label lives in the
+  config, the code, AND the committed claim.** When a cheap pre-check projects an
+  achievable signal from a PROXY signal, name honestly what the proxy can and cannot
+  support: a projection built from a *cross-model* capability contrast (the 0036
+  pilot's 14b-vs-4b discordance) can BOUND but cannot ESTIMATE a *within-model* effect
+  (the 0039 think-on/off flip rate), so it is a `projection_kind="upper-bound-
+  feasibility"` field, not a probability. Compute it generously (every located case
+  assumed to flip) — if even the generous ceiling cannot clear the frozen floor, the
+  `UNDER_POWERED_STOP` is unimpeachable; if the ceiling clears, the gate PROCEEDs and
+  the real power is measured live, never inferred from the bound. Labeling a bound as
+  an estimate is the same false-capability class as a `has_citations→CORRECT` proxy (a
+  projection reading as a measurement); the honest label is what makes the typed stop a
+  legitimate close rather than a guess. (See `harpyja/eval/think_ab_precheck.py`
+  `ab_power_precheck` `projection_kind`, `specs/.archive/0039-thinking-ab/claim.json`
+  `precheck.projection_kind`, spec 0039 AC5.)
+- A **per-pair arm-distinctness guard is DELIBERATELY ASYMMETRIC by which arm shows the
+  aberrant signal — the same "arms look alike" observation has OPPOSITE dispositions,
+  and the asymmetry rationale is stated so no one "fixes" it into symmetry.** Extends
+  the 0037 generation-level-proof rule from the pre-run probe to LIVE per-pair
+  validity: in a paired on/off A/B, an OFF arm showing the on-arm signal (reasoning
+  present) is an instrument DEFECT (the knob failed on that pair) → the pair is
+  excluded-and-recorded, and an exclusion rate above the frozen ceiling trips
+  CONFOUNDED; an ON arm showing NO signal (zero reasoning) is LEGITIMATE behavior of
+  the shipped default → the pair is KEPT, because excluding it would bias the sample
+  toward cases where the treatment fired, which is not the shipped contrast the
+  downstream decision needs. The second factor (a budget-indistinctness check) is a
+  frozen per-case-aggregate predicate that bites ONLY in the hidden-treatment signature
+  (the on arm genuinely worked yet the off arm burned an indistinguishable budget),
+  never collapsing back to single-factor field-presence and never misfiring on a
+  legitimate small delta on an easy case. The asymmetry is a one-line docstring
+  rationale in the module; a symmetric "both arms must differ" rewrite is the wrongful
+  fix this text exists to prevent. (See `harpyja/eval/think_ab.py`
+  `classify_pair_validity` / `factor_b_min_on_reasoning_chars`, spec 0039 AC3.)
+- A **gate whose whole purpose is to prevent a wasteful/steer-able expensive run
+  carries NO force/bypass parameter — the escape hatch IS the post-hoc steering the
+  gate exists to close.** When a pre-check gates a costly live run (a paired A/B, a
+  full authoring pass) on a frozen-config projection, the runner takes no `force=` /
+  `skip_precheck=` argument: the only sanctioned way past a typed stop is to change the
+  committed EVIDENCE (enlarge the pool, re-run the pre-check) and let the gate flip,
+  not to override the verdict at call time. An override parameter would let an operator
+  spend the budget the gate protects on a favorable-looking whim, exactly the
+  tuned-until-it-passes loop the freeze-before-run discipline forbids; the PROCEED
+  branch is built to AUTO-ACTIVATE on the evidence flip, so no bypass is ever needed.
+  (See `harpyja/eval/think_ab_run.py` `run_ab_paired` (precheck-gated, no force
+  param), spec 0039 AC6.)
 - A **pre-registered selection or eligibility rule may be AMENDED only while still
   OUTCOME-BLIND — before any authored/measured output is seen — and the amendment is
   RECORDED with the trigger that forced it.** Spec 0036 added a blind-ELIGIBILITY

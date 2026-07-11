@@ -1,0 +1,17 @@
+{
+  "config_hash": "f3cb5d6750928df9157cf05eb19b1ad6cc989d37344f11046744705f6b84ba51",
+  "headline": "under-powered-stop",
+  "precheck": {
+    "degrade_warning": "per-turn artifacts unavailable; on-arm truncation risk unprojected (0038 observed 850-3980 reasoning chars/turn against explorer_max_tokens=2048)",
+    "floor": 8,
+    "full_conceptual_n": 15,
+    "located_conceptual": 3,
+    "next_step": "enlarge the blind-clean pool first \u2014 the named 0036 pool-enlargement audited convert step (the 50-case raw pool is exhausted at 19 blind-clean); the conceptual stratum cannot reach the committed floor at N=15",
+    "outcome": "under-powered-stop",
+    "piloted_conceptual_n": 7,
+    "projected_upper_bound": 6,
+    "projection_kind": "upper-bound-feasibility"
+  },
+  "schema_version": "0039/1",
+  "status": "gated-under-powered-stop"
+}
