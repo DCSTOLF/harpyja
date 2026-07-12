@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/Users/daniel.stolf/development/harpyja/specs/0040-pool/pilot/run_pilot.py", line 74, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/Users/daniel.stolf/development/harpyja/specs/0040-pool/pilot/run_pilot.py", line 54, in main
+    result = run_pool_pilot(
+             ^^^^^^^^^^^^^^^
+  File "/Users/daniel.stolf/development/harpyja/harpyja/eval/pool_pilot.py", line 389, in run_pool_pilot
+    return _run_pool_pilot_live(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/daniel.stolf/development/harpyja/harpyja/eval/pool_pilot.py", line 528, in _run_pool_pilot_live
+    "reasoning_chars": sum(
+                       ^^^^
+TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'
+{
+  "qwen3:14b": 1,
+  "qwen3:8b": 1,
+  "qwen3.5:4b": 1
+}
+pilot complete; ledger: /Users/daniel.stolf/development/harpyja/specs/0040-pool/pilot/pilot_results.json

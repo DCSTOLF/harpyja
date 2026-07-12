@@ -1,0 +1,42 @@
+{
+  "config_hash": "7e2f19c00ef123f49189940c3f6e56a8e7dc8c0168c7c2940be7310929ea1e61",
+  "pairs": {
+    "qwen3:14b vs qwen3.5:4b": {
+      "ceiling": 8,
+      "coverage": 4,
+      "estimate_kind": "point-estimate",
+      "floor": 8,
+      "next_step": "pool enlargement \u2014 the named 0036 audited convert step (which also unblocks the 0039 thinking A/B re-check)",
+      "observed": 4,
+      "preflight_a": "preflight-pass",
+      "preflight_b": "preflight-pass",
+      "projection_kind": "upper-bound-feasibility",
+      "verdict": "insufficient-pilot-evidence"
+    },
+    "qwen3:14b vs qwen3:8b": {
+      "ceiling": 6,
+      "coverage": 7,
+      "estimate_kind": "point-estimate",
+      "floor": 8,
+      "next_step": "pool enlargement \u2014 the named 0036 audited convert step (which also unblocks the 0039 thinking A/B re-check)",
+      "observed": 6,
+      "preflight_a": "preflight-pass",
+      "preflight_b": "preflight-pass",
+      "projection_kind": "upper-bound-feasibility",
+      "verdict": "insufficient-pilot-evidence"
+    },
+    "qwen3:8b vs qwen3.5:4b": {
+      "ceiling": 3,
+      "coverage": 5,
+      "estimate_kind": "point-estimate",
+      "floor": 8,
+      "next_step": "pool enlargement \u2014 the named 0036 audited convert step (which also unblocks the 0039 thinking A/B re-check)",
+      "observed": 3,
+      "preflight_a": "preflight-pass",
+      "preflight_b": "preflight-pass",
+      "projection_kind": "upper-bound-feasibility",
+      "verdict": "insufficient-pilot-evidence"
+    }
+  },
+  "schema_version": "0040/fork/1"
+}

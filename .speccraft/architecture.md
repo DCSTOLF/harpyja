@@ -969,3 +969,52 @@ clears the static floor and the conceptual reportability floor but NOT the froze
 `full_n_target=30` (raw-pool exhaustion); `full_set_report.json` records
 `representative_at_frozen_target: false`, test-pinned to computed truth. See history.md
 2026-07-09 (spec 0036).
+
+## Spec 0040 architecture updates — the three-model pool power pre-check (frozen 0040 config, the preflight enum, the two-quantity per-pair verdict, three new schemas)
+
+**As of spec 0040 `harpyja/eval/pool_precheck.py` (NEW, pure, no live I/O) is the
+frozen decision core of the 2→3 model pool pre-check.** It exposes
+`PREREGISTERED_POOL_CONFIG_0040` (a `frozen=True` `PoolConfig`) + `POOL_CONFIG_HASH_0040`
+— three model tags (`qwen3:14b` anchor / `qwen3:8b` / `qwen3.5:4b`), three named pairs,
+floor 8 imported VERBATIM from `benchmark_fit.MIN_DISCORDANT_PAIRS` (identity-asserted),
+per-pair-α (uncorrected) multiplicity, an 11-case pinned pilot set,
+`MIN_PILOT_CONCEPTUAL_COVERAGE=8` (derived `15 − c < 8`), the arm-parity pin
+`explorer_think=None`, and the staging order — every verdict a total pure function over
+it (the 0023/0036/0039 frozen-config-first discipline, re-registered fresh because the
+0039 freeze pins one model and cannot govern a 3-model pre-check). It also carries the
+`PreflightOutcome` enum + `PREFLIGHT_PRECEDENCE` + `adjudicate_preflight` / `is_excluding`
+(the deliberately asymmetric exclusion machinery), the two per-pair quantities from
+per-case pairs (`build_pair_cases` → `union_located_ceiling` the true bound /
+`observed_discordance` the point estimate — reusing `ac8_pilot.is_signal_discordant` by
+identity, NEVER marginal counts), the coverage predicate
+(`pilot_conceptual_coverage` / `coverage_below_minimum`), and the total 5-member
+`PairVerdict` with `decide_pair_verdict` (frozen order `MODEL_EXCLUDED > INSUFFICIENT >
+UNDER_POWERED > TOO_CLOSE > FEASIBLE`) + `decide_pool_fork` (total over the three pairs;
+an anchor preflight failure voids all three as `PAIR_NOT_EVALUATED_MODEL_EXCLUDED`).
+
+**As of spec 0040 `harpyja/eval/pool_pilot.py` (NEW, operator-side/live) is the live
+preflight probe + resumable pilot driver machinery.** `run_model_preflight` types one
+model through the committed enum against the actual Ollama `/v1` path — served →
+coherent → clean `tool_calls` → think-control — re-running the 0038 tiny-cap two-factor
+discriminator PER model (serving is model+version specific). `PoolPilotLedger`
+(schema `0040/pilot/1`, `case::model`, resumable, keyed to the frozen config hash) drives
+`run_pool_pilot` over each preflight-passing model × pinned case at `explorer_think=None`
+via `run_verified_case`; `pool_pilot_preflight` is the STOP-AND-WARN gate behind
+`require_live_stack`. Two run-integrity mechanisms were added mid-implementation (not in
+the original plan) after the contaminated first run: `_evict_other_models` clears
+co-resident tags before each model block (the dev Ollama pins with infinite keep-alive),
+and `_cell_needs_run` enforces the bounded-degrade rule — clean cells NEVER re-run
+(outcome-blind), a typed degrade gets exactly one re-run (the 0036 posture).
+
+**As of spec 0040 two thin contract modules carry the committed evidence, archive-first,
+test-pinned to computed truth.** `pool_preflight_result.py` (schema `0040/preflight/1`,
+loud validator, archive-first loader) records the per-model typed outcome +
+think-control mechanism; `pool_fork.py` (schema `0040/fork/1`, `load_committed_pool_fork`
++ emitter) records the per-pair fork pinned to `decide_pool_fork`'s recomputed truth over
+the committed pilot ledger + preflight result (the 0039 claim-pin pattern — the claim
+cannot exist without the recorded evidence backing it). No live bake-off compute is
+spent: a `PAIR_FEASIBLE` verdict is upper-bound honesty, proven only by the bake-off's
+own run. The committed run (all three models `preflight-pass` + `reasoning_effort`-honoring;
+all three pairs `insufficient-pilot-evidence`, ceilings 6/8/3 vs floor 8) names pool
+enlargement — the 0036 audited convert step — as the single next step for all pairs, which
+also unblocks the 0039 thinking A/B. See history.md 2026-07-11 (spec 0040).

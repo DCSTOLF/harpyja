@@ -1,0 +1,344 @@
+{
+  "config_hash": "7e2f19c00ef123f49189940c3f6e56a8e7dc8c0168c7c2940be7310929ea1e61",
+  "entries": {
+    "astropy__astropy-12907::qwen3.5:4b": {
+      "artifact": null,
+      "attempts": 1,
+      "bucket": null,
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)"
+    },
+    "astropy__astropy-12907::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/astropy__astropy-12907_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "completion_tokens": 2926,
+      "degrade": null,
+      "reasoning_chars": 12023,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "astropy__astropy-12907::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/astropy__astropy-12907_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "wrong-file",
+      "completion_tokens": 3470,
+      "degrade": null,
+      "reasoning_chars": 14835,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "django__django-13516::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/django__django-13516_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1131,
+      "degrade": null,
+      "reasoning_chars": 4321,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "django__django-13516::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/django__django-13516_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "wrong-file",
+      "completion_tokens": 4949,
+      "degrade": null,
+      "reasoning_chars": 21090,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "django__django-13516::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/django__django-13516_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 6012,
+      "degrade": null,
+      "reasoning_chars": 27262,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "django__django-14315::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/django__django-14315_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1398,
+      "degrade": null,
+      "reasoning_chars": 4416,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "django__django-14315::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/django__django-14315_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "wrong-file",
+      "completion_tokens": 3783,
+      "degrade": null,
+      "reasoning_chars": 16979,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "django__django-14315::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/django__django-14315_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 2342,
+      "degrade": null,
+      "reasoning_chars": 10688,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "matplotlib__matplotlib-21568::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1480,
+      "degrade": null,
+      "reasoning_chars": 5358,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "matplotlib__matplotlib-21568::qwen3:14b": {
+      "artifact": null,
+      "attempts": 2,
+      "bucket": null,
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)"
+    },
+    "matplotlib__matplotlib-21568::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 7684,
+      "degrade": null,
+      "reasoning_chars": 34641,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pallets__flask-5014::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pallets__flask-5014_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1166,
+      "degrade": null,
+      "reasoning_chars": 3197,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pallets__flask-5014::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pallets__flask-5014_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 3615,
+      "degrade": null,
+      "reasoning_chars": 14306,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pallets__flask-5014::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pallets__flask-5014_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "completion_tokens": 2984,
+      "degrade": null,
+      "reasoning_chars": 12547,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "psf__requests-1766::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/psf__requests-1766_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1764,
+      "degrade": null,
+      "reasoning_chars": 6230,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "psf__requests-1766::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/psf__requests-1766_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "completion_tokens": 4528,
+      "degrade": null,
+      "reasoning_chars": 18418,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "psf__requests-1766::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/psf__requests-1766_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 2265,
+      "degrade": null,
+      "reasoning_chars": 9547,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pydata__xarray-3993::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pydata__xarray-3993_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "correct",
+      "completion_tokens": 891,
+      "degrade": null,
+      "reasoning_chars": 2581,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pydata__xarray-3993::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pydata__xarray-3993_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "correct",
+      "completion_tokens": 3648,
+      "degrade": null,
+      "reasoning_chars": 14580,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pydata__xarray-3993::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pydata__xarray-3993_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "correct",
+      "completion_tokens": 2619,
+      "degrade": null,
+      "reasoning_chars": 10707,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pylint-dev__pylint-7080::qwen3.5:4b": {
+      "artifact": null,
+      "attempts": 1,
+      "bucket": null,
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: backend-error)"
+    },
+    "pylint-dev__pylint-7080::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "wrong-file",
+      "completion_tokens": 2357,
+      "degrade": null,
+      "reasoning_chars": 10367,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pylint-dev__pylint-7080::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1972,
+      "degrade": null,
+      "reasoning_chars": 8680,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pytest-dev__pytest-10081::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 966,
+      "degrade": null,
+      "reasoning_chars": 3440,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pytest-dev__pytest-10081::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "attempts": 2,
+      "bucket": "correct",
+      "completion_tokens": 2572,
+      "degrade": null,
+      "reasoning_chars": 8957,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "pytest-dev__pytest-10081::qwen3:8b": {
+      "artifact": null,
+      "attempts": 1,
+      "bucket": null,
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)"
+    },
+    "scikit-learn__scikit-learn-10844::qwen3.5:4b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "right-file-wrong-span",
+      "completion_tokens": 655,
+      "degrade": null,
+      "reasoning_chars": 1792,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "scikit-learn__scikit-learn-10844::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "correct",
+      "completion_tokens": 2693,
+      "degrade": null,
+      "reasoning_chars": 10400,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "scikit-learn__scikit-learn-10844::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 2225,
+      "degrade": null,
+      "reasoning_chars": 9816,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "sympy__sympy-16792::qwen3.5:4b": {
+      "artifact": null,
+      "attempts": 1,
+      "bucket": null,
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)"
+    },
+    "sympy__sympy-16792::qwen3:14b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/sympy__sympy-16792_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 4888,
+      "degrade": null,
+      "reasoning_chars": 20434,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    },
+    "sympy__sympy-16792::qwen3:8b": {
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/sympy__sympy-16792_verifier_artifact.json",
+      "attempts": 1,
+      "bucket": "empty",
+      "completion_tokens": 1884,
+      "degrade": null,
+      "reasoning_chars": 8415,
+      "serving_transport": "v1-chat-completions",
+      "think_mode": "default-omitted",
+      "tools": []
+    }
+  },
+  "schema_version": "0040/pilot/1"
+}

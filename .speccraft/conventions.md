@@ -851,6 +851,94 @@
   branch is built to AUTO-ACTIVATE on the evidence flip, so no bypass is ever needed.
   (See `harpyja/eval/think_ab_run.py` `run_ab_paired` (precheck-gated, no force
   param), spec 0039 AC6.)
+- A **live-measurement driver must have EXCLUSIVE use of the model endpoint for the
+  run's duration, and a contaminated run is invalidated OUTCOME-BLIND at RUN
+  granularity — never per-suspicious-cell.** A shared Ollama silently converts
+  environment latency into FAKE capability observations two ways at once, which are
+  NOT competing explanations: (i) a concurrent live-calling workload (a pytest suite
+  launched without `-m "not integration"`, whose live tests QUEUE requests and TOUCH
+  other model tags) and (ii) the dev Ollama's infinite keep-alive PINNING those tags
+  resident (`expires_at` ~2318 / `keep_alive=-1`) — suite traffic touching a tag is
+  what pins it, and the resident set squeezes the model under test on a memory-bounded
+  box, so wall-clock expiries record as honest `empty` buckets and HTTP timeouts type
+  `model-unreachable` (spec 0040 run 1: `qwen3:14b` collapsed to 0 located vs 0036's
+  5/10 on the SAME cases, under 14.3 GB of pinned co-residents on a 32 GB box). Two
+  rules travel with this: a driver preflight SHOULD check `/api/ps` for foreign pinned
+  residents and refuse/warn, and it evicts co-resident tags per model block
+  (`_evict_other_models`) so a block runs on an un-squeezed box; and NEVER run the test
+  suite (or any live-calling workload) concurrently with a live measurement run. When
+  contamination is detected, invalidate by the criterion "recorded during the
+  contaminated environment" (EVERY cell of the run, including the located ones), NOT
+  "cells whose outcome looks wrong" — the latter is exactly the post-hoc steering the
+  outcome-blind discipline forbids: archive the whole run (`*.run1-contaminated.json`,
+  retained beside the clean re-run) and re-run fresh. The clean re-run restoring the
+  prior-spec profile is what validates the diagnosis. This composes with the
+  bounded-degrade rule (clean cells are NEVER re-run on suspicion; a typed degrade gets
+  exactly ONE bounded re-run, the 0036 posture). (See `harpyja/eval/pool_pilot.py`
+  `_evict_other_models` / `_cell_needs_run`,
+  `specs/0040-pool/pilot/pilot_results.run1-contaminated.json`, spec 0040 T17/T18.)
+- A **pre-check whose pinned pilot set sits EXACTLY at a derived coverage minimum has
+  zero slack — pin coverage HEADROOM above the boundary, because any single
+  environment degrade then forces the under-powered verdict.** A `MIN_PILOT_*_COVERAGE`
+  minimum derived from the consuming arithmetic (spec 0040's `15 − c < 8` ⇒ `c ≥ 8`, the
+  vacuity boundary at which a verdict would rest on majority-unobserved mass) is the
+  FLOOR, not the target: a pilot set pinned at exactly the minimum (8 conceptual vs
+  min 8) forces `INSUFFICIENT_PILOT_EVIDENCE` on the first per-case degrade, and typed
+  per-case degrades at the attempt cap are a real, recurring cost on heavy repos (the
+  binding constraint is per-case timeout sensitivity — 240 s wall / 300 s HTTP, a large
+  context window amplifying prefill cost — ahead of model capability). Pin the pinned
+  set ABOVE the boundary so the derived minimum survives the expected degrade rate. (See
+  `harpyja/eval/pool_precheck.py` `MIN_PILOT_CONCEPTUAL_COVERAGE`, spec 0040 findings
+  Finding 1 / secondary finding.)
+- **When a pre-check HAS direct per-case cross-arm pairs, pin TWO separate quantities —
+  a true CEILING and a labeled point ESTIMATE — never one number wearing the wrong
+  epistemic label.** This is the successor to the 0039 upper-bound-only rule (which had
+  ONLY a cross-model proxy and so could pin only a ceiling): with direct per-case pairs
+  `(case_id, a_bucket, b_bucket)`, pin (1) the CEILING = extrapolated per-case
+  UNION-located count (`projection_kind="upper-bound-feasibility"`, a TRUE bound because
+  `is_signal_discordant` requires ≥1 located arm by its own definition — one-oracle
+  reuse justifies the bound), which gates the `UNDER_POWERED` stop and is the ONLY
+  quantity the stop-quality claim may rest on; and (2) the OBSERVED signal-discordance
+  through the same oracle (`estimate_kind="point-estimate"`), which splits
+  `TOO_CLOSE`/`FEASIBLE` as a reportable closeness finding. The split resolves the
+  conflation in BOTH directions: extrapolating observed discordance and labeling it a
+  bound is an epistemic mislabel (a false `UNDER_POWERED` from sampling noise while the
+  artifact claims unimpeachability), and a literal max-possible bound over the unpiloted
+  cases is vacuous (unobserved mass alone clears the floor, making `UNDER_POWERED`
+  structurally unreachable). NEVER compute either quantity from MARGINAL locate-counts:
+  6/7 vs 5/7 is identical whether the located sets fully overlap (`TOO_CLOSE`) or are
+  nearly disjoint (discordant) — union-located and discordance are per-case properties
+  marginals cannot recover, so a counts-identical/overlap-different fixture pair must
+  yield DIFFERENT verdicts and the two quantities must differ on a fixture where the
+  models locate overlapping-but-discordant sets. (See `harpyja/eval/pool_precheck.py`
+  `union_located_ceiling` / `observed_discordance` / `build_pair_cases`, spec 0040
+  AC5. Contrast `harpyja/eval/think_ab_precheck.py`, which pins only the ceiling because
+  it lacks within-model paired flips.)
+- A **multi-model preflight returns exactly ONE value of a committed enum under a
+  committed PRECEDENCE, with a DELIBERATE asymmetry by exclusion power stated in the
+  artifact so it is never "fixed" into symmetry — and serving is re-probed PER MODEL,
+  never assumed from a sibling's or a prior spec's evidence.** Enumerate the total
+  answer space before any probe (`UNSERVABLE` / `COHERENCE_FAIL` / `TOOL_CALL_MALFORMED`
+  / `THINK_CONTROL_NOOP` / `PASS`), and — because a model can exhibit two failures at
+  once — commit a tie-break precedence (`UNSERVABLE > COHERENCE_FAIL >
+  TOOL_CALL_MALFORMED > THINK_CONTROL_NOOP > PASS`, cheapest/most-fundamental first) so
+  "exactly one value" is not implementer choice; an INDETERMINATE probe (a control whose
+  effect cannot be adjudicated under the tiny-cap discriminator) maps to the conservative
+  `THINK_CONTROL_NOOP`, stated in the enum so the probe cannot stall outside the
+  committed space. The asymmetry is load-bearing: the fundamental failures are EXCLUDING
+  (the model produces no capability number — the 16B-gibberish lesson) and MUST carry an
+  `exclusion_reason`; `THINK_CONTROL_NOOP` is RECORDED-NON-EXCLUDING (the model still
+  bakes off default-on, only barred from a future thinking-arm) and MUST NOT — a
+  validator enforces both directions. Serving is model+version specific (the 0037/0038
+  lesson): a control proven on one model/generation (`reasoning_effort` on `qwen3:14b`
+  `/v1`) is RE-PROBED per model under the 0038 tiny-cap two-factor discriminator, never
+  carried over — an incumbent model's prior-spec history is re-confirmation evidence, not
+  a preflight pass, and an anchor model's failure voids EVERY pair containing it with a
+  typed `PAIR_NOT_EVALUATED_MODEL_EXCLUDED` (absence is never a disposition). (See
+  `harpyja/eval/pool_precheck.py` `PreflightOutcome` / `PREFLIGHT_PRECEDENCE` /
+  `adjudicate_preflight` / `is_excluding`, `harpyja/eval/pool_pilot.py`
+  `run_model_preflight`, `specs/0040-pool/preflight/preflight_result.json`, spec 0040
+  AC2/AC3.)
 - A **pre-registered selection or eligibility rule may be AMENDED only while still
   OUTCOME-BLIND — before any authored/measured output is seen — and the amendment is
   RECORDED with the trigger that forced it.** Spec 0036 added a blind-ELIGIBILITY

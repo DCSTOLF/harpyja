@@ -1,0 +1,34 @@
+{
+  "config_hash": "7e2f19c00ef123f49189940c3f6e56a8e7dc8c0168c7c2940be7310929ea1e61",
+  "endpoint": "http://127.0.0.1:11434/v1",
+  "models": {
+    "qwen3.5:4b": {
+      "coherent": true,
+      "exclusion_reason": null,
+      "outcome": "preflight-pass",
+      "served": true,
+      "think_control": "effective",
+      "think_control_mechanism": "reasoning-effort",
+      "tool_calls_clean": true
+    },
+    "qwen3:14b": {
+      "coherent": true,
+      "exclusion_reason": null,
+      "outcome": "preflight-pass",
+      "served": true,
+      "think_control": "effective",
+      "think_control_mechanism": "reasoning-effort",
+      "tool_calls_clean": true
+    },
+    "qwen3:8b": {
+      "coherent": true,
+      "exclusion_reason": null,
+      "outcome": "preflight-pass",
+      "served": true,
+      "think_control": "effective",
+      "think_control_mechanism": "reasoning-effort",
+      "tool_calls_clean": true
+    }
+  },
+  "schema_version": "0040/preflight/1"
+}
