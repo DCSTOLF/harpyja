@@ -131,11 +131,23 @@ def _tool_schemas() -> list[dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "symbols",
-                "description": "List the symbols (functions, classes, types, etc.) defined in a file.",
+                # Spec 0042 (AC1-desc/AC3): the WHEN-to-use + citation-shaped-output
+                # pitch, and `path` OPTIONAL so the repo-wide by-name lookup is
+                # reachable before a candidate file is found.
+                "description": (
+                    "List the symbols (functions, classes, types) defined in a file "
+                    "with their exact start/end line spans — the fastest way to turn "
+                    "a candidate file into the precise file:line span to cite. Omit "
+                    "path and pass name to look a symbol up by name across the repo "
+                    "(use when the query's words are not greppable)."
+                ),
                 "parameters": {
                     "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": ["path"],
+                    "properties": {
+                        "path": {"type": "string"},
+                        "name": {"type": "string"},
+                    },
+                    "required": [],
                 },
             },
         },

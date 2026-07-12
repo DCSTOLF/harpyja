@@ -75,3 +75,47 @@ def test_excluded_file_still_reachable_via_tools(tmp_path):
 class _FakeSearch:
     def search(self, pattern, scope=None, *, repo_root=None):
         return [CodeSpan(path="tests/test_core.py", start_line=1, end_line=1)]
+
+
+# --- Spec 0042 (AC1): the initial prompt names EVERY registered tool ------------
+#
+# The 0027 prompt enumerated "ls, glob, and grep" and was never updated when
+# `symbols` landed in 0030 — for an instruction-following 4–14B the enumerated
+# list IS the menu, so the tool was structurally unadvertised for 5 specs and
+# 0040 measured 0/28 adoption on an unusable tool. These tests bind the prompt's
+# enumeration to the registered tool surface (word-boundary match — a bare
+# substring check would vacuously find "ls" inside "tools").
+
+import re  # noqa: E402
+
+from harpyja.scout.context_map import build_initial_prompt  # noqa: E402
+from harpyja.scout.explorer_backend import _tool_schemas  # noqa: E402
+
+
+def _named_in(name: str, text: str) -> bool:
+    return re.search(rf"\b{re.escape(name)}\b", text) is not None
+
+
+def test_build_initial_prompt_names_every_registered_tool():
+    # Derived from the SAME single source the schema-vs-dispatch test uses
+    # (_tool_schemas), so there is exactly ONE definition of "the registered
+    # tool list" — {grep, glob, read_span, ls, symbols} + terminal submit_citations.
+    prompt = build_initial_prompt("q")
+    for name in (s["function"]["name"] for s in _tool_schemas()):
+        assert _named_in(name, prompt), f"registered tool {name!r} absent from the initial prompt"
+
+
+def test_build_initial_prompt_documents_symbols_repo_wide_when():
+    # The adoption pitch: the prompt carries WHEN to use symbols, including the
+    # repo-wide by-name lookup (the lexical-unreachability partial answer) —
+    # name-presence alone cannot verify the capability is ADVERTISED.
+    prompt = build_initial_prompt("q")
+    assert "by name across the repo" in prompt
+
+
+def test_build_initial_prompt_marks_submit_citations_terminal():
+    # submit_citations is documented as the TERMINAL action, distinct from the
+    # navigation tools.
+    prompt = build_initial_prompt("q")
+    assert _named_in("submit_citations", prompt)
+    assert "end the search" in prompt

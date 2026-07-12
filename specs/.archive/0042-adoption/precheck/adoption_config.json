@@ -1,0 +1,41 @@
+{
+  "config": {
+    "adoption_boundary": "still-not-adopted-iff-zero-clean-cell-symbols-invocations",
+    "adoption_denominator": "per-model-clean-cells-of-models-actually-run",
+    "baseline_config_hash": "7e2f19c00ef123f49189940c3f6e56a8e7dc8c0168c7c2940be7310929ea1e61",
+    "baseline_ledger_schema_version": "0040/pilot/1",
+    "baseline_spec": "0040",
+    "conversion_predicate": "bidirectional-per-case-paired-buckets-never-marginals",
+    "exact_bucket": "correct",
+    "min_rfws_denominator": 3,
+    "optional_models": [
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "outcome_precedence": [
+      "still-not-adopted",
+      "adopted-and-converts",
+      "adopted-under-powered",
+      "adopted-no-conversion"
+    ],
+    "pilot_case_ids": [
+      "astropy__astropy-12907",
+      "django__django-13516",
+      "matplotlib__matplotlib-21568",
+      "pallets__flask-5014",
+      "pydata__xarray-3993",
+      "pytest-dev__pytest-10081",
+      "scikit-learn__scikit-learn-10844",
+      "psf__requests-1766",
+      "pylint-dev__pylint-7080",
+      "sympy__sympy-16792",
+      "django__django-14315"
+    ],
+    "required_models": [
+      "qwen3:14b"
+    ],
+    "rfws_bucket": "right-file-wrong-span"
+  },
+  "config_hash": "c4e24c249e81c63b9e926c400266b99dd89971c17a8c2c46121287401ec0bcb2",
+  "schema_version": "0042/adoption-config/1"
+}

@@ -409,6 +409,23 @@ def test_scout_symbols_max_entries_default_is_finite_positive_bound():
     assert s.scout_symbols_max_entries == 400
 
 
+def test_scout_symbols_repo_max_entries_default_is_finite_positive_bound():
+    # spec 0042 (AC3/OQ2): the REPO-WIDE symbol-lookup clamp — a DISTINCT knob from
+    # the file-local scout_symbols_max_entries, because a common name's blast radius
+    # across a whole repo differs from one file's symbol list. Finite + positive.
+    s = Settings()
+    assert isinstance(s.scout_symbols_repo_max_entries, int)
+    assert s.scout_symbols_repo_max_entries > 0
+    assert s.scout_symbols_repo_max_entries == 200
+
+
+def test_scout_symbols_repo_max_entries_is_declared_settings_field():
+    import dataclasses
+
+    names = {f.name for f in dataclasses.fields(Settings)}
+    assert "scout_symbols_repo_max_entries" in names
+
+
 def test_scout_wall_clock_exceeds_per_call_http_timeout():
     # The whole-loop wall-clock ceiling must sit strictly ABOVE the per-call HTTP
     # timeout floor — turns and time are distinct budgets (AC4). A single slow call

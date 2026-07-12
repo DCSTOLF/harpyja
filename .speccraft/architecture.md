@@ -1070,3 +1070,50 @@ gates on the committed residency probe (probe-first: refuses if absent). Committ
 evidence: `gate_proof.json` (exclusive endpoint → PASS, 4 clean checks) and
 `gate_proof.contended.json` (foreign resident → typed stop, zero cells). See history.md
 (spec 0041).
+
+## Spec 0042 architecture updates — `symbols` repositioned + result-shape parity + prompt-surface binding (adoption)
+
+**As of spec 0042 the `symbols` explorer tool is REPOSITIONED and its result shape is at
+PARITY with every other nav tool — the four stacked defects behind the 0040 0/28 adoption
+are fixed together.** This SUPERSEDES the spec-0030 block above on two points: (1) `symbols`
+no longer returns the nested dict `{"symbols": [...], "degraded": bool}` — it returns a
+BARE `list[CodeSpan]` clean, or `[f"symbols-degraded: '<path>'", *CodeSpans]` degraded
+(marker FIRST, the 0035 convention's second/ANNOTATION case), so `_spans_of` unwraps it and
+its locations enter seen-span/loop-detection accounting (the pre-0042 dict was the only nav
+result `_spans_of` could not unwrap → zero spans → the tool was structurally penalized for
+being called); (2) `symbols(path)` is no longer file-local-only — `path` is OPTIONAL and
+`symbols(name=…)` does a repo-wide by-name lookup over the injected Tier-0 `symbol_records`
+(read-only, no filesystem walk, no new parser), ranked exact > prefix > substring (ties by
+`(path, start_line)`), clamped by the NEW DISTINCT `Settings.scout_symbols_repo_max_entries`
+(default 200, separate from the file-local `scout_symbols_max_entries=400`). An absent/degraded
+Tier-0 index → the 0035 REPLACEMENT marker (`symbols-index-unavailable`), hostile input →
+`symbols-name-invalid`, and (post-T12) a nonexistent file path with no records →
+`symbols-path-not-found` (records win over disk absence). The tool COUNT stays FIVE — OQ1
+decided optional-path over a distinct `find_symbol`, so both hard-count tests stay green and
+the exact-count convention is unchanged. `context_map.build_initial_prompt` now enumerates
+all five nav tools + the terminal `submit_citations` with the `symbols` when-to-use, BOUND to
+the registered surface by `test_initial_prompt_binds_to_registered_tool_surface_single_source`
+(the same single source as the schema-vs-dispatch test — a new tool is un-shippable without
+appearing in the prompt); `_tool_schemas()` `symbols` drops `path` from `required` and carries
+the when-to-use + exact-span description. The SUT surface changed (prompt, schema, result
+shape, positioning) yet the 0034/0038 `explorer_think=None ⇒ params == {max_tokens: 2048}`
+pin SURVIVES VERBATIM — every change rides `messages`/`schemas`, never `params`.
+
+**The adoption measurement is a frozen-config, gated, artifact-backed re-measure in
+`harpyja/eval/` (measurement, not a runtime tier).** `adoption_precheck.py` (NEW) carries
+`PREREGISTERED_ADOPTION_CONFIG_0042` + `ADOPTION_CONFIG_HASH_0042` (`c4e24c24…`, committed at
+`specs/0042-adoption/precheck/adoption_config.json` BEFORE any live call) and the total pure
+`decide_adoption_outcome` (grid-totality tested) over the adoption boundary, the RFWS
+denominator, a BIDIRECTIONAL per-case paired-bucket conversion predicate (conversions AND
+regressions, net surfaced — never marginals), the `MIN_RFWS_DENOMINATOR=3` power floor, pinned
+model coverage, and per-model partial-coverage denominators → one of
+`{ADOPTED_AND_CONVERTS, ADOPTED_NO_CONVERSION, ADOPTED_UNDER_POWERED, STILL_NOT_ADOPTED}`.
+`adoption_run.py` (NEW) drives the re-measure through `run_gated_pool_pilot(live=True)` (the
+0041 gate, `0041/pilot/2` exclusivity proof in every artifact), resumable via `PoolPilotLedger`
+keyed to the config hash, coverage consumed from the frozen config; the committed operator
+driver `specs/0042-adoption/adoption_run/run_adoption.py` is STOP-AND-WARN (exit 0/2/3). LIVE
+(exit 0): typed **`ADOPTED_AND_CONVERTS`** — adoption 24/31 clean cells (77%) vs the 0/28
+baseline, 1 RFWS→exact conversion, 0 regressions, net +1 on RFWS denominator 4 ≥ floor 3 (a
+SIGNAL at pilot scale, not an inferential claim); 33 cells (31 clean, 2 typed 4b heavy-repo
+degrades, 0 suspect). The 0/28→24/31 delta is fix-vs-defect, not tool-vs-no-tool; a powered
+conversion claim still needs the standing pool enlargement (0039/0040). See history.md (spec 0042).

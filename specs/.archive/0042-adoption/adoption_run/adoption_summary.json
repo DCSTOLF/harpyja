@@ -1,0 +1,43 @@
+{
+  "cells_clean": 31,
+  "cells_degraded": 2,
+  "cells_recorded": 33,
+  "cells_suspect": 0,
+  "config_hash": "c4e24c249e81c63b9e926c400266b99dd89971c17a8c2c46121287401ec0bcb2",
+  "decision": {
+    "adoption_by_model": [
+      [
+        "qwen3.5:4b",
+        7,
+        9
+      ],
+      [
+        "qwen3:14b",
+        7,
+        11
+      ],
+      [
+        "qwen3:8b",
+        10,
+        11
+      ]
+    ],
+    "adoption_count": 24,
+    "adoption_denominator": 31,
+    "config_hash": "c4e24c249e81c63b9e926c400266b99dd89971c17a8c2c46121287401ec0bcb2",
+    "conversions": 1,
+    "missing_required": [],
+    "net": 1,
+    "outcome": "adopted-and-converts",
+    "regressions": 0,
+    "rfws_denominator": 4,
+    "under_powered": false
+  },
+  "ledger": "/Users/daniel.stolf/development/harpyja/specs/0042-adoption/adoption_run/adoption_results.json",
+  "models_run": [
+    "qwen3.5:4b",
+    "qwen3:14b",
+    "qwen3:8b"
+  ],
+  "schema_version": "0042/adoption-run-summary/1"
+}

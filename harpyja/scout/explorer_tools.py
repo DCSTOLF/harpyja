@@ -125,13 +125,64 @@ def build_explorer_tools(
                 break
         return out
 
-    def symbols(path: str) -> dict[str, Any]:
-        # File-local symbol index (spec 0030): return the symbols (functions, classes,
-        # types, etc.) defined in the given file. Source: Tier-0's pre-extracted symbol
-        # records (no new parser). Path is normalized (resolved) before lookup and
-        # repo-confined. Output clamped by scout_symbols_max_entries.
-        # Returns a dict {"symbols": [...CodeSpan...], "degraded": bool} with visible
-        # provenance marker (AC3).
+    def _symbols_by_name(name: Any) -> list[CodeSpan] | str:
+        # Repo-wide by-name lookup (spec 0042, AC3) — the positioning fix: reachable
+        # BEFORE a candidate file is found, and the NAME-based partial answer to
+        # lexical unreachability ("separability matrix" is ungreppable;
+        # separability_matrix is findable by name). Read-only (filters the injected
+        # Tier-0 records — no filesystem walk, no new parser), repo-confined by
+        # construction, clamped by the DISTINCT scout_symbols_repo_max_entries knob.
+        #
+        # Hostile input (non-string / empty / oversized) → typed marker, clipped —
+        # never echoed unclamped, never an unhandled exception (0035 marker route:
+        # a navigation mistake, not an execution error).
+        if not isinstance(name, str) or not name or len(name) > 256:
+            return f"symbols-name-invalid: {repr(name)[:128]}"
+        # Absent Tier-0 records (index missing/degraded): the 0035 REPLACEMENT
+        # marker — no spans exist to annotate, and a silent [] would be
+        # indistinguishable from "no such symbol".
+        if not symbol_records:
+            return f"symbols-index-unavailable: {name!r}"
+        # PINNED ranking (OQ2): exact-name > prefix > substring; ties broken
+        # deterministically by (path, start_line) — never arbitrary truncation.
+        tiers: tuple[list[SymbolRecord], list[SymbolRecord], list[SymbolRecord]] = ([], [], [])
+        for record in symbol_records:
+            if record.name == name:
+                tiers[0].append(record)
+            elif record.name.startswith(name):
+                tiers[1].append(record)
+            elif name in record.name:
+                tiers[2].append(record)
+        ranked = [
+            record
+            for tier in tiers
+            for record in sorted(tier, key=lambda r: (r.path, r.start_line))
+        ]
+        clamped = ranked[: settings.scout_symbols_repo_max_entries]
+        return [record_to_codespan(r) for r in clamped]
+
+    def symbols(path: str | None = None, name: str | None = None) -> list[CodeSpan | str] | str:
+        # Symbol lookup (spec 0030, repositioned by spec 0042): with `path`, the
+        # file-local symbol index (functions, classes, types + exact start/end line
+        # spans) sourced from Tier-0's pre-extracted records (no new parser); with
+        # `name` only, a repo-wide by-name lookup (path is OPTIONAL as of 0042 —
+        # the adoption-driver positioning fix). Output clamped per mode.
+        #
+        # Result shape (spec 0042, AC2): a bare list[CodeSpan] — parity with every
+        # other nav tool, so _spans_of unwraps it and its locations enter
+        # seen-span/loop-detection accounting (the 0/28-era nested dict registered
+        # ZERO spans and structurally penalized every call). A degraded file
+        # PREPENDS the stable ANNOTATION marker `symbols-degraded: '<path>'` to the
+        # real ripgrep-fallback spans (the 0035 convention's second case:
+        # successful-but-degraded — marker model-visible via stringification,
+        # never counted as a span; 0030's never-a-silent-downgrade contract).
+        # An EMPTY path is absent, not file-local (post-T12 pin: a live 0042 cell
+        # sent {"path": "", "name": ...} and the `is None` check silently ignored
+        # the name — the repo-wide affordance must not be defeatable by "").
+        if not path:
+            if name is None:
+                return "symbols-args-missing: 'provide path or name'"
+            return _symbols_by_name(name)
 
         # Confine the path first: raises PathConfinementError if out-of-repo.
         # This preserves the untrusted-caller boundary (loud error, not silent drop).
@@ -142,7 +193,7 @@ def build_explorer_tools(
             candidate = (repo_real / path).resolve()
             rel_path = candidate.relative_to(repo_real)
         except (ValueError, OSError):
-            return {"symbols": [], "degraded": False}  # escapes or error — empty clean result
+            return []  # escapes or error — empty clean result
 
         normalized_str = str(rel_path)
 
@@ -153,7 +204,7 @@ def build_explorer_tools(
                 "", scope=str(candidate), repo_root=repo_path
             )
             clamped = ripgrep_results[: settings.scout_symbols_max_entries]
-            return {"symbols": clamped, "degraded": True}
+            return [f"symbols-degraded: {normalized_str!r}", *clamped]
 
         # Clean file: filter records by the normalized repo-relative path, convert to CodeSpan.
         out: list[CodeSpan] = []
@@ -162,6 +213,12 @@ def build_explorer_tools(
                 out.append(record_to_codespan(record))
                 if len(out) >= settings.scout_symbols_max_entries:
                     break
-        return {"symbols": out, "degraded": False}
+        # Post-T12 (0035 replacement marker, the ls/grep class): NO records AND the
+        # file absent on disk is UNSEARCHABLE — never a silent [] that reads as
+        # "file has no symbols". Records win over disk absence (the no-new-parser
+        # contract); a real file with no records keeps honest-[].
+        if not out and not candidate.exists():
+            return f"symbols-path-not-found: {path!r}"
+        return out
 
     return {"grep": grep, "glob": glob, "read_span": read_span, "ls": ls, "symbols": symbols}

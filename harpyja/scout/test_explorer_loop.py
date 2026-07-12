@@ -723,3 +723,90 @@ def test_grep_scope_marker_not_flagged_execution_error(tmp_path):
     )
     assert not any("tool-call-degraded:execution-error" in str(m.get("content", ""))
                    for m in result.history)
+
+
+# --- Spec 0042 (AC2): symbols list-shape results register in span accounting ---
+#
+# The 0/28-era nested dict {"symbols": [...], "degraded": bool} yielded ZERO
+# spans from _spans_of (a Mapping with no top-level "path" key), so a repeated
+# symbols call read as an unproductive repeat and its locations never entered
+# seen-span accounting — the tool was structurally PENALIZED for being called.
+# The bare-list shape rides the existing list branch: CodeSpans count, the
+# degraded ANNOTATION marker string (no .path) is skipped but stays
+# model-visible via stringification.
+
+
+def _symbols_tools(result):
+    def symbols(path):
+        return result
+
+    return {"symbols": symbols}
+
+
+def test_spans_of_counts_symbols_codespans_into_seen_accounting():
+    """A [marker, CodeSpan] symbols result yields its CodeSpan into new-span
+    accounting: an identical second call that ADDS a new span is NOT a repeat,
+    so no corrective note fires (the property the nested dict defeated)."""
+    span_a = CodeSpan(path="pkg/mod.py", start_line=3, end_line=9)
+    span_b = CodeSpan(path="pkg/other.py", start_line=1, end_line=4)
+    results = iter([
+        ["symbols-degraded: 'pkg/mod.py'", span_a],
+        ["symbols-degraded: 'pkg/mod.py'", span_b],  # same call, NEW span
+    ])
+
+    def symbols(path):
+        return next(results)
+
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("submit_citations", citations=[])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools={"symbols": symbols}, submit=_submit_ok,
+        context_map="", settings=Settings(scout_loop_repeat_n=2),
+    )
+    assert result.outcome == SUBMITTED
+    # New spans on the repeat call → NOT an unproductive repeat → no corrective.
+    assert not any("unproductive" in str(m.get("content", "")) for m in result.history)
+
+
+def test_spans_of_ignores_symbols_marker_string():
+    """Only CodeSpan entries count as spans: a symbols result that is ALL marker
+    (empty degraded fallback) yields no new span, so an exact repeat trips loop
+    detection — the marker element never pollutes span accounting."""
+    model = _scripted(
+        _msg(_tc("symbols", path="broken.py")),
+        _msg(_tc("symbols", path="broken.py")),
+        _msg(_tc("submit_citations", citations=[])),
+    )
+    result = run_explorer_loop(
+        model_call=model,
+        tools=_symbols_tools(["symbols-degraded: 'broken.py'"]),
+        submit=_submit_ok, context_map="",
+        settings=Settings(scout_loop_repeat_n=2),
+    )
+    assert result.outcome == SUBMITTED
+    assert any("unproductive" in str(m.get("content", "")) for m in result.history)
+
+
+def test_symbols_degraded_marker_stays_model_visible():
+    """0030's never-a-silent-downgrade contract survives the shape change: the
+    ANNOTATION marker reaches the model-visible history verbatim (stringified
+    alongside its spans), and is never routed through the execution-error degrade."""
+    model = _scripted(
+        _msg(_tc("symbols", path="broken.py")),
+        _msg(_tc("submit_citations", citations=[])),
+    )
+    result = run_explorer_loop(
+        model_call=model,
+        tools=_symbols_tools(
+            ["symbols-degraded: 'broken.py'", CodeSpan(path="broken.py", start_line=5, end_line=5)]
+        ),
+        submit=_submit_ok, context_map="", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert any("symbols-degraded: 'broken.py'" in str(m.get("content", ""))
+               for m in result.history)
+    assert not any("tool-call-degraded:execution-error" in str(m.get("content", ""))
+                   for m in result.history)

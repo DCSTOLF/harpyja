@@ -1,0 +1,38 @@
+{
+  "case_id": "psf__requests-1766",
+  "citations_submitted": null,
+  "citations_surviving": null,
+  "endpoint": "http://127.0.0.1:11434/v1",
+  "exclusivity_proof_ref": {
+    "config_hash": "c4e24c249e81c63b9e926c400266b99dd89971c17a8c2c46121287401ec0bcb2",
+    "ledger": "/Users/daniel.stolf/development/harpyja/specs/0042-adoption/adoption_run/adoption_results.json",
+    "ledger_schema_version": "0041/pilot/2"
+  },
+  "model": "qwen3.5:4b",
+  "requested_model": "qwen3.5:4b",
+  "schema_version": "0042/adoption-cell/1",
+  "served_model": "qwen3.5:4b",
+  "symbols_invocations": 1,
+  "terminal_bucket": "empty",
+  "tool_invocations": [
+    "grep",
+    "grep",
+    "grep",
+    "symbols",
+    "ls",
+    "ls",
+    "glob",
+    "ls",
+    "glob",
+    "ls"
+  ],
+  "tool_names_invoked": [
+    "grep",
+    "symbols",
+    "ls",
+    "glob"
+  ],
+  "verifier_artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/psf__requests-1766_verifier_artifact.json",
+  "verifier_schema_version": "0038/1",
+  "verifier_status": "PASSED"
+}

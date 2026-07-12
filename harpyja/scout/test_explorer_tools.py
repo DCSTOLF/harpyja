@@ -171,7 +171,10 @@ def test_ls_clamps_to_scout_ls_max_entries(tmp_path):
     assert len(out) == 3  # defensive clamp on untrusted-loop output
 
 
-# --- Spec 0030: symbols tool (AC1) —
+# --- Spec 0030: symbols tool (AC1) — result shape re-pinned by spec 0042 (AC2):
+# bare list[CodeSpan] like every other nav tool; the 0/28-era nested dict
+# {"symbols": [...], "degraded": bool} registered ZERO spans in _spans_of and
+# structurally penalized every call.
 
 
 def test_symbols_tool_wraps_tier0_records_python(tmp_path):
@@ -199,14 +202,14 @@ def test_symbols_tool_wraps_tier0_records_python(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records)
     out = tools["symbols"]("app.py")
-    assert out["degraded"] is False
-    assert len(out["symbols"]) == 2
-    assert out["symbols"][0].symbol == "MyClass"
-    assert out["symbols"][0].kind == "class"
-    assert out["symbols"][0].start_line == 1
-    assert out["symbols"][0].end_line == 10
-    assert out["symbols"][1].symbol == "my_func"
-    assert out["symbols"][1].kind == "function"
+    assert isinstance(out, list)
+    assert len(out) == 2
+    assert out[0].symbol == "MyClass"
+    assert out[0].kind == "class"
+    assert out[0].start_line == 1
+    assert out[0].end_line == 10
+    assert out[1].symbol == "my_func"
+    assert out[1].kind == "function"
 
 
 def test_symbols_tool_wraps_tier0_records_go(tmp_path):
@@ -224,10 +227,51 @@ def test_symbols_tool_wraps_tier0_records_go(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records)
     out = tools["symbols"]("main.go")
-    assert out["degraded"] is False
-    assert len(out["symbols"]) == 1
-    assert out["symbols"][0].symbol == "SomeType"
-    assert out["symbols"][0].kind == "type"
+    assert isinstance(out, list)
+    assert len(out) == 1
+    assert out[0].symbol == "SomeType"
+    assert out[0].kind == "type"
+
+
+def test_symbols_clean_returns_bare_codespan_list(tmp_path):
+    # Spec 0042 (AC2): the CLEAN result is a bare list[CodeSpan] — shape parity
+    # with grep/glob/ls, so _spans_of unwraps it and its locations enter
+    # seen-span/loop-detection accounting.
+    records = [
+        SymbolRecord(
+            path="app.py", language="python", name="f", kind="function",
+            parent=None, start_line=1, end_line=2,
+        )
+    ]
+    out = _tools(tmp_path, symbol_records=records)["symbols"]("app.py")
+    assert isinstance(out, list)
+    assert all(isinstance(s, CodeSpan) for s in out)
+
+
+def test_symbols_result_shape_no_longer_nested_dict(tmp_path):
+    # Spec 0042 (AC2): regression pin against the 0/28-era shape — the result is
+    # NEVER a mapping ({"symbols": ..., "degraded": ...}), on any branch:
+    # clean, degraded, and no-records.
+    from collections.abc import Mapping
+
+    records = [
+        SymbolRecord(
+            path="app.py", language="python", name="f", kind="function",
+            parent=None, start_line=1, end_line=2,
+        )
+    ]
+    manifest = [
+        ManifestEntry(
+            path="broken.py", language="python", size=1, hash="h", mtime=0.0,
+            prior=0.0, degraded="PARSE_ERROR",
+        )
+    ]
+    tools = _tools(
+        tmp_path, search=_FakeSearch([CodeSpan(path="broken.py", start_line=1, end_line=1)]),
+        symbol_records=records, manifest=manifest,
+    )
+    for path in ("app.py", "broken.py", "unknown.py"):
+        assert not isinstance(tools["symbols"](path), Mapping)
 
 
 def test_symbols_tool_normalized_path(tmp_path):
@@ -248,9 +292,9 @@ def test_symbols_tool_normalized_path(tmp_path):
     # Both paths should resolve to the same canonical form.
     out1 = tools["symbols"]("pkg/file.py")
     out2 = tools["symbols"]("pkg/../pkg/file.py")
-    assert len(out1["symbols"]) == 1
-    assert len(out2["symbols"]) == 1
-    assert out1["symbols"][0].symbol == out2["symbols"][0].symbol
+    assert len(out1) == 1
+    assert len(out2) == 1
+    assert out1[0].symbol == out2[0].symbol
 
 
 def test_symbols_tool_no_new_parser(tmp_path):
@@ -270,8 +314,8 @@ def test_symbols_tool_no_new_parser(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records)
     out = tools["symbols"]("nonexistent.py")
-    assert len(out["symbols"]) == 1
-    assert out["symbols"][0].symbol == "phantom"
+    assert len(out) == 1
+    assert out[0].symbol == "phantom"
 
 
 def test_symbols_tool_out_of_repo_path_rejected(tmp_path):
@@ -299,10 +343,15 @@ def test_symbols_tool_clamps_to_scout_symbols_max_entries(tmp_path):
     ]
     tools = _tools(tmp_path, settings=Settings(scout_symbols_max_entries=3), symbol_records=records)
     out = tools["symbols"]("big.py")
-    assert len(out["symbols"]) == 3  # defensive clamp on untrusted-loop output
+    assert len(out) == 3  # defensive clamp on untrusted-loop output
 
 
 # --- Spec 0030: graceful degradation with visible provenance (AC3) —
+# Spec 0042 (AC2): the degraded result is [marker, *CodeSpans] — a stable
+# ANNOTATION marker string PREPENDED to the real ripgrep-fallback spans (the
+# 0035 convention's second case: successful-but-degraded, spans real). The
+# marker never counts as a span; 0030's never-a-silent-downgrade contract is
+# preserved via loop stringification.
 
 
 def test_symbols_tool_degraded_file_falls_back_to_ripgrep(tmp_path):
@@ -327,17 +376,17 @@ def test_symbols_tool_degraded_file_falls_back_to_ripgrep(tmp_path):
     ]
     tools = _tools(tmp_path, search=fake_search, manifest=manifest)
     out = tools["symbols"]("broken.py")
-    # Should return the ripgrep results (not zero records for a degraded file).
-    assert isinstance(out, dict)
-    assert len(out["symbols"]) == 2
-    assert out["symbols"][0].start_line == 5
+    # The ripgrep fallback spans ride BEHIND the marker (not zero records).
+    assert isinstance(out, list)
+    spans = [s for s in out if isinstance(s, CodeSpan)]
+    assert len(spans) == 2
+    assert spans[0].start_line == 5
 
 
-def test_symbols_tool_degraded_file_marks_output_degraded(tmp_path):
-    # AC3: when returning degraded results, the tool surfaces a visible
-    # `degraded: true` marker in the output (not a silent swap).
+def test_symbols_degraded_prepends_marker_then_codespans(tmp_path):
+    # Spec 0042 (AC2): degraded shape is [marker, *CodeSpans] — marker FIRST, a
+    # stable identifier (cause-taxonomy shape), then the real fallback spans.
     ripgrep_results = [CodeSpan(path="broken.py", start_line=1, end_line=1)]
-    fake_search = _FakeSearch(ripgrep_results)
     manifest = [
         ManifestEntry(
             path="broken.py",
@@ -349,18 +398,17 @@ def test_symbols_tool_degraded_file_marks_output_degraded(tmp_path):
             degraded="PARSE_ERROR",
         )
     ]
-    tools = _tools(tmp_path, search=fake_search, manifest=manifest)
+    tools = _tools(tmp_path, search=_FakeSearch(ripgrep_results), manifest=manifest)
     out = tools["symbols"]("broken.py")
-    # The tool returns a dict with symbols + degraded marker.
-    assert isinstance(out, dict)
-    assert "symbols" in out
-    assert "degraded" in out
-    assert out["degraded"] is True
-    assert len(out["symbols"]) == 1
+    assert isinstance(out, list)
+    assert isinstance(out[0], str)
+    assert out[0] == "symbols-degraded: 'broken.py'"
+    assert [s for s in out[1:]] == ripgrep_results
 
 
 def test_symbols_tool_clean_file_not_marked_degraded(tmp_path):
-    # AC3: a clean file (no manifest degraded flag) carries `degraded: false`.
+    # AC3: a clean file (no manifest degraded flag) carries NO marker — a bare
+    # CodeSpan list with no string element.
     records = [
         SymbolRecord(
             path="clean.py",
@@ -385,16 +433,15 @@ def test_symbols_tool_clean_file_not_marked_degraded(tmp_path):
     ]
     tools = _tools(tmp_path, symbol_records=records, manifest=manifest)
     out = tools["symbols"]("clean.py")
-    # Clean file should be a dict with degraded=False.
-    assert isinstance(out, dict)
-    assert "degraded" in out
-    assert out["degraded"] is False
-    assert len(out["symbols"]) == 1
+    assert isinstance(out, list)
+    assert not any(isinstance(item, str) for item in out)
+    assert len(out) == 1
 
 
 def test_symbols_tool_degraded_never_raises(tmp_path):
     # AC3: degraded files return a normal tool result, never an exception
-    # (untrusted-caller boundary).
+    # (untrusted-caller boundary). An empty fallback still carries the marker —
+    # the degrade is never silent.
     fake_search = _FakeSearch([])
     manifest = [
         ManifestEntry(
@@ -408,11 +455,8 @@ def test_symbols_tool_degraded_never_raises(tmp_path):
         )
     ]
     tools = _tools(tmp_path, search=fake_search, manifest=manifest)
-    # Should not raise, should return a dict with empty symbols list.
     out = tools["symbols"]("broken.py")
-    assert isinstance(out, dict)
-    assert out["degraded"] is True
-    assert out["symbols"] == []
+    assert out == ["symbols-degraded: 'broken.py'"]
 
 
 # --- Spec 0033: repo-relative tool contract (AC2/AC3/AC4) ---
@@ -461,7 +505,7 @@ def test_all_path_discovering_tools_emit_repo_relative_paths(tmp_path):
         start_line=1, end_line=2, language="python", parent=None,
     )
     symres = _tools(tmp_path, symbol_records=[record])["symbols"]("astropy/modeling/core.py")
-    assert [s.path for s in symres["symbols"]] == ["astropy/modeling/core.py"]
+    assert [s.path for s in symres] == ["astropy/modeling/core.py"]
 
 
 def test_ls_directory_entries_are_repo_relative_noncitable(tmp_path):
@@ -500,8 +544,8 @@ def test_symbols_degraded_fallback_file_scope_repo_relative_no_crash(tmp_path):
     runner, captured = _runner_returning(_match_line("core.py", 5))
     tools = _tools(tmp_path, search=_real_engine(runner), manifest=manifest)
     out = tools["symbols"]("astropy/modeling/core.py")
-    assert out["degraded"] is True
-    assert [s.path for s in out["symbols"]] == ["astropy/modeling/core.py"]
+    assert out[0] == "symbols-degraded: 'astropy/modeling/core.py'"
+    assert [s.path for s in out[1:]] == ["astropy/modeling/core.py"]
 
 
 # --- Spec 0035: scope markers + file-scope delegation ---
@@ -561,3 +605,133 @@ def test_ls_nonexistent_path_returns_marker(tmp_path):
     as grep (confine_path non-strict + silent-[] mechanics)."""
     out = _tools(tmp_path)["ls"]("does/not/exist")
     assert out == "ls-path-not-found: 'does/not/exist'"
+
+
+# --- Spec 0042 (AC3): repo-wide symbol lookup — `path` optional, by-name -------
+#
+# The adoption driver: with `path` REQUIRED, symbols was only reachable AFTER a
+# candidate file was found (by which point grep had line numbers already — no
+# perceived marginal value). Repo-wide by-name lookup is the partial answer to
+# lexical unreachability (astropy: "separability matrix" is ungreppable, but
+# separability_matrix is findable BY NAME). Read-only, repo-confined (it only
+# filters injected Tier-0 records), output-clamped by the DISTINCT
+# scout_symbols_repo_max_entries knob, ranking PINNED exact > prefix > substring.
+
+
+def _rec(name, path="a.py", start=1, end=2):
+    return SymbolRecord(
+        path=path, language="python", name=name, kind="function",
+        parent=None, start_line=start, end_line=end,
+    )
+
+
+def test_symbols_repo_wide_lookup_by_name_no_path(tmp_path):
+    # No path → repo-wide lookup over the Tier-0 records, exact spans returned.
+    records = [
+        _rec("separability_matrix", path="astropy/modeling/separable.py", start=66, end=120),
+        _rec("unrelated", path="astropy/io/fits.py"),
+    ]
+    out = _tools(tmp_path, symbol_records=records)["symbols"](name="separability_matrix")
+    assert [s.path for s in out] == ["astropy/modeling/separable.py"]
+    assert out[0].start_line == 66
+    assert out[0].end_line == 120
+
+
+def test_symbols_repo_wide_ranking_exact_prefix_substring(tmp_path):
+    # PINNED ranking (spec 0042 OQ2): exact-name > prefix > substring, ties
+    # broken deterministically by path lexicographic then start_line — never
+    # arbitrary truncation order.
+    records = [
+        _rec("myfoo", path="sub.py"),               # substring tier
+        _rec("foobar", path="prefix.py"),            # prefix tier
+        _rec("foo", path="z.py"),                    # exact tier, tie-broken second
+        _rec("foo", path="a.py"),                    # exact tier, tie-broken first
+    ]
+    out = _tools(tmp_path, symbol_records=records)["symbols"](name="foo")
+    assert [(s.symbol, s.path) for s in out] == [
+        ("foo", "a.py"), ("foo", "z.py"), ("foobar", "prefix.py"), ("myfoo", "sub.py"),
+    ]
+
+
+def test_symbols_repo_wide_no_match_is_honest_empty(tmp_path):
+    # Records PRESENT but nothing matches → plain [] (searchable-but-empty),
+    # categorically distinct from the absent-index replacement marker below.
+    out = _tools(tmp_path, symbol_records=[_rec("bar")])["symbols"](name="zzz")
+    assert out == []
+
+
+def test_symbols_repo_wide_clamped_by_repo_max_entries(tmp_path):
+    # Clamped by the DISTINCT repo-wide knob (a common name's blast radius across
+    # a repo differs from one file's symbol list) — not the file-local clamp.
+    records = [_rec("common", path=f"pkg/f{i:02d}.py") for i in range(10)]
+    settings = Settings(scout_symbols_repo_max_entries=3, scout_symbols_max_entries=400)
+    out = _tools(tmp_path, settings=settings, symbol_records=records)["symbols"](name="common")
+    assert len(out) == 3
+
+
+def test_symbols_repo_wide_hostile_input_rejected(tmp_path):
+    # Hostile/oversized name input is rejected with a typed marker — bounded,
+    # never echoed unclamped, never an unhandled exception.
+    tools = _tools(tmp_path, symbol_records=[_rec("foo")])
+    oversized = "x" * 10_000
+    out = tools["symbols"](name=oversized)
+    assert isinstance(out, str)
+    assert out.startswith("symbols-name-invalid:")
+    assert len(out) < 400  # the hostile input is clipped, not echoed whole
+    assert tools["symbols"](name="") == "symbols-name-invalid: ''"
+
+
+def test_symbols_no_args_returns_typed_marker(tmp_path):
+    # Neither path nor name → a typed marker, never a silent [] and never a crash.
+    out = _tools(tmp_path, symbol_records=[_rec("foo")])["symbols"]()
+    assert out == "symbols-args-missing: 'provide path or name'"
+
+
+def test_symbols_nonexistent_path_returns_replacement_marker(tmp_path):
+    # Post-T12 pin (observed LIVE: symbols({"path": "digest-auth/*"}) returned a
+    # silent []): a path with NO records that also does not exist on disk is
+    # UNSEARCHABLE — the 0035 replacement marker, same class as ls/grep — never
+    # a silent [] that reads as "file has no symbols".
+    out = _tools(tmp_path)["symbols"]("digest-auth/*")
+    assert out == "symbols-path-not-found: 'digest-auth/*'"
+
+
+def test_symbols_existing_file_without_records_is_honest_empty(tmp_path):
+    # A REAL file with no extracted records (e.g. unsupported language) stays
+    # honest-[] — searchable-but-empty, categorically distinct from path-absent.
+    _file(tmp_path, "notes.txt")
+    assert _tools(tmp_path)["symbols"]("notes.txt") == []
+
+
+def test_symbols_records_win_over_disk_absence(tmp_path):
+    # The records-win contract (test_symbols_tool_no_new_parser) is unchanged:
+    # records for a path whose file is NOT on disk are still returned — the
+    # marker fires only when BOTH records and the file are absent.
+    records = [_rec("phantom", path="gone.py")]
+    out = _tools(tmp_path, symbol_records=records)["symbols"]("gone.py")
+    assert [s.symbol for s in out] == ["phantom"]
+
+
+def test_symbols_empty_string_path_routes_repo_wide_not_file_local(tmp_path):
+    # Post-T12 pin (observed LIVE in the 0042 measurement, astropy cell): the
+    # model sent {"path": "", "name": "..."} and the `path is None` routing sent
+    # it down the FILE-LOCAL branch, silently ignoring `name` — a silent
+    # degradation of the repo-wide affordance. An empty/absent path with a name
+    # MUST route repo-wide.
+    records = [_rec("separability_matrix", path="astropy/modeling/separable.py", start=66, end=120)]
+    out = _tools(tmp_path, symbol_records=records)["symbols"](path="", name="separability_matrix")
+    assert [s.path for s in out] == ["astropy/modeling/separable.py"]
+
+
+def test_symbols_empty_path_and_no_name_is_args_missing(tmp_path):
+    # Empty path with no name is the args-missing marker, same as no args at all.
+    out = _tools(tmp_path, symbol_records=[_rec("foo")])["symbols"](path="")
+    assert out == "symbols-args-missing: 'provide path or name'"
+
+
+def test_symbols_repo_wide_absent_tier0_returns_replacement_marker(tmp_path):
+    # Absent Tier-0 records (e.g. wiring's load_symbols_or_none(...) or []) →
+    # the 0035 REPLACEMENT marker (no spans exist to annotate) — never a silent
+    # [] indistinguishable from "no such symbol".
+    out = _tools(tmp_path, symbol_records=[])["symbols"](name="separability_matrix")
+    assert out == "symbols-index-unavailable: 'separability_matrix'"

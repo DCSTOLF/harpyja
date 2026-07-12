@@ -124,6 +124,13 @@ class Settings:
     # output clamp (AC2): a symbol list is bounded to this many entries (parallel to
     # scout_glob_max_paths / scout_ls_max_entries). Additive-last on the scout budgets.
     scout_symbols_max_entries: int = 400
+    # Spec 0042 — `scout_symbols_repo_max_entries` — the REPO-WIDE symbol-lookup
+    # clamp (AC3/OQ2): a by-name lookup across the whole repo is bounded to this
+    # many entries. DISTINCT from the file-local scout_symbols_max_entries because
+    # a common name's blast radius across a repo differs from one file's symbol
+    # list; results are ranked (exact > prefix > substring, deterministic ties)
+    # before the clamp so truncation is never arbitrary. Additive-last.
+    scout_symbols_repo_max_entries: int = 200
 
     # Spec 0008 (Wave 5) — Verification Gate (additive, appended last).
     # `verify_method` selects the scoring backend; `verify_threshold` is the pass

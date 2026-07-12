@@ -215,6 +215,57 @@ def test_tool_schemas_match_the_built_tool_surface_single_source(tmp_path):
     assert schema_names == tool_names | {SUBMIT_TOOL}
 
 
+def test_initial_prompt_binds_to_registered_tool_surface_single_source(tmp_path):
+    # Spec 0042 (AC1) — the structural drift guard that would have caught the 0030
+    # stale prompt: a tool registered on the built surface (or the terminal action)
+    # that is NOT named in the initial prompt fails this test. A new tool is
+    # un-shippable without appearing in the prompt. Word-boundary match: a bare
+    # substring check would vacuously find "ls" inside "tools".
+    import re
+
+    from harpyja.scout.context_map import build_initial_prompt
+    from harpyja.scout.explorer_backend import _tool_schemas
+    from harpyja.scout.explorer_loop import SUBMIT_TOOL
+    from harpyja.scout.explorer_tools import build_explorer_tools
+
+    prompt = build_initial_prompt("q")
+    registered = set(
+        build_explorer_tools(str(tmp_path), Settings(), search_engine=_FakeSearch())
+    ) | {SUBMIT_TOOL}
+    # The prompt is bound to the SAME surface the schemas are bound to (one source).
+    assert registered == {s["function"]["name"] for s in _tool_schemas()}
+    missing = {
+        name for name in registered
+        if re.search(rf"\b{re.escape(name)}\b", prompt) is None
+    }
+    assert not missing, f"registered tools absent from the initial prompt: {sorted(missing)}"
+
+
+def _symbols_schema():
+    from harpyja.scout.explorer_backend import _tool_schemas
+
+    return next(s["function"] for s in _tool_schemas() if s["function"]["name"] == "symbols")
+
+
+def test_symbols_schema_path_optional():
+    # Spec 0042 (AC3): `path` is no longer required — the repo-wide by-name lookup
+    # must be reachable BEFORE a candidate file is found (the positioning defect:
+    # a path-gated symbols tool is only reachable after grep already produced
+    # line numbers, so the model perceives no marginal value).
+    schema = _symbols_schema()
+    assert "path" not in schema["parameters"].get("required", [])
+    assert "name" in schema["parameters"]["properties"]
+
+
+def test_symbols_schema_description_states_when_and_spans():
+    # Spec 0042 (AC1-desc): the description carries the WHEN-to-use and the
+    # citation-shaped-output pitch — exact start/end line spans per symbol, the
+    # fastest path from candidate-file to the file:line submit_citations wants.
+    desc = _symbols_schema()["description"]
+    assert "exact start/end line spans" in desc
+    assert "by name across the repo" in desc
+
+
 # --- Turns-used native seam (T3/T4, AC3) ---
 #
 # Spec 0025 migrates the 0022 turns-used diagnostic OFF the FastContext trajectory
