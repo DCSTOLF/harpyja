@@ -853,7 +853,10 @@
   param), spec 0039 AC6.)
 - A **live-measurement driver must have EXCLUSIVE use of the model endpoint for the
   run's duration, and a contaminated run is invalidated OUTCOME-BLIND at RUN
-  granularity — never per-suspicious-cell.** A shared Ollama silently converts
+  granularity — never per-suspicious-cell.** *(Amended by spec 0041, below: the
+  SHOULD-check became a HARD GATE, and invalidation is boundary-granularity when
+  per-check records exist — run-granularity remains the rule when they don't; the
+  outcome-blind criterion is unchanged either way.)* A shared Ollama silently converts
   environment latency into FAKE capability observations two ways at once, which are
   NOT competing explanations: (i) a concurrent live-calling workload (a pytest suite
   launched without `-m "not integration"`, whose live tests QUEUE requests and TOUCH
@@ -877,6 +880,64 @@
   exactly ONE bounded re-run, the 0036 posture). (See `harpyja/eval/pool_pilot.py`
   `_evict_other_models` / `_cell_needs_run`,
   `specs/0040-pool/pilot/pilot_results.run1-contaminated.json`, spec 0040 T17/T18.)
+- The **exclusive-endpoint check is a HARD GATE with a recorded, honestly-labeled
+  strength — refuse, don't warn; no bypass exists; the claim never exceeds what
+  `/api/ps` can show** (spec 0041, mechanizing the 0040 lesson before the
+  enlargement/bake-off can re-pay it). The live driver checks `/api/ps` (loopback-
+  asserted FIRST — the same egress class as `/api/tags`, the 0019 rule) BEFORE the run
+  and BEFORE EACH model block; a foreign resident (the PINNED predicate: a resident tag
+  NOT in the frozen config's model set — the driver's own block loads never
+  self-trigger) is the typed stop `exclusive-endpoint-contended`, non-zero exit, zero
+  cells; `run_gated_pool_pilot` takes no force/bypass parameter (signature-introspection
+  pinned, the 0039 posture — the only sanctioned unblock is changing the environment).
+  EVERY check (result + timestamp) rides the run-level ledger (`0041/pilot/2`,
+  version-gated: the new version REQUIRES the proof, legacy `0040/pilot/1` validates
+  unchanged — run-level, deliberately NOT the per-case verifier artifact, dodging the
+  dual-seam class) under `exclusivity_check_kind: start-plus-per-block` with TWO named
+  unseeable residuals: the intra-block window and SAME-TAG contention (`/api/ps` lists
+  resident models, not queued requests — a contaminator on a tag inside the frozen set
+  passes every check; carried by the opt-in test default, stated in the artifact, never
+  implied covered). A failed per-block re-check types every cell since the last clean
+  check `suspect` — boundary-granularity, outcome-blind, observations retained; suspect
+  is the THIRD `_cell_needs_run` branch (re-runnable ONLY after a subsequent clean gate
+  check; clean never re-runs, typed degrades keep one bounded re-run). Reload-churn
+  attribution is the pinned two-condition predicate (NEW vs the committed 0040 clean-run
+  degrade profile AND an observed `expires_at`-reset marker), never a close-time judgment
+  call. (See `harpyja/eval/exclusivity_gate.py`, `harpyja/eval/gate_run.py`,
+  `specs/0041-gates/gate/gate_proof.json` + `.contended.json`, spec 0041 AC1–AC3/AC8.)
+- **Live integration tests are OPT-IN, not opt-out, and the opt-in has a NAMED
+  EXECUTABLE consumer** (spec 0041 — the 0040 contamination was a plain `pytest -q`
+  firing live tests at the measurement endpoint). The committed default
+  (`pyproject.toml` `addopts = ["-m", "not integration"]`) deselects live-marked tests;
+  the documented opt-in is `uv run pytest -m integration` (strict:
+  `HARPYJA_REQUIRE_LIVE_STACK=1`). The consumer is MECHANICAL, never documentation-only:
+  `assert_live_optin_selection` proves via `pytest --collect-only` that the opt-in
+  reaches a non-zero live suite AND the default selection contains zero live-marked
+  tests — raised loudly on either failure (a deselect default whose live suite silently
+  rots into never-running is its own failure) — and the operator gate driver runs it in
+  preflight before any live traffic. (See `harpyja/eval/live_test_selection.py`,
+  `harpyja/eval/test_deselect_default.py`, `specs/0041-gates/gate/run_gate.py`, spec
+  0041 AC6.)
+- **Residency bounds are DRIVER-SCOPED and probe-proven — the production request body is
+  not the seam, and sent ≠ honored applies to the hygiene knob itself** (spec 0041; the
+  0037 lesson pointed at this spec's own mechanism). The dev host pins every touched tag
+  (`keep_alive=-1`, `expires_at` ~2318); the fix is a native-API bounded touch FROM THE
+  DRIVER (the seam where `_evict_other_models` already lives), never a `keep_alive`
+  field on the SUT's `/v1` call — the 0034/0038 byte-identical pin
+  (`explorer_think=None ⇒ params == {max_tokens: 2048}`) survives VERBATIM, and an
+  ast-sweep guard (`test_sut_boundary_residency.py`) rots false on any leak of
+  `keep_alive`/`/api/ps` into `gateway/`/`scout/`/`deep/`. Whether the touch re-bounds a
+  pinned model was PROBED, not assumed: the committed `0041/residency-probe/1` artifact
+  (judged ONLY from `/api/ps` `expires_at` movement; the validator re-judges the
+  recorded evidence and rejects self-contradiction) typed **`touch-rebounds` live**
+  (expires_at 2318 → now+300s), so the touch is the primary mechanism and
+  `_evict_other_models` stays defense-in-depth; the wiring tripwire
+  (`assert_residency_wiring_matches_committed_outcome`) FAILS loudly on any
+  wiring↔evidence drift, never skips. The bound value (300 s at probe time) is pinned by
+  the consuming run spec's frozen config, tuned ≥ a block's cadence (a too-short bound
+  converts memory-squeeze into timeout churn — the AC8 attribution predicate exists for
+  exactly that regression). (See `harpyja/eval/residency_probe.py`,
+  `specs/0041-gates/residency_probe/probe_result.json`, spec 0041 AC4/AC7.)
 - A **pre-check whose pinned pilot set sits EXACTLY at a derived coverage minimum has
   zero slack — pin coverage HEADROOM above the boundary, because any single
   environment degrade then forces the under-powered verdict.** A `MIN_PILOT_*_COVERAGE`

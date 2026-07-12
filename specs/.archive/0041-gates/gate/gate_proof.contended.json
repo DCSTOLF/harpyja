@@ -1,0 +1,31 @@
+{
+  "config_hash": "7e2f19c00ef123f49189940c3f6e56a8e7dc8c0168c7c2940be7310929ea1e61",
+  "entries": {},
+  "exclusivity": {
+    "checks": [
+      {
+        "clean": false,
+        "foreign": [
+          "qwen3-14b-cc:latest"
+        ],
+        "label": "start",
+        "residents": [
+          "qwen3-14b-cc:latest"
+        ],
+        "timestamp": "2026-07-12T02:36:40.507719+00:00"
+      }
+    ],
+    "exclusivity_check_kind": "start-plus-per-block",
+    "model_set": [
+      "qwen3:14b",
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "schema_version": "0041/exclusivity/1",
+    "unseeable_residuals": [
+      "intra-block-window",
+      "same-tag-contention"
+    ]
+  },
+  "schema_version": "0041/pilot/2"
+}

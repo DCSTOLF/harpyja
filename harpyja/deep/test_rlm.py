@@ -75,3 +75,12 @@ def test_deep_outbound_carries_no_reasoning_effort():
         settings = dataclasses.replace(Settings(), explorer_think=value)
         kwargs = _run_deep_and_capture(settings)
         assert "reasoning_effort" not in kwargs
+
+
+def test_deep_outbound_carries_no_keep_alive():
+    # spec 0041 (AC5): bounded residency is a DRIVER-side native-API concern —
+    # the Deep forward call must NOT acquire a keep_alive field. Green on
+    # introduction; ROTS FALSE on any future leak of the hygiene knob into
+    # the SUT request body.
+    kwargs = _run_deep_and_capture(Settings())
+    assert "keep_alive" not in kwargs

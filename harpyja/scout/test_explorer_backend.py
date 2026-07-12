@@ -630,6 +630,34 @@ def test_default_outbound_request_body_pinned(tmp_path):
     assert captured == {"max_tokens": 2048}
 
 
+def test_explorer_byte_identical_pin_survives_0041(tmp_path):
+    """Spec 0041 (AC5): the residency mechanism is DRIVER-scoped (native-API
+    touch/eviction) — the production explorer request body acquires NO
+    keep_alive and stays byte-identical under explorer_think=None. Green on
+    introduction; ROTS FALSE on any future SUT leak of the hygiene knob."""
+    captured = {}
+
+    class _Gw:
+        api_base = "http://127.0.0.1:11434/v1"
+
+        def assert_local(self, resolver=None):
+            pass
+
+        def complete_with_tools(self, messages, tools, **params):
+            captured.update(params)
+            return {"content": "", "tool_calls": [_tc(
+                "submit_citations", citations=[])], "finish_reason": "tool_calls",
+                "model": "m", "reasoning": None, "completion_tokens": 7}
+
+    backend = ExplorerBackend(
+        gateway=_Gw(), repo_path=str(tmp_path), settings=Settings(),
+        manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert captured == {"max_tokens": 2048}  # the 0034/0038 pin, verbatim
+    assert "keep_alive" not in captured
+
+
 def test_think_mode_default_omitted():
     assert derive_think_mode(None, True) == "default-omitted"
 

@@ -1018,3 +1018,55 @@ own run. The committed run (all three models `preflight-pass` + `reasoning_effor
 all three pairs `insufficient-pilot-evidence`, ceilings 6/8/3 vs floor 8) names pool
 enlargement — the 0036 audited convert step — as the single next step for all pairs, which
 also unblocks the 0039 thinking A/B. See history.md 2026-07-11 (spec 0040).
+
+## Spec 0041 architecture updates — measurement-hygiene gates (the exclusive-endpoint hard gate, driver-scoped probe-proven residency, the opt-in live-test default)
+
+**As of spec 0041 `harpyja/eval/exclusivity_gate.py` (NEW, operator-side) is the
+exclusive-endpoint gate contract.** `check_exclusive_endpoint` routes `/api/ps` behind
+`gateway.assert_local` FIRST (the 0019 rule — the same loopback-gated egress class as
+`/api/tags`), applies the PINNED foreign predicate (`foreign_residents`: a resident tag
+not in the frozen config's model set — the driver's own block loads never self-trigger),
+and either returns a clean check record (timestamp + residents) or raises the typed stop
+`ExclusiveEndpointContended` (`exclusive-endpoint-contended`), whose `as_failed_check()`
+makes the refusal itself auditable. The `0041/exclusivity/1` record carries EVERY check
+under `exclusivity_check_kind: "start-plus-per-block"` plus the TWO named unseeable
+residuals (`intra-block-window`, `same-tag-contention` — `/api/ps` shows resident models,
+not queued requests; the claim never exceeds the mechanism).
+
+**`harpyja/eval/gate_run.py` (NEW, operator-side) is the gated run driver.**
+`run_gated_pool_pilot` wraps a pilot loop in start + per-block gate checks, persists the
+proof via `PoolPilotLedger(exclusivity=…)` at `0041/pilot/2` (version-gated additive
+bump in `pool_pilot.py`: the new version REQUIRES the record and the validator rejects
+one without it; legacy `0040/pilot/1` writes/reads byte-unchanged), and on a failed
+per-block re-check types every cell since the last clean check `suspect` —
+boundary-granularity, outcome-blind, observations retained. `suspect` is the THIRD
+`_cell_needs_run` branch (re-runnable only after a subsequent clean gate check). No
+force/bypass parameter exists (signature-introspection pinned). `attribute_reload_churn`
++ `clean_0040_degrade_profile` operationalize the AC8 churn predicate (NEW vs the
+committed 0040 clean-run profile AND an `expires_at`-reset marker).
+
+**`harpyja/eval/residency_probe.py` (NEW, operator-side) is the probe-first residency
+mechanism decider.** `run_residency_probe` issues one bounded-`keep_alive` native touch
+against a resident model and `judge_residency_outcome` types `{touch-rebounds,
+touch-ignored}` ONLY from `/api/ps` `expires_at` movement (sent ≠ honored — the 0037
+lesson applied to the hygiene knob itself); the validator RE-JUDGES the recorded
+evidence and rejects a self-contradicting artifact. The committed
+`specs/0041-gates/residency_probe/probe_result.json` typed **`touch-rebounds`** live
+(expires_at 2318 → now+300 s), so the bounded touch is the primary residency control and
+`_evict_other_models` stays defense-in-depth;
+`assert_residency_wiring_matches_committed_outcome` is the loud-FAIL drift tripwire. The
+SUT is byte-frozen: the 0034/0038 `explorer_think=None ⇒ params == {max_tokens: 2048}`
+pin survives verbatim, Deep carries no new field, and
+`test_sut_boundary_residency.py`'s ast sweep rots false on any `keep_alive`/`/api/ps`
+leak into `gateway/`/`scout/`/`deep/`.
+
+**`harpyja/eval/live_test_selection.py` (NEW) is the AC6 enforced consumer.** The
+committed default (`pyproject.toml` `addopts = ["-m", "not integration"]`) makes live
+tests OPT-IN (`uv run pytest -m integration`); `assert_live_optin_selection` proves both
+directions mechanically via `pytest --collect-only` (non-zero live suite opt-in, zero
+live-marked in the default) and the committed operator driver
+`specs/0041-gates/gate/run_gate.py` runs it in preflight before any live traffic, then
+gates on the committed residency probe (probe-first: refuses if absent). Committed live
+evidence: `gate_proof.json` (exclusive endpoint → PASS, 4 clean checks) and
+`gate_proof.contended.json` (foreign resident → typed stop, zero cells). See history.md
+(spec 0041).

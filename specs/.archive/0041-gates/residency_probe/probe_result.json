@@ -1,0 +1,10 @@
+{
+  "endpoint": "http://127.0.0.1:11434",
+  "expires_at_after": "2026-07-11T23:41:11.04603-03:00",
+  "expires_at_before": "2318-10-21T19:44:59.216338807-03:00",
+  "keep_alive_bound_s": 300.0,
+  "model": "qwen3-14b-cc:latest",
+  "outcome": "touch-rebounds",
+  "schema_version": "0041/residency-probe/1",
+  "touched_at": "2026-07-12T02:36:10.859145+00:00"
+}

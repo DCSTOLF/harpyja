@@ -47,6 +47,11 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 # Tests live next to the package under test; no top-level tests/ root.
+# Spec 0041 (AC6): live integration tests are OPT-IN — the default invocation
+# deselects them so a plain `pytest -q` can never fire live requests at a
+# measurement endpoint (the 0040 run-1 contamination). Opt in explicitly:
+#   uv run pytest -m integration
+addopts = ["-m", "not integration"]
 testpaths = ["harpyja"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

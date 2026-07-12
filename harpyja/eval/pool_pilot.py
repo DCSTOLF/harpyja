@@ -38,6 +38,7 @@ from harpyja.eval.pool_precheck import (
 
 __all__ = [
     "POOL_PILOT_LEDGER_SCHEMA_VERSION",
+    "POOL_PILOT_LEDGER_SCHEMA_VERSION_0041",
     "ModelPreflightResult",
     "PoolPilotLedger",
     "PoolRunError",
@@ -268,17 +269,33 @@ def run_model_preflight(
 
 POOL_PILOT_LEDGER_SCHEMA_VERSION = "0040/pilot/1"
 
-_KNOWN_LEDGER_SCHEMA_VERSIONS = frozenset({POOL_PILOT_LEDGER_SCHEMA_VERSION})
+# Spec 0041 (AC3): the run-level exclusivity proof rides the ledger under a
+# NEW version — version-gated per the 0026/0036 pattern: the new version
+# REQUIRES the record, legacy 0040/pilot/1 artifacts validate unchanged.
+POOL_PILOT_LEDGER_SCHEMA_VERSION_0041 = "0041/pilot/2"
+
+_KNOWN_LEDGER_SCHEMA_VERSIONS = frozenset(
+    {POOL_PILOT_LEDGER_SCHEMA_VERSION, POOL_PILOT_LEDGER_SCHEMA_VERSION_0041}
+)
 
 
 class PoolPilotLedger:
     """Resumable per-cell (case x model) pilot ledger, atomically persisted,
     keyed to the FROZEN 0040 config hash (a ledger written under a different
-    config is not resumable — loud, never merged)."""
+    config is not resumable — loud, never merged). With ``exclusivity`` (the
+    0041 run-level proof) it persists at ``0041/pilot/2``, which REQUIRES a
+    conforming record; without, it writes/reads ``0040/pilot/1`` unchanged."""
 
-    def __init__(self, path: str | Path, *, config_hash: str = POOL_CONFIG_HASH_0040):
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        config_hash: str = POOL_CONFIG_HASH_0040,
+        exclusivity: dict[str, Any] | None = None,
+    ):
         self._path = Path(path)
         self._config_hash = config_hash
+        self._exclusivity: dict[str, Any] | None = None
         if self._path.is_file():
             obj = json.loads(self._path.read_text(encoding="utf-8"))
             version = obj.get("schema_version")
@@ -289,10 +306,48 @@ class PoolPilotLedger:
                     "ledger was written under a different frozen config "
                     f"({obj.get('config_hash')!r} != {config_hash!r}) — not resumable"
                 )
+            if version == POOL_PILOT_LEDGER_SCHEMA_VERSION_0041:
+                # The new version is not a valid measurement without the proof.
+                self._exclusivity = self._validated_exclusivity(
+                    obj.get("exclusivity")
+                )
             self._entries: dict[str, dict[str, Any]] = dict(obj.get("entries", {}))
+            if exclusivity is not None:
+                self.set_exclusivity(exclusivity)
         else:
             self._entries = {}
+            if exclusivity is not None:
+                self._exclusivity = self._validated_exclusivity(exclusivity)
             self._flush()
+
+    @staticmethod
+    def _validated_exclusivity(record: Any) -> dict[str, Any]:
+        from harpyja.eval.exclusivity_gate import (
+            ExclusivityError,
+            validate_exclusivity_record,
+        )
+
+        if not isinstance(record, dict):
+            raise PoolRunError(
+                f"a {POOL_PILOT_LEDGER_SCHEMA_VERSION_0041} ledger requires the "
+                "exclusivity proof record — a run artifact lacking it is not a "
+                "valid measurement"
+            )
+        try:
+            validate_exclusivity_record(record)
+        except ExclusivityError as e:
+            raise PoolRunError(f"non-conforming exclusivity record: {e}") from e
+        return dict(record)
+
+    @property
+    def exclusivity(self) -> dict[str, Any] | None:
+        return dict(self._exclusivity) if self._exclusivity is not None else None
+
+    def set_exclusivity(self, record: dict[str, Any]) -> None:
+        """Replace the exclusivity record (e.g. a per-block check appended)
+        and re-persist — validated, never defaulted."""
+        self._exclusivity = self._validated_exclusivity(record)
+        self._flush()
 
     @staticmethod
     def _key(case_id: str, model: str) -> str:
@@ -313,11 +368,17 @@ class PoolPilotLedger:
         return dict(self._entries)
 
     def _flush(self) -> None:
-        payload = {
-            "schema_version": POOL_PILOT_LEDGER_SCHEMA_VERSION,
+        payload: dict[str, Any] = {
+            "schema_version": (
+                POOL_PILOT_LEDGER_SCHEMA_VERSION_0041
+                if self._exclusivity is not None
+                else POOL_PILOT_LEDGER_SCHEMA_VERSION
+            ),
             "config_hash": self._config_hash,
             "entries": self._entries,
         }
+        if self._exclusivity is not None:
+            payload["exclusivity"] = self._exclusivity
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         tmp.write_text(
@@ -359,12 +420,18 @@ def _evict_other_models(current: str, *, api_base: str = _API_BASE) -> list[str]
     return evicted
 
 
-def _cell_needs_run(cell: dict[str, Any] | None) -> bool:
+def _cell_needs_run(
+    cell: dict[str, Any] | None, *, clean_gate_since: bool = False
+) -> bool:
     """Resume predicate: absent → run; clean bucket → NEVER re-run (re-running
     a clean observation because its outcome looks wrong would be post-hoc
-    steering); typed degrade → ONE bounded re-run, then recorded-by-cause."""
+    steering); typed degrade → ONE bounded re-run, then recorded-by-cause;
+    suspect (spec 0041 — invalidated outcome-blind at a contamination
+    boundary) → re-runnable ONLY after a subsequent clean gate check."""
     if cell is None:
         return True
+    if cell.get("status") == "suspect":
+        return clean_gate_since
     if cell.get("degrade") is None:
         return False
     return cell.get("attempts", 1) < _MAX_CELL_ATTEMPTS

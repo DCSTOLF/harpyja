@@ -1,0 +1,48 @@
+{
+  "config_hash": "7e2f19c00ef123f49189940c3f6e56a8e7dc8c0168c7c2940be7310929ea1e61",
+  "entries": {},
+  "exclusivity": {
+    "checks": [
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "start",
+        "residents": [],
+        "timestamp": "2026-07-12T02:37:05.065400+00:00"
+      },
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "pre-block:qwen3:14b",
+        "residents": [],
+        "timestamp": "2026-07-12T02:37:05.069110+00:00"
+      },
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "pre-block:qwen3:8b",
+        "residents": [],
+        "timestamp": "2026-07-12T02:37:05.071081+00:00"
+      },
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "pre-block:qwen3.5:4b",
+        "residents": [],
+        "timestamp": "2026-07-12T02:37:05.072523+00:00"
+      }
+    ],
+    "exclusivity_check_kind": "start-plus-per-block",
+    "model_set": [
+      "qwen3:14b",
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "schema_version": "0041/exclusivity/1",
+    "unseeable_residuals": [
+      "intra-block-window",
+      "same-tag-contention"
+    ]
+  },
+  "schema_version": "0041/pilot/2"
+}
