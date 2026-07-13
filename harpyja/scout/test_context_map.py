@@ -119,3 +119,21 @@ def test_build_initial_prompt_marks_submit_citations_terminal():
     prompt = build_initial_prompt("q")
     assert _named_in("submit_citations", prompt)
     assert "end the search" in prompt
+
+
+def test_submit_early_nudge_removed_from_prompt():
+    """Spec 0044 (AC3): the 0043 UNCONDITIONAL submit-early sentence is REMOVED
+    — it typed CLOCK_BOUND_PERSISTS at net −1 (2 conversions bought with 3
+    premature-submission regressions; it fixes dawdle-after-locate but induces
+    submit-before-verify). Its successor is the confidence-CONDITIONED mid-loop
+    nudge (confidence_gate + explorer_loop), which cannot ride turn 0 because
+    the evidence does not exist yet. Absent the nudge, the model explores as it
+    did pre-0043 — an implicit removal would quietly make the 0044 comparison
+    three-armed."""
+    prompt = build_initial_prompt("where is X")
+    assert "do not keep exploring" not in prompt
+    assert "immediately" not in prompt
+    # The tool menu and the terminal action survive the removal (the 0042
+    # prompt↔surface drift guard keeps enumerating every registered tool).
+    assert "submit_citations" in prompt
+    assert "Query: where is X" in prompt

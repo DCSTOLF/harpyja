@@ -975,3 +975,77 @@ def test_explorer_think_pin_gated_on_native_probe_outcome(tmp_path):
     )
     backend.run("q", [])
     assert "think" not in captured  # None ⇒ omitted, byte-identical floor
+
+
+def test_params_pin_survives_confidence_nudge(tmp_path):
+    """Spec 0044 (AC3, successor to test_params_pin_survives_submit_early_nudge):
+    the confidence-conditioned lever rides `messages`, never `params` — the
+    0034/0038 byte-frozen pin survives VERBATIM, and the removed 0043
+    unconditional sentence is absent from the outbound initial prompt (the
+    message surface carries only the conditioned mid-loop nudge, when fired)."""
+    captured = {}
+    seen_messages = []
+
+    class _Gw:
+        api_base = "http://127.0.0.1:11434/v1"
+
+        def assert_local(self, resolver=None):
+            pass
+
+        def complete_with_tools(self, messages, tools, **params):
+            captured.update(params)
+            seen_messages.extend(messages)
+            return {"content": "", "tool_calls": [_tc(
+                "submit_citations", citations=[])], "finish_reason": "tool_calls",
+                "model": "m", "reasoning": None, "completion_tokens": 7}
+
+    backend = ExplorerBackend(
+        gateway=_Gw(), repo_path=str(tmp_path), settings=Settings(),
+        manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert captured == {"max_tokens": 2048}  # the 0034/0038 pin, verbatim
+    assert "do not keep exploring" not in seen_messages[0]["content"]  # 0043 sentence gone
+
+
+def test_trajectory_record_carries_confidence_fired_signal_and_turn(tmp_path):
+    """Spec 0044 (AC3, seam 1 threading): the backend threads the LoopResult
+    confidence facts into build_trajectory_record — fired/signal/turn/spans are
+    durable in last_trajectory on every terminal path."""
+    from harpyja.symbols.extract import SymbolRecord
+
+    _file(tmp_path, "pkg/mod.py", n=30)
+    records = [SymbolRecord(
+        path="pkg/mod.py", language="python", name="target_fn",
+        kind="function", parent=None, start_line=10, end_line=20,
+    )]
+    model = _scripted(
+        {"content": "", "tool_calls": [_tc("symbols", path="pkg/mod.py")]},
+        {"content": "", "tool_calls": [_tc(
+            "submit_citations",
+            citations=[{"path": "pkg/mod.py", "start_line": 10, "end_line": 20}])]},
+    )
+    backend = ExplorerBackend(
+        gateway=ModelGateway(api_base="http://127.0.0.1:11434/v1"),
+        repo_path=str(tmp_path), settings=Settings(), manifest=[],
+        search_engine=_FakeSearch(), symbol_records=records, model_call=model,
+    )
+    backend.run("q", [])
+    traj = backend.last_trajectory
+    assert traj["confidence_fired"] is True
+    assert traj["confidence_triggering_signal"] == "symbols-exact-span"
+    assert traj["confidence_firing_turn"] == 1
+    assert traj["confidence_firing_spans"] == [
+        {"path": "pkg/mod.py", "start_line": 10, "end_line": 20}
+    ]
+    # A non-firing run records the facts as False/None — present, never absent.
+    model2 = _scripted(
+        {"content": "", "tool_calls": [_tc("submit_citations", citations=[])]},
+    )
+    backend2 = _backend(tmp_path, model_call=model2)
+    backend2.run("q", [])
+    traj2 = backend2.last_trajectory
+    assert traj2["confidence_fired"] is False
+    assert traj2["confidence_triggering_signal"] is None
+    assert traj2["confidence_firing_turn"] is None
+    assert traj2["confidence_firing_spans"] is None

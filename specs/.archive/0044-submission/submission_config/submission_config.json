@@ -1,0 +1,84 @@
+{
+  "config": {
+    "baseline_run": "adoption_0042",
+    "baseline_table_path": "specs/.archive/0043-diagnosis/attribution/attribution_table.json",
+    "baseline_table_sha256": "4fa58df66e4119afd64d476340ba304f253a5f45d172dd5ce13b6f56d12a86a4",
+    "beneficiary_model": "qwen3:14b",
+    "confidence_signal": "symbols-exact-span",
+    "config_id": "0044/submission-config/1",
+    "counted_buckets": [
+      "correct",
+      "right-file-wrong-span",
+      "wrong-file",
+      "empty"
+    ],
+    "detector_version": "0043/1",
+    "expected_model_readings": [
+      [
+        "qwen3:14b",
+        "the pre-registered beneficiary (its 0043 failure mode was dawdle-after-locate); NEVER_FIRES is keyed to 14b firings == 0"
+      ],
+      [
+        "qwen3:8b",
+        "success criterion is regressions == 0 at ANY firing rate \u2014 high firing with zero regressions is the EXPECTED success shape (8b had the highest 0042 symbols adoption, 10/11); zero firing with zero regressions is also success, never instrument failure"
+      ],
+      [
+        "qwen3.5:4b",
+        "expected inert (its constraint is tool-output-byte/prefill cost, not dawdling \u2014 the 0043 named inversion); an unmoved 4b is consistent-with-expectation, its lever is the future compression spec"
+      ]
+    ],
+    "explorer_think": null,
+    "gate_proof_version": "0041/exclusivity/1",
+    "ledger_schema_version": "0041/pilot/2",
+    "levers_under_test": [
+      "confidence-conditioned-submit-nudge"
+    ],
+    "lm_http_timeout_s": 300.0,
+    "max_qualifying_spans": 5,
+    "min_before_found_unsubmitted": 3,
+    "min_covered_before_cells": 8,
+    "never_fires_max_beneficiary_firings": 0,
+    "nudge_role": "user",
+    "nudge_template": "Your symbols result contains the exact span(s): {spans}. If one of these spans answers the query, call submit_citations with it now.",
+    "optional_models": [
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "pilot_case_ids": [
+      "astropy__astropy-12907",
+      "django__django-13516",
+      "matplotlib__matplotlib-21568",
+      "pallets__flask-5014",
+      "pydata__xarray-3993",
+      "pytest-dev__pytest-10081",
+      "scikit-learn__scikit-learn-10844",
+      "psf__requests-1766",
+      "pylint-dev__pylint-7080",
+      "sympy__sympy-16792",
+      "django__django-14315"
+    ],
+    "required_models": [
+      "qwen3:14b"
+    ],
+    "scout_max_turns": 10,
+    "scout_wall_clock_s": 240.0,
+    "sut_delta": [
+      "remove-0043-unconditional-nudge",
+      "add-confidence-conditioned-mid-loop-nudge"
+    ],
+    "sut_files": [
+      "harpyja/scout/confidence_gate.py",
+      "harpyja/scout/context_map.py",
+      "harpyja/scout/explorer_backend.py",
+      "harpyja/scout/explorer_loop.py",
+      "harpyja/scout/explorer_tools.py",
+      "harpyja/config/settings.py"
+    ],
+    "sut_hash": "1ef7ce8a5a8232af12cc50e89074ce6843887dd43fc869fc02bafc0868c5a423"
+  },
+  "config_hash": "0079c627de6d188fa05481024b5f72172832e83d110349192d876cc9bdb5a505",
+  "frozen_after": "the SUT lever landed (T2/T4/T6/T7/T9/T11: 0043 unconditional sentence removed; confidence_gate + mid-loop injection + 0044/1 schema shipped)",
+  "frozen_before": "any live re-measurement spend (stage-2 freeze, spec 0044 T21)",
+  "schema_version": "0044/submission-config/1",
+  "sut_state": "post-lever (confidence-conditioned mid-loop nudge landed; 0043 unconditional sentence removed; params pin verbatim)"
+}

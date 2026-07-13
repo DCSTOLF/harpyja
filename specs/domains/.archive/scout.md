@@ -59,3 +59,6 @@ Verbatim superseded requirement text demoted from a domain file by spec consolid
 ## scout | spec 0042 | MODIFY
 - The explorer injects ZERO repo content pre-loop — a minimal build_initial_prompt(query) carries only the task/query, the eager whole-repo context map having been removed (push→pull: structure is discovered on demand via the tools) — so the turn-1 payload is bounded and independent of repo size. (spec 0027)
 
+## scout | spec 0044 | MODIFY
+- The initial prompt carries the submit-early nudge (spec 0043's frozen-table-selected lever over the measured median 5-turn dawdle-after-locate): as soon as a tool result shows the answering span, call submit_citations immediately — do not keep exploring to double-check. The nudge rides `messages` ONLY: the 0034/0038 `params == {max_tokens: 2048}` byte-frozen pin survives verbatim (`test_params_pin_survives_submit_early_nudge`) and the 0042 prompt↔tool-surface drift guard stays green. Live outcome caveat (0043 pilot): it cut found-but-unsubmitted 6→2 but induced 3 premature-submission regressions (net −1, CLOCK_BOUND_PERSISTS) — a confidence-conditioned refinement is the named follow-up. (spec 0043)
+

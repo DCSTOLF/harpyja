@@ -1,0 +1,54 @@
+{
+  "case_id": "pydata__xarray-3993",
+  "citations_submitted": 2,
+  "citations_surviving": 2,
+  "confidence_fired": true,
+  "confidence_firing_spans": [
+    {
+      "end_line": 3532,
+      "path": "xarray/core/dataarray.py",
+      "start_line": 3483
+    },
+    {
+      "end_line": 6023,
+      "path": "xarray/core/dataset.py",
+      "start_line": 5966
+    },
+    {
+      "end_line": 6070,
+      "path": "xarray/core/dataset.py",
+      "start_line": 6025
+    },
+    {
+      "end_line": 6604,
+      "path": "xarray/tests/test_dataset.py",
+      "start_line": 6554
+    }
+  ],
+  "confidence_firing_turn": 1,
+  "confidence_null": null,
+  "confidence_triggering_signal": "symbols-exact-span",
+  "convergent_evidence": false,
+  "detector_version": "0043/1",
+  "endpoint": "http://127.0.0.1:11434/v1",
+  "exclusivity_proof_ref": {
+    "config_hash": "0079c627de6d188fa05481024b5f72172832e83d110349192d876cc9bdb5a505",
+    "ledger": "/Users/daniel.stolf/development/harpyja/specs/0044-submission/submission_run/submission_results.json",
+    "ledger_schema_version": "0041/pilot/2"
+  },
+  "grep_hits_inside_symbol_spans": 0,
+  "model": "qwen3.5:4b",
+  "requested_model": "qwen3.5:4b",
+  "schema_version": "0044/submission-cell/1",
+  "served_model": "qwen3.5:4b",
+  "submission_outcome": "submitted",
+  "terminal_bucket": "correct",
+  "tool_names_invoked": [
+    "symbols",
+    "read_span",
+    "submit_citations"
+  ],
+  "verifier_artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/submission_0044/qwen3_5_4b/pydata__xarray-3993_verifier_artifact.json",
+  "verifier_schema_version": "0044/1",
+  "verifier_status": "PASSED"
+}

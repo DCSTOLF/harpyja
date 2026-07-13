@@ -5,15 +5,23 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from harpyja.eval.report import atomic_write_json
+from harpyja.eval.submission_gap import DETECTOR_VERSION as _DETECTOR_VERSION
 
-VERIFIER_SCHEMA_VERSION = "0038/1"
+VERIFIER_SCHEMA_VERSION = "0044/1"
 
-# Spec 0033 (+0034, +0038): the version GATE (0026 DATASET_SCHEMA_VERSION pattern) —
-# a legacy 0031/1 artifact (no citation-count fields) still validates; an unknown
-# version fails loud. The 0033/1, 0034/1, and 0038/1 additions are all OPTIONAL
-# fields (citations counts; per_turn/think_mode; serving_transport), so no legacy
-# artifact is invalidated by any bump.
-_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1", "0038/1"})
+# Spec 0033 (+0034, +0038, +0043, +0044): the version GATE (0026
+# DATASET_SCHEMA_VERSION pattern) — a legacy 0031/1 artifact (no citation-count
+# fields) still validates; an unknown version fails loud. The 0033/1, 0034/1,
+# and 0038/1 additions are all OPTIONAL fields (citations counts;
+# per_turn/think_mode; serving_transport), so no legacy artifact is invalidated
+# by any bump. The 0043/1 field (submission_outcome) is REQUIRED-present on a
+# 0043/1+ artifact (value may be None when no gold was available). The 0044/1
+# fields (confidence_fired / triggering signal / firing turn / firing spans)
+# are REQUIRED-present on a 0044/1 artifact (False/None on a non-firing run) —
+# an attributable null must not be silently omittable from a current artifact.
+_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset(
+    {"0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1"}
+)
 
 # Six enumerated failure reasons (when facts cannot be proven)
 FAILURE_CODES = frozenset([
@@ -85,6 +93,32 @@ def validate_verifier_artifact(artifact: Mapping[str, Any]) -> None:
         "tiers_run",
         "model_turns",
     }
+
+    # Spec 0043: the loss-class field is presence-required on a 0043/1+ artifact
+    # (legacy versions predate it and stay valid — additive, never breaking).
+    if artifact.get("schema_version") in ("0043/1", "0044/1"):
+        required_keys = required_keys | {"submission_outcome"}
+
+    # Spec 0044: the confidence facts are presence-required on a CURRENT
+    # artifact — a null must be attributable (never-fired / fired-but-ignored /
+    # fired-on-wrong-span), so the firing facts cannot be silently omitted.
+    # The record-only observability fields (b)/(c) + the null label ride the
+    # WRITTEN artifact only (eval-side postflight) and are presence-required
+    # there too, so the next spec's gate choice has its data on every artifact.
+    if artifact.get("schema_version") == "0044/1":
+        required_keys = required_keys | {
+            "confidence_fired",
+            "confidence_triggering_signal",
+            "confidence_firing_turn",
+            "confidence_firing_spans",
+        }
+        if "case" in artifact:
+            # A run_verified_case-assembled artifact (never a bare record).
+            required_keys = required_keys | {
+                "grep_hits_inside_symbol_spans",
+                "convergent_evidence",
+                "confidence_null",
+            }
 
     missing = required_keys - set(artifact.keys())
     if missing:
@@ -324,6 +358,11 @@ def build_trajectory_record(
     per_turn: list[dict[str, Any]] | None = None,
     think_mode: str | None = None,
     serving_transport: str | None = None,
+    submission_outcome: str | None = None,
+    confidence_fired: bool = False,
+    confidence_triggering_signal: str | None = None,
+    confidence_firing_turn: int | None = None,
+    confidence_firing_spans: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build trajectory artifact record from captured explorer loop data.
 
@@ -376,6 +415,22 @@ def build_trajectory_record(
         # (e.g. "v1-chat-completions"), so the four-facts invariant is checkable
         # per-transport. Present-and-None when unknown — never fabricated.
         "serving_transport": serving_transport,
+        # Spec 0043: the found-but-unsubmitted loss class as data. The builder
+        # runs live without gold spans, so the value arrives from the caller
+        # (present-and-None when no gold was available — never fabricated);
+        # detector_version rides along only when an outcome was computed.
+        "submission_outcome": submission_outcome,
+        "detector_version": (
+            _DETECTOR_VERSION if submission_outcome is not None else None
+        ),
+        # Spec 0044: the confidence-conditioned nudge facts — whether the
+        # evidence gate fired, which signal, on which turn, and the triggering
+        # spans (plain dicts). SUT-recorded, gold-blind; the eval-side
+        # wrong-span attribution judges the spans against gold postflight.
+        "confidence_fired": confidence_fired,
+        "confidence_triggering_signal": confidence_triggering_signal,
+        "confidence_firing_turn": confidence_firing_turn,
+        "confidence_firing_spans": confidence_firing_spans,
     }
 
     # Add optional fields if provided
@@ -571,6 +626,40 @@ def run_verified_case(
     # Verify the trajectory
     result = verify_trajectory(traj)
 
+    # Spec 0043: type the found-but-unsubmitted loss class from the trajectory
+    # + gold via the ONE detector (submission_gap), so the fact is durable in
+    # the written artifact — distinct from never-found, countable per run.
+    from harpyja.eval.submission_gap import classify_submission
+
+    submission_outcome = classify_submission(
+        {
+            "model_turns": traj["model_turns"],
+            "citations_submitted": last_trajectory.get("citations_submitted"),
+            "citations_surviving": last_trajectory.get("citations_surviving"),
+        },
+        (gold_span_obj,),
+    )
+
+    # Spec 0044: the record-only observability fields (b)/(c) and the
+    # attributable-null label — EVAL-SIDE POSTFLIGHT over the persisted
+    # trajectory (the SUT never sees gold; the gate never sees these).
+    from harpyja.eval.submission_observability import (
+        classify_confidence_null,
+        convergent_evidence,
+        grep_hits_inside_symbol_spans,
+    )
+
+    confidence_null = classify_confidence_null(
+        {
+            "confidence_fired": last_trajectory.get("confidence_fired", False),
+            "confidence_firing_spans": last_trajectory.get(
+                "confidence_firing_spans"
+            ),
+            "terminal_bucket": traj["terminal_bucket"],
+        },
+        (gold_span_obj,),
+    )
+
     # Build and write artifact
     artifact = {
         "schema_version": VERIFIER_SCHEMA_VERSION,
@@ -593,6 +682,28 @@ def run_verified_case(
         # Spec 0038: the transport identity the run was served through — durable,
         # so the four-facts invariant is checkable per-transport.
         "serving_transport": last_trajectory.get("serving_transport"),
+        # Spec 0043: the loss class as data in the SECOND (hand-assembled) seam
+        # — the 0033/0034/0038 dual-seam rule, written-JSON test-pinned.
+        "submission_outcome": submission_outcome.value,
+        "detector_version": _DETECTOR_VERSION,
+        # Spec 0044: the confidence facts in the SECOND seam too (the dual-seam
+        # checklist's 4th application, written-JSON test-pinned).
+        "confidence_fired": last_trajectory.get("confidence_fired", False),
+        "confidence_triggering_signal": last_trajectory.get(
+            "confidence_triggering_signal"
+        ),
+        "confidence_firing_turn": last_trajectory.get("confidence_firing_turn"),
+        "confidence_firing_spans": last_trajectory.get("confidence_firing_spans"),
+        # Spec 0044: the record-only fields (b)/(c) + the attributable null —
+        # eval-side postflight, never gating, durable for the next spec's
+        # gate choice.
+        "grep_hits_inside_symbol_spans": grep_hits_inside_symbol_spans(
+            {"model_turns": traj["model_turns"]}
+        ),
+        "convergent_evidence": convergent_evidence(
+            {"model_turns": traj["model_turns"]}
+        ),
+        "confidence_null": confidence_null,
         "timestamp": datetime.utcnow().isoformat(),
         "case": case_name,
     }

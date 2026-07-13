@@ -358,6 +358,11 @@ class ExplorerBackend:
             # ModelGateway.complete_with_tools (the reconciled reasoning_effort
             # mechanism rides this same path; no per-value transport split).
             serving_transport="v1-chat-completions",
+            # Spec 0044: the confidence-conditioned nudge facts from the loop.
+            confidence_fired=result.confidence_fired,
+            confidence_triggering_signal=result.confidence_triggering_signal,
+            confidence_firing_turn=result.confidence_firing_turn,
+            confidence_firing_spans=result.confidence_firing_spans,
         )
 
         if result.outcome == SUBMITTED:

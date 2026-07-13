@@ -550,6 +550,22 @@
   fabricated counter. Recovering a discarded signal via a public seam beats both a
   frozen-internals edit and a guessed number. (See `harpyja/eval/locate_probe.py`
   `counting_agent_factory` / `count_turns`, spec 0022 AC5.)
+  (d) A spec claim that a quantity is **MEASURED is VERIFIED against the actual
+  persisted-artifact schema BEFORE it is asserted, not after** — an unverified
+  "from the ledger / from the record" claim is a latent fabrication until the field is
+  shown to exist. When the field is absent it downgrades to an explicitly-labeled
+  estimate (or an honest "needs instrumented re-run"), never carried as measured.
+  Spec 0043's round-1 spec asserted "case-level latency from the run ledger" as
+  measured; direct inspection of the committed 0042 `adoption_results.json` proved the
+  ledger entries carry NO elapsed/duration field (one `timestamp` per verifier
+  artifact, `per_turn` carries only `{reasoning_chars, completion_tokens,
+  finish_reason}`), so ALL timing was reclassified ESTIMATE-GRADE (successive
+  verifier-artifact timestamp deltas within a sequential run block) across the
+  evidence-base section, AC1, and the What section, and the attributor's tests pin
+  that no measured-latency field is ever read. The verification is the obligation —
+  the downgrade is only its consequence. (See `harpyja/eval/clock_attribution.py`
+  `test_no_measured_latency_field_anywhere` / `test_case_timing_is_estimate_grade_labeled`,
+  spec 0043 AC1.)
 - A recorded diagnostic **finding taxonomy is MECE**: when candidate outcome values are
   not mutually exclusive — one is an *explanation UNDER* another rather than an
   *alternative TO* it — split the finding into **orthogonal axes, one value per axis**,
@@ -620,6 +636,51 @@
   function, not just its prior. (See `harpyja/eval/benchmark_fit.py` `PREREGISTERED_CONFIG`
   / `decide_axis1` / `compose_verdict` / `MECHANICAL_RULE_HASH` / `LLM_PROMPT_HASH`,
   spec 0023 AC4/AC6.)
+- **When a spec both SELECTS an intervention FROM measured data AND then measures that
+  intervention, the freeze is TWO-STAGE and ordered — the CHOOSING RULE freezes before
+  the numbers exist, the CONFIG naming the choice freezes after selection but before any
+  live spend.** The single-stage freeze above closes post-hoc steering of the *verdict*;
+  it does NOT by itself close post-hoc steering of *which intervention was chosen*. When
+  the same spec derives a lever/arm from an attribution and then re-measures under it,
+  split the freeze: (1) the selection rule (a `dataclasses.asdict`→sha256-hashed decision
+  table with a TOTAL selection function) freezes + commits its artifact BEFORE any
+  attribution number is computed or seen — so the choice is mechanical, not fitted to the
+  numbers; (2) the `PREREGISTERED_*_CONFIG` naming the SELECTED intervention (+ the frozen
+  power floors, counted buckets, detector version, and the SUT hash the driver re-verifies
+  at startup) freezes + hashes + commits AFTER the table has mechanically selected from the
+  committed attribution but BEFORE any live re-measurement compute. The config freeze being
+  post-attribution is BY DESIGN, not a violation: the choice-steering risk is closed by
+  stage 1 and the predicate-steering risk by stage 2 preceding the spend. Pin that the
+  config's lever field EQUALS `select_lever(...)` over the committed attribution
+  (mechanical, never hand-picked), and hard-sequence it in the task order (no attribution
+  number before the stage-1 commit; no live spend before the stage-2 commit). (See
+  `harpyja/eval/lever_table.py` `FROZEN_LEVER_TABLE_0043` / `select_lever` +
+  `diagnosis_config.py` `PREREGISTERED_DIAGNOSIS_CONFIG_0043`, and their committed
+  `specs/0043-diagnosis/{lever_table,diagnosis_config}/*.json`, spec 0043 AC4/AC5.)
+- **A frozen decision config carries LITERALS drift-pinned to the SUT constants, NEVER
+  references to them (anti-tautology), and a total verdict's POWER FLOORS are CONSUMED by a
+  branch while a BENEFIT conjunct accompanies the net conjunct so a do-nothing lever cannot
+  type a ship.** Two failure modes the 0043 frozen-config rule above does not by itself close:
+  (1) a config that IMPORTS the SUT constant it claims to pin re-derives whatever the code says
+  and can never catch a drift — so `PREREGISTERED_*_CONFIG` fields are hand-written LITERALS
+  (`CONFIDENCE_MAX_QUALIFYING_SPANS=5` copied as a number, the nudge template + role copied as
+  data, the baseline pinned by path + sha256 with its derived quantity — `fu_before=6` —
+  RE-DERIVED in the pin test), and a drift-guard test asserts the literal EQUALS the live SUT
+  constant (`sut_hash` covering the gate module), so a code change that desyncs from the frozen
+  choice ROTS THE TEST FALSE rather than silently agreeing with itself; (2) a verdict whose
+  positive branch is `aggregate net ≥ 0 AND no model net-negative` types a do-NOTHING mechanism
+  (a nudge that never fires, or fires and buys nothing) as a SHIP at net 0 — so the SHIPS branch
+  carries a BENEFIT conjunct (`conversions ≥ 1 OR the primary metric improved`) AND a distinct
+  `*_INERT` label (fired-but-bought-nothing) precedes it, and the pre-registered power floors are
+  CONSUMED by an explicit `UNDER_POWERED` branch (never dormant config — the 0043 discipline),
+  all under a FROZEN TOTAL ORDER over overlapping conditions with a grid-totality test and every
+  true condition recorded in the artifact. When the numbers meet the mechanical ship predicate
+  but MISS a pre-registered per-model reading, record a QUALIFIED ship with named residuals —
+  never re-type the verdict after seeing the numbers (post-hoc re-typing is steering). (See
+  `harpyja/eval/submission_config.py` `PREREGISTERED_SUBMISSION_CONFIG_0044` /
+  `SUBMISSION_CONFIG_HASH_0044` + `submission_outcome.py` `decide_submission_outcome` (five
+  members: UNDER_POWERED / NEVER_FIRES / STILL_TRADES_OFF / NUDGE_INERT /
+  CONDITIONED_NUDGE_SHIPS), spec 0044 AC5.)
 - A **within-case paired A/B over a BINARY outcome is a McNemar test, and its power lives
   in the DISCORDANT PAIRS — the effective sample size is the discordant (flip) count, not
   N.** When each case is its own control (run the SUT on arm A and arm B for the *same*
@@ -1103,6 +1164,28 @@
   still floors the tier. N calls = ONE model turn (`turns_used` increments per model_call, not
   per tool_call), so the turn budget is unaffected. (See `harpyja/scout/explorer_loop.py`
   `_answer_tool_call` + the tool_calls loop in `run_explorer_loop`, spec 0029 AC1/AC4.)
+- **A mid-loop MESSAGE INJECTION (a gold-blind, evidence-conditioned nudge) lands ONLY at a
+  COMPLETED tool-result batch boundary — after the batch's final tool message, before the next
+  model call — never interleaved inside an answer-all-N batch, and it rides `messages` ONLY.**
+  When an evidence-conditioned nudge cannot ride turn 0 (the evidence does not exist yet), the
+  loop appends the nudge mid-run — but injecting BETWEEN an assistant `tool_calls` message and
+  its N tool responses is the exact malformed-conversation class the 0029 answer-all-N rule
+  fixed, so the injection is gated to the post-batch boundary. It fires AT MOST ONCE per case
+  with NO turn-count / wall-clock fallback (a turn/time trigger is the 0043 submit-before-verify
+  failure mode; conditioning on evidence makes it structurally impossible). Four load-bearing
+  properties travel with it: (a) it is `role:user` with an EXACT frozen-config template
+  (test-pinned, incl. multi-span wording so the implementation cannot drift into arbitrary
+  first-span steering); (b) it is a distinct, NON-tombstoned record kind that SURVIVES
+  `scout_history_char_cap` truncation (never displacing citable observations); (c) it perturbs
+  neither loop-detection/no-new-span accounting NOR turn arithmetic — it is not a tool result and
+  not a model turn; (d) it rides the outbound `messages` list ONLY, so the 0034/0038
+  `explorer_think=None ⇒ params == {max_tokens: 2048}` byte-pin survives verbatim (the successor
+  `test_params_pin_survives_confidence_nudge`) — the whole SUT delta is predicate + injection, no
+  params/prompt-surface change. The gold-blind predicate lives in `scout/` (sees only the
+  trajectory); any gold-needing attribution (fired-on-wrong-span) is EVAL-SIDE postflight reusing
+  `metrics.span_hit_kind` BY IDENTITY. (See `harpyja/scout/confidence_gate.py`,
+  `harpyja/scout/explorer_loop.py` `_answer_tool_call` stash + the post-batch `"confidence-nudge"`
+  injection + the `LoopResult.confidence_*` facts, spec 0044 AC2/AC3.)
 
 ## Trajectory-verified measurement
 

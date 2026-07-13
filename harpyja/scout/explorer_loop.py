@@ -34,6 +34,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from harpyja.gateway.gateway import AirGapError
+from harpyja.scout.confidence_gate import (
+    CONFIDENCE_SIGNAL,
+    build_confidence_nudge,
+    qualifying_symbols_spans,
+)
 from harpyja.scout.submit import SubmitResult
 from harpyja.server.types import CodeSpan
 from harpyja.symbols.ripgrep import RipgrepMissingError
@@ -69,6 +74,14 @@ class LoopResult:
     # None on non-submit terminals (exhaustion/truncation — nothing was submitted).
     citations_submitted: int | None = None
     citations_surviving: int | None = None
+    # Spec 0044: the confidence-conditioned nudge facts (AC3) — whether the
+    # evidence gate fired, which signal, on which turn, and the triggering
+    # spans (as plain dicts, so the eval-side wrong-span attribution can judge
+    # them against gold via the ONE oracle without re-parsing history).
+    confidence_fired: bool = False
+    confidence_triggering_signal: str | None = None
+    confidence_firing_turn: int | None = None
+    confidence_firing_spans: list[dict[str, Any]] | None = None
 
 
 def _parse_arguments(raw: Any) -> dict[str, Any]:
@@ -181,6 +194,19 @@ def _answer_tool_call(
         spans=spans,
     )
 
+    # Spec 0044: the confidence gate watches RAW symbols results only. A
+    # qualifying result is STASHED here and injected strictly POST-BATCH by
+    # run_explorer_loop (0029: never interleave a message inside an
+    # answer-all-N batch). Fires at most once per case.
+    if (
+        name == "symbols"
+        and not session.confidence_fired
+        and session.pending_confidence is None
+    ):
+        qualifying = qualifying_symbols_spans(result)
+        if qualifying:
+            session.pending_confidence = qualifying
+
     # Loop detection: an exact repeat with no new span for N consecutive turns.
     session.note_navigation(name, args, spans)
     if session.repeat >= settings.scout_loop_repeat_n:
@@ -202,6 +228,12 @@ class _Session:
         self.repeat = 0
         self.dropped: list[CodeSpan] = []
         self.index_pos: int | None = None
+        # Spec 0044: confidence-nudge state — a qualifying symbols result is
+        # stashed mid-batch and injected post-batch; fired-at-most-once.
+        self.pending_confidence: list[CodeSpan] | None = None
+        self.confidence_fired = False
+        self.confidence_firing_turn: int | None = None
+        self.confidence_spans: list[CodeSpan] | None = None
 
     def messages(self) -> list[dict[str, Any]]:
         return [r["msg"] for r in self.records]
@@ -210,7 +242,13 @@ class _Session:
         self.records.append({"msg": msg, "kind": kind, **extra})
 
     def _total_chars(self) -> int:
-        return sum(len(str(r["msg"].get("content", ""))) for r in self.records)
+        # Skip in-flight tombstones: maybe_truncate re-reads the total between
+        # drops, and with ≥2 droppable observations a None is present mid-pass.
+        return sum(
+            len(str(r["msg"].get("content", "")))
+            for r in self.records
+            if r is not None
+        )
 
     def note_navigation(self, name: str, args: dict[str, Any], spans: list[CodeSpan]) -> None:
         """Update loop-detection state; the caller reads ``self.repeat``.
@@ -261,6 +299,19 @@ class _Session:
         self.records.insert(1, {"msg": {"role": "user", "content": content}, "kind": "index"})
 
 
+def _stamp_confidence(result: LoopResult, session: _Session) -> LoopResult:
+    """Thread the 0044 confidence facts onto a terminal LoopResult."""
+    result.confidence_fired = session.confidence_fired
+    if session.confidence_fired:
+        result.confidence_triggering_signal = CONFIDENCE_SIGNAL
+        result.confidence_firing_turn = session.confidence_firing_turn
+        result.confidence_firing_spans = [
+            {"path": s.path, "start_line": s.start_line, "end_line": s.end_line}
+            for s in session.confidence_spans or []
+        ]
+    return result
+
+
 def run_explorer_loop(
     *,
     model_call: ModelCall,
@@ -277,7 +328,10 @@ def run_explorer_loop(
 
     for _ in range(settings.scout_max_turns):
         if clock() - start >= settings.scout_wall_clock_s:
-            return LoopResult(WALLCLOCK_EXHAUSTED, None, turns_used, session.messages())
+            return _stamp_confidence(
+                LoopResult(WALLCLOCK_EXHAUSTED, None, turns_used, session.messages()),
+                session,
+            )
 
         turns_used += 1
         response = model_call(session.messages())
@@ -286,7 +340,10 @@ def run_explorer_loop(
         # tool_call rode along, its args may be silently incomplete. Bail before any
         # tool dispatch so a truncated turn degrades instead of being mis-read.
         if response.get("finish_reason") == "length":
-            return LoopResult(GENERATION_TRUNCATED, None, turns_used, session.messages())
+            return _stamp_confidence(
+                LoopResult(GENERATION_TRUNCATED, None, turns_used, session.messages()),
+                session,
+            )
         session.add(
             {
                 "role": "assistant",
@@ -309,9 +366,29 @@ def run_explorer_loop(
             if result is not None:
                 # Terminal (submit_citations) was encountered; return immediately.
                 result.turns_used = turns_used
-                return result
+                return _stamp_confidence(result, session)
+
+        # Spec 0044: the confidence-conditioned nudge, injected strictly at the
+        # POST-BATCH boundary (0029: every tool_call_id above is answered; a
+        # message inside the batch would be a malformed conversation). Evidence-
+        # gated ONLY — no turn/time fallback — and fired at most once per case.
+        # The record kind "confidence-nudge" is never tombstoned by
+        # maybe_truncate (which drops only bulky "tool" observations) and never
+        # enters note_navigation, so loop-detection and turn accounting are
+        # untouched.
+        if session.pending_confidence and not session.confidence_fired:
+            session.add(
+                build_confidence_nudge(session.pending_confidence),
+                "confidence-nudge",
+            )
+            session.confidence_fired = True
+            session.confidence_firing_turn = turns_used
+            session.confidence_spans = session.pending_confidence
+            session.pending_confidence = None
 
         # Context management: citation-preserving truncation past the bloat cap.
         session.maybe_truncate(settings.scout_history_char_cap)
 
-    return LoopResult(TURNS_EXHAUSTED, None, turns_used, session.messages())
+    return _stamp_confidence(
+        LoopResult(TURNS_EXHAUSTED, None, turns_used, session.messages()), session
+    )

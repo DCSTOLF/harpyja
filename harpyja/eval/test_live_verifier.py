@@ -31,6 +31,15 @@ def test_verifier_artifact_schema_is_version_stamped_and_validated():
         "terminal_bucket": "correct",
         "verifier_status": "PASSED",
         "failure_reason": None,
+        # Spec 0043: presence-required on a CURRENT artifact (same-change
+        # amendment — this fixture tracks VERIFIER_SCHEMA_VERSION).
+        "submission_outcome": "never-found",
+        # Spec 0044: the confidence facts, presence-required on a CURRENT
+        # artifact (same-change amendment — non-firing run shape).
+        "confidence_fired": False,
+        "confidence_triggering_signal": None,
+        "confidence_firing_turn": None,
+        "confidence_firing_spans": None,
     }
 
     # Should pass validation
@@ -528,9 +537,9 @@ def test_build_trajectory_record_valid_multitool_names_preserved():
 
 def test_verifier_schema_version_and_failure_codes_frozen():
     """AC5: schema version, the six codes, and their precedence are byte-frozen."""
-    # 0031/1 -> 0033/1 -> 0034/1 -> 0038/1: spec 0038 additive bump
-    # (serving_transport), reconciled here (same-change amendment discipline).
-    assert VERIFIER_SCHEMA_VERSION == "0038/1"
+    # 0031/1 -> ... -> 0043/1 -> 0044/1: spec 0044 additive bump (confidence
+    # facts), reconciled here (same-change amendment discipline).
+    assert VERIFIER_SCHEMA_VERSION == "0044/1"
     assert FAILURE_CODES == frozenset([
         "model-unknown",
         "model-mismatch",
@@ -558,8 +567,8 @@ def test_verify_result_field_by_field_stable_on_valid_trajectory():
     got.pop("timestamp")
 
     assert got == {
-        # 0038 additive bump (serving_transport) — same-change amendment.
-        "schema_version": "0038/1",
+        # 0044 additive bump (confidence facts) — same-change amendment.
+        "schema_version": "0044/1",
         "status": "PASSED",
         "failure_reason": None,
         "model_identity": "served_present_and_matching",
@@ -869,10 +878,11 @@ def test_record_discriminates_reasoning_truncated_from_content_truncated_and_cle
 
 def test_schema_version_is_0034_1():
     """AC2: 0033/1 -> 0034/1 — spec 0034 additive bump (per_turn/think_mode).
-    Amended by spec 0038 (additive serving_transport bump, same-change
-    reconciliation): the CURRENT version is 0038/1; 0034/1 stays a known
-    legacy version (see test_legacy_artifacts_without_serving_transport)."""
-    assert VERIFIER_SCHEMA_VERSION == "0038/1"
+    Amended by spec 0038 (serving_transport), spec 0043 (submission_outcome),
+    and spec 0044 (confidence facts; same-change reconciliation): the CURRENT
+    version is 0044/1; 0034/1 and
+    0038/1 stay known legacy versions."""
+    assert VERIFIER_SCHEMA_VERSION == "0044/1"
 
 
 def test_legacy_0031_and_0033_artifacts_still_validate():
@@ -1052,3 +1062,333 @@ def test_derive_think_mode_disambiguates_post_switch():
     }
     assert labels == {"native-think-true", "native-think-false", "default-omitted"}
     assert derive_think_mode(False, False) == "native-think-false"  # native wins
+
+
+# --- Spec 0043: found-but-unsubmitted on the artifact, dual-seam (AC2) ---
+
+
+def test_build_trajectory_record_carries_submission_outcome():
+    """AC2 (seam 1): the builder carries the typed submission outcome + the
+    detector version as data; omitted → present-and-None (additive default,
+    legacy callers unbroken)."""
+    record = build_trajectory_record(
+        _multitool_history(), 3, submission_outcome="found-unsubmitted"
+    )
+    assert record["submission_outcome"] == "found-unsubmitted"
+    from harpyja.eval.submission_gap import DETECTOR_VERSION
+
+    assert record["detector_version"] == DETECTOR_VERSION
+
+    defaulted = build_trajectory_record(_multitool_history(), 3)
+    assert defaulted["submission_outcome"] is None
+    assert defaulted["detector_version"] is None
+
+
+def test_run_verified_case_written_artifact_carries_submission_outcome(
+    tmp_path, monkeypatch
+):
+    """AC2 (seam 2, the 0033/0034/0038 dual-seam written-JSON pin): the
+    hand-assembled run_verified_case artifact ALSO carries the field — computed
+    from the trajectory + gold via the ONE detector, durable in the JSON."""
+    import json as _json
+
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+    from harpyja.eval.submission_gap import DETECTOR_VERSION
+
+    class _FoundNotSubmittedBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [{"function": {"name": "grep"}}]},
+                    {"role": "tool", "content":
+                     "[CodeSpan(path='a.py', start_line=1, end_line=2, "
+                     "symbol=None, language=None, kind=None)]"},
+                ],
+                "tool_names_invoked": ["grep"],
+                "tool_names_failure": None,
+                "served_model": "qwen3:14b",
+                "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 1,
+                "citations_submitted": 0,
+                "citations_surviving": 0,
+            }
+            return []
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _FoundNotSubmittedBackend)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    _result, artifact_path = run_verified_case(
+        case_name="fake-case",
+        settings=_Settings(),
+        gateway=object(),
+        gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir,
+        repo_path=str(tmp_path / "repo"),
+        query="find it",
+    )
+    artifact = _json.loads(Path(artifact_path).read_text())
+    # The gold span sat in a TOOL RESULT and was never submitted — the loss
+    # class is countable in the durable artifact, distinct from never-found.
+    assert artifact["submission_outcome"] == "found-unsubmitted"
+    assert artifact["detector_version"] == DETECTOR_VERSION
+
+
+def test_verifier_schema_version_bumped_and_legacy_still_validates():
+    """AC2: 0038/1 -> 0043/1 -> 0044/1 additive bumps; every legacy version
+    still passes the gate; unknown versions still fail loud."""
+    from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+    assert VERIFIER_SCHEMA_VERSION == "0044/1"
+    assert "0043/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+    assert "0038/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+    legacy = {
+        "schema_version": "0038/1",
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "correct",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+        "serving_transport": "v1-chat-completions",
+    }
+    validate_verifier_artifact(legacy)  # no submission_outcome — still valid
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(dict(legacy, schema_version="9999/9"))
+
+
+def test_validate_verifier_artifact_requires_submission_outcome():
+    """AC2: the 0043/1 required key set includes the new field — a CURRENT
+    artifact cannot silently omit the loss-class fact (presence-required; a
+    None value is legitimate when no gold was available to the builder)."""
+    artifact = {
+        "schema_version": "0043/1",
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "correct",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+    }
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(artifact)  # 0043/1 without the field: loud
+    validate_verifier_artifact(
+        dict(artifact, submission_outcome="never-found",
+             detector_version="0043/1")
+    )
+    validate_verifier_artifact(
+        dict(artifact, submission_outcome=None, detector_version=None)
+    )
+
+
+# --- Spec 0044: confidence-conditioned nudge facts on the artifact, dual-seam (AC4) ---
+
+
+def test_verifier_schema_version_is_0044_1():
+    """AC4: 0043/1 -> 0044/1 additive bump (confidence fields); every legacy
+    version still passes the gate; unknown versions still fail loud."""
+    from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+    assert VERIFIER_SCHEMA_VERSION == "0044/1"
+    for legacy_version in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1"):
+        assert legacy_version in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+    assert "0044/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+
+def test_build_trajectory_record_carries_confidence_fields():
+    """AC4 (seam 1): the builder carries fired/signal/turn/spans as data;
+    omitted -> present-and-None/False (additive default, legacy callers
+    unbroken)."""
+    record = build_trajectory_record(
+        _multitool_history(), 3,
+        confidence_fired=True,
+        confidence_triggering_signal="symbols-exact-span",
+        confidence_firing_turn=2,
+        confidence_firing_spans=[{"path": "a.py", "start_line": 1, "end_line": 2}],
+    )
+    assert record["confidence_fired"] is True
+    assert record["confidence_triggering_signal"] == "symbols-exact-span"
+    assert record["confidence_firing_turn"] == 2
+    assert record["confidence_firing_spans"] == [
+        {"path": "a.py", "start_line": 1, "end_line": 2}
+    ]
+    defaulted = build_trajectory_record(_multitool_history(), 3)
+    assert defaulted["confidence_fired"] is False
+    assert defaulted["confidence_triggering_signal"] is None
+    assert defaulted["confidence_firing_turn"] is None
+    assert defaulted["confidence_firing_spans"] is None
+
+
+def test_run_verified_case_written_artifact_carries_confidence_fields(
+    tmp_path, monkeypatch
+):
+    """AC4 (seam 2, the 0033/0034/0038/0043 dual-seam written-JSON pin — 4th
+    application): run_verified_case's HAND-ASSEMBLED artifact carries the
+    confidence facts from the backend trajectory, asserted against the written
+    JSON, not the record."""
+    import json as _json
+
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+
+    class _FiredBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [{"function": {"name": "symbols"}}]},
+                ],
+                "tool_names_invoked": ["symbols"],
+                "tool_names_failure": None,
+                "served_model": "qwen3:14b",
+                "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 1,
+                "citations_submitted": 0,
+                "citations_surviving": 0,
+                "confidence_fired": True,
+                "confidence_triggering_signal": "symbols-exact-span",
+                "confidence_firing_turn": 1,
+                "confidence_firing_spans": [
+                    {"path": "a.py", "start_line": 1, "end_line": 2}
+                ],
+            }
+            return []
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _FiredBackend)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    _res, artifact_path = run_verified_case(
+        case_name="fake-case", settings=_Settings(), gateway=object(),
+        gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir, repo_path=str(tmp_path / "repo"), query="find it",
+    )
+    artifact = _json.loads(Path(artifact_path).read_text())
+    assert artifact["confidence_fired"] is True
+    assert artifact["confidence_triggering_signal"] == "symbols-exact-span"
+    assert artifact["confidence_firing_turn"] == 1
+    assert artifact["confidence_firing_spans"] == [
+        {"path": "a.py", "start_line": 1, "end_line": 2}
+    ]
+
+
+def test_validate_verifier_artifact_requires_confidence_fields_on_0044():
+    """AC4: the 0044/1 required key set includes the confidence facts — a
+    CURRENT artifact cannot silently omit them (presence-required; None/False
+    values are legitimate on a non-firing run). Legacy 0043/1 artifacts (no
+    confidence fields) still validate unchanged."""
+    base = {
+        "schema_version": "0044/1",
+        "requested_model": "qwen3:14b",
+        "endpoint": "http://localhost:11434",
+        "served_model": "qwen3:14b",
+        "configured_endpoint_models": ["qwen3:14b"],
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "terminal_bucket": "correct",
+        "verifier_status": "PASSED",
+        "failure_reason": None,
+        "submission_outcome": "never-found",
+        "detector_version": "0043/1",
+    }
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(base)  # 0044/1 without confidence facts: loud
+    validate_verifier_artifact(dict(
+        base,
+        confidence_fired=False,
+        confidence_triggering_signal=None,
+        confidence_firing_turn=None,
+        confidence_firing_spans=None,
+    ))
+    # Legacy 0043/1 still validates with neither field set beyond its own gate.
+    legacy = dict(base, schema_version="0043/1")
+    validate_verifier_artifact(legacy)
+
+
+def test_run_verified_case_written_artifact_carries_observability_fields(
+    tmp_path, monkeypatch
+):
+    """AC4 (seam 2 extension): the record-only fields (b)/(c) and the
+    attributable-null label are computed EVAL-SIDE POSTFLIGHT and are durable
+    in the written JSON — presence-required on a 0044/1 artifact."""
+    import json as _json
+
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+
+    class _WrongSpanFiredBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [
+                         {"id": "s1", "function": {"name": "symbols"}}]},
+                    {"role": "tool", "tool_call_id": "s1", "content":
+                     "[CodeSpan(path='other.py', start_line=5, end_line=9, "
+                     "symbol=None, language=None, kind=None)]"},
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [{"id": "g1", "function": {"name": "grep"}}]},
+                    {"role": "tool", "tool_call_id": "g1", "content":
+                     "[CodeSpan(path='other.py', start_line=6, end_line=6, "
+                     "symbol=None, language=None, kind=None)]"},
+                ],
+                "tool_names_invoked": ["symbols", "grep"],
+                "tool_names_failure": None,
+                "served_model": "qwen3:14b",
+                "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 2,
+                "citations_submitted": 0,
+                "citations_surviving": 0,
+                "confidence_fired": True,
+                "confidence_triggering_signal": "symbols-exact-span",
+                "confidence_firing_turn": 1,
+                "confidence_firing_spans": [
+                    {"path": "other.py", "start_line": 5, "end_line": 9}
+                ],
+            }
+            return []
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _WrongSpanFiredBackend)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    _res, artifact_path = run_verified_case(
+        case_name="fake-case", settings=_Settings(), gateway=object(),
+        gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir, repo_path=str(tmp_path / "repo"), query="find it",
+    )
+    artifact = _json.loads(Path(artifact_path).read_text())
+    # (b): the grep hit at other.py:6 lies inside the earlier symbols span 5-9.
+    assert artifact["grep_hits_inside_symbol_spans"] == 1
+    # (c): two distinct tools overlap on other.py.
+    assert artifact["convergent_evidence"] is True
+    # The null is attributable: fired on a span that does NOT line-hit gold.
+    assert artifact["confidence_null"] == "fired-on-wrong-span"
+    validate_verifier_artifact(artifact)

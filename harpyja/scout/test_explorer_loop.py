@@ -810,3 +810,242 @@ def test_symbols_degraded_marker_stays_model_visible():
                for m in result.history)
     assert not any("tool-call-degraded:execution-error" in str(m.get("content", ""))
                    for m in result.history)
+
+
+# --- Spec 0044: the confidence-conditioned mid-loop nudge (AC1/AC2/AC3) ---
+#
+# The successor to 0043's unconditional prompt sentence (removed): after a
+# COMPLETED tool-result batch, if the batch produced a QUALIFYING symbols
+# result (confidence_gate), ONE role:user nudge is appended — at most once per
+# case, evidence-gated (never turn/time-gated), 0029-safe (never interleaved
+# inside an answer-all-N batch), truncation-proof, invisible to loop-detection
+# and turn accounting.
+
+from harpyja.scout.confidence_gate import (  # noqa: E402
+    CONFIDENCE_NUDGE_TEMPLATE,
+    CONFIDENCE_SIGNAL,
+)
+
+_QUALIFYING = [CodeSpan(path="pkg/mod.py", start_line=10, end_line=20)]
+_NUDGE_CONTENT = CONFIDENCE_NUDGE_TEMPLATE.format(spans="pkg/mod.py:10-20")
+
+
+def _symbols_tools(symbols_result=None, grep_result=None):
+    return {
+        "grep": lambda pattern, scope=None: list(grep_result or []),
+        "glob": lambda pattern: [],
+        "read_span": lambda path, start, end: {},
+        "symbols": lambda path=None, name=None: (
+            list(symbols_result) if symbols_result is not None else []
+        ),
+    }
+
+
+def _nudge_indices(history):
+    return [
+        i for i, m in enumerate(history)
+        if m.get("role") == "user" and m.get("content") == _NUDGE_CONTENT
+    ]
+
+
+def test_confidence_nudge_fires_once_after_qualifying_symbols_batch():
+    tools = _symbols_tools(symbols_result=_QUALIFYING)
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("submit_citations", citations=[{"path": "pkg/mod.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    nudges = _nudge_indices(result.history)
+    assert len(nudges) == 1
+    # Appended AFTER the batch's final tool message — the very next message.
+    tool_positions = [i for i, m in enumerate(result.history) if m.get("role") == "tool"]
+    assert nudges[0] == tool_positions[-1] + 1
+
+
+def test_confidence_nudge_injected_only_at_post_batch_boundary_never_mid_answer_all_n():
+    # 0029 pin: with N parallel tool_calls, EVERY tool_call_id is answered
+    # BEFORE the nudge — a message interleaved between an assistant tool_calls
+    # message and its N tool responses is a malformed conversation.
+    tools = _symbols_tools(
+        symbols_result=_QUALIFYING,
+        grep_result=[CodeSpan(path="other.py", start_line=1, end_line=1)],
+    )
+    model = _scripted(
+        _msg(
+            _tc("symbols", call_id="c1", path="pkg/mod.py"),
+            _tc("grep", call_id="c2", pattern="needle"),
+        ),
+        _msg(_tc("submit_citations", citations=[{"path": "pkg/mod.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    history = result.history
+    answered = [i for i, m in enumerate(history) if m.get("role") == "tool"]
+    assert {history[i].get("tool_call_id") for i in answered} == {"c1", "c2"}
+    (nudge_pos,) = _nudge_indices(history)
+    # The nudge sits strictly AFTER both tool responses of the batch.
+    assert nudge_pos > max(answered)
+    # And nothing is interleaved between the assistant tool_calls message and
+    # its N tool responses.
+    (assistant_pos,) = [
+        i for i, m in enumerate(history)
+        if m.get("role") == "assistant"
+        and any(tc.get("id") == "c1" for tc in m.get("tool_calls") or [])
+    ]
+    for i in range(assistant_pos + 1, max(answered) + 1):
+        assert history[i].get("role") == "tool"
+
+
+def test_confidence_nudge_fires_at_most_once_per_case():
+    tools = _symbols_tools(symbols_result=_QUALIFYING)
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("symbols", path="pkg/mod.py")),  # second qualifying result
+        _msg(_tc("submit_citations", citations=[{"path": "pkg/mod.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert len(_nudge_indices(result.history)) == 1
+
+
+def test_confidence_nudge_is_evidence_gated_not_turn_gated():
+    # The 0043 failure mode is structurally impossible: many turns with NO
+    # qualifying span receive ZERO nudge — there is no turn/time fallback.
+    tools = _symbols_tools(grep_result=[CodeSpan(path="a.py", start_line=1, end_line=1)])
+    model = _scripted(_msg(_tc("grep", pattern="needle")))  # never submits
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(scout_max_turns=8),
+    )
+    assert result.outcome == TURNS_EXHAUSTED
+    assert result.turns_used == 8
+    assert _nudge_indices(result.history) == []
+    assert result.confidence_fired is False
+
+
+def test_confidence_nudge_survives_history_char_cap_truncation():
+    # The nudge is never tombstoned by citation-preserving truncation — it is
+    # not a bulky navigational observation, and dropping it would silently
+    # un-fire the lever mid-case.
+    def bulky_grep(pattern, scope=None):
+        return [CodeSpan(path=f"{pattern}.py", start_line=5, end_line=5,
+                         symbol="OBS:" + "x" * 400)]
+
+    tools = _symbols_tools(symbols_result=_QUALIFYING)
+    tools["grep"] = bulky_grep
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("grep", pattern="alpha")),
+        _msg(_tc("grep", pattern="beta")),
+        _msg(_tc("grep", pattern="gamma")),
+        _msg(_tc("submit_citations", citations=[{"path": "pkg/mod.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(scout_history_char_cap=900),
+    )
+    assert result.outcome == SUBMITTED
+    # Truncation actually fired (the re-injected location index is present)...
+    assert any("Previously observed locations" in str(m.get("content", ""))
+               for m in result.history)
+    # ...and the nudge SURVIVED it.
+    assert len(_nudge_indices(result.history)) == 1
+
+
+def test_confidence_nudge_does_not_perturb_loop_detection():
+    # Injection registers no spans and never touches the no-new-span/repeat
+    # counter: the corrective still fires on an exact repeat exactly as it
+    # would without the interleaved nudge message.
+    def fixed_grep(pattern, scope=None):
+        return [CodeSpan(path="a.py", start_line=1, end_line=1)]
+
+    tools = _symbols_tools(symbols_result=_QUALIFYING)
+    tools["grep"] = fixed_grep
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),  # nudge fires post-batch
+        _msg(_tc("grep", pattern="same")),
+        _msg(_tc("grep", pattern="same")),  # exact repeat, no new span
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert any("unproductive" in str(m.get("content", "")) for m in result.history)
+
+
+def test_confidence_nudge_is_not_a_model_turn():
+    # turns_used counts MODEL iterations; the injected message adds none.
+    tools = _symbols_tools(symbols_result=_QUALIFYING)
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("submit_citations", citations=[{"path": "pkg/mod.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert result.turns_used == 2  # symbols turn + submit turn, nothing more
+
+
+def test_loop_result_carries_confidence_fired_signal_and_turn():
+    tools = _symbols_tools(symbols_result=_QUALIFYING)
+    model = _scripted(
+        _msg(_tc("symbols", path="pkg/mod.py")),
+        _msg(_tc("submit_citations", citations=[{"path": "pkg/mod.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert result.confidence_fired is True
+    assert result.confidence_triggering_signal == CONFIDENCE_SIGNAL
+    assert result.confidence_firing_turn == 1  # fired after turn 1's batch
+    # The triggering spans ride as data for the eval-side wrong-span attribution.
+    assert result.confidence_firing_spans == [
+        {"path": "pkg/mod.py", "start_line": 10, "end_line": 20}
+    ]
+
+
+def test_non_firing_run_reports_confidence_fired_false():
+    tools = _symbols_tools()
+    model = _scripted(
+        _msg(_tc("grep", pattern="needle")),
+        _msg(_tc("submit_citations", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert result.confidence_fired is False
+    assert result.confidence_triggering_signal is None
+    assert result.confidence_firing_turn is None
+    assert result.confidence_firing_spans is None
+
+
+def test_degraded_symbols_result_does_not_fire_nudge():
+    # The gate's clean-only projection holds at the loop seam: an ANNOTATION
+    # result (marker + spans) never fires.
+    tools = _symbols_tools(
+        symbols_result=["symbols-degraded: 'x.py'",
+                        CodeSpan(path="x.py", start_line=1, end_line=2)],
+    )
+    model = _scripted(
+        _msg(_tc("symbols", path="x.py")),
+        _msg(_tc("submit_citations", citations=[{"path": "x.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_echo,
+        context_map="map", settings=Settings(),
+    )
+    assert result.confidence_fired is False
+    assert _nudge_indices(result.history) == []

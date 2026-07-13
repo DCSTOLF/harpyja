@@ -59,7 +59,16 @@ def build_initial_prompt(query: str) -> str:
     (candidate-file → exact definition span; repo-wide by-name lookup) and marks
     `submit_citations` terminal. Bound to the registered surface by the
     `test_initial_prompt_binds_to_registered_tool_surface_single_source` drift guard —
-    a new tool is un-shippable without appearing here."""
+    a new tool is un-shippable without appearing here.
+
+    spec 0044 (AC3): the 0043 UNCONDITIONAL submit-early sentence is REMOVED —
+    it typed CLOCK_BOUND_PERSISTS at net −1 (2 conversions vs 3 premature-submission
+    regressions: it fixed dawdle-after-locate but induced submit-before-verify). Its
+    successor is the confidence-CONDITIONED mid-loop nudge (`confidence_gate` +
+    `explorer_loop`), which cannot ride turn 0 because the triggering evidence does
+    not exist yet. Both the removal and the injection ride `messages` ONLY — the
+    0034/0038 `params == {max_tokens: 2048}` byte-frozen pin survives verbatim
+    (`test_params_pin_survives_confidence_nudge`)."""
     return (
         "You are localizing a query in a repository. Discover the layout on demand "
         "with the ls, glob, and grep tools, and read code with read_span. Use the "

@@ -1,0 +1,33 @@
+{
+  "case_id": "matplotlib__matplotlib-21568",
+  "citations_submitted": null,
+  "citations_surviving": null,
+  "confidence_fired": false,
+  "confidence_firing_spans": null,
+  "confidence_firing_turn": null,
+  "confidence_null": "never-fired",
+  "confidence_triggering_signal": null,
+  "convergent_evidence": false,
+  "detector_version": "0043/1",
+  "endpoint": "http://127.0.0.1:11434/v1",
+  "exclusivity_proof_ref": {
+    "config_hash": "0079c627de6d188fa05481024b5f72172832e83d110349192d876cc9bdb5a505",
+    "ledger": "/Users/daniel.stolf/development/harpyja/specs/0044-submission/submission_run/submission_results.json",
+    "ledger_schema_version": "0041/pilot/2"
+  },
+  "grep_hits_inside_symbol_spans": 0,
+  "model": "qwen3:14b",
+  "requested_model": "qwen3:14b",
+  "schema_version": "0044/submission-cell/1",
+  "served_model": "qwen3:14b",
+  "submission_outcome": "never-found",
+  "terminal_bucket": "empty",
+  "tool_names_invoked": [
+    "grep",
+    "ls",
+    "read_span"
+  ],
+  "verifier_artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/submission_0044/qwen3_14b/matplotlib__matplotlib-21568_verifier_artifact.json",
+  "verifier_schema_version": "0044/1",
+  "verifier_status": "PASSED"
+}

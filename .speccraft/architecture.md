@@ -218,6 +218,28 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    PREREQUISITE for the 0026 re-run + the bake-off + any localization measurement; the AC5
    test (`test_harness_live.py`) ships `xfail` until it lands. See history.md 2026-07-07
    (spec 0027).
+
+   **As of spec 0044 the explorer carries a CONFIDENCE-CONDITIONED submit-early nudge — a
+   gold-blind mid-loop MESSAGE INJECTION replacing the 0043 unconditional turn-0 sentence.**
+   `scout/confidence_gate.py` (gold-blind by construction: lives in `scout/`, sees only the
+   trajectory, ast-pinned no-eval-import) qualifies a `symbols` result iff clean (no 0035
+   marker), bounded (1..`CONFIDENCE_MAX_QUALIFYING_SPANS=5` spans), and exact-span-shaped;
+   `run_explorer_loop` stashes the qualifying result in `_answer_tool_call` and appends ONE
+   `role:user` nudge (`CONFIDENCE_NUDGE_TEMPLATE`, multi-span wording) strictly at the
+   POST-BATCH boundary (0029 answer-all-N safe — never inside an N-call batch), at most once
+   per case with no turn/time fallback; a non-tombstoned `"confidence-nudge"` record kind
+   survives `scout_history_char_cap` truncation and perturbs neither loop-detection nor turn
+   accounting (not a model turn). The 0043 unconditional sentence is REMOVED from
+   `build_initial_prompt`. `LoopResult` gains `confidence_fired` /
+   `confidence_triggering_signal` / `confidence_firing_turn` / `confidence_firing_spans`,
+   threaded by `explorer_backend.build_trajectory_record` — the whole delta rides `messages`
+   only, so the 0034/0038 `explorer_think=None ⇒ params == {max_tokens: 2048}` byte-pin holds
+   (`test_params_pin_survives_confidence_nudge`). The verifier bumps `VERIFIER_SCHEMA_VERSION
+   0043/1 → 0044/1` (additive, version-gated), presence-requiring the four confidence facts on
+   BOTH seams (`build_trajectory_record` + `run_verified_case`'s written artifact) plus the
+   eval-side postflight record-only observability fields (grep-inside-symbol-span, convergent
+   evidence, `confidence_null`) computed by `eval/submission_observability.py`. See history.md
+   2026-07-13 (spec 0044).
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -1117,3 +1139,45 @@ baseline, 1 RFWS→exact conversion, 0 regressions, net +1 on RFWS denominator 4
 SIGNAL at pilot scale, not an inferential claim); 33 cells (31 clean, 2 typed 4b heavy-repo
 degrades, 0 suspect). The 0/28→24/31 delta is fix-vs-defect, not tool-vs-no-tool; a powered
 conversion claim still needs the standing pool enlargement (0039/0040). See history.md (spec 0042).
+
+## Spec 0043 architecture updates — submission-gap diagnosis machinery + the dual-seam verifier bump
+
+**As of spec 0043 `VERIFIER_SCHEMA_VERSION` is `"0043/1"`** (supersedes the `"0038/1"`
+note above). `_KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset({"0031/1", "0033/1", "0034/1",
+"0038/1", "0043/1"})` behind the same version GATE; the two new fields `submission_outcome`
+(a `SubmissionOutcome` value or `None` when no gold) and `detector_version` are threaded
+through BOTH assembly seams — `build_trajectory_record`'s param AND `run_verified_case`'s
+hand-assembled written artifact (computed-from-gold; the 0033/0034/0038 written-JSON
+dual-seam lesson re-applied) — and are presence-REQUIRED on a `0043/1` artifact (value may
+be `None`), while legacy `0031/1`/`0033/1`/`0034/1`/`0038/1` artifacts still validate
+unchanged. Four existing version-pin tests were amended in the same change.
+
+**As of spec 0043 `harpyja/eval/` carries the submission-gap diagnosis suite** — still
+measurement, not a runtime tier; the only SUT change is a sibling one-sentence prompt nudge
+(below). All modules land flat with sibling `test_*.py`: `submission_gap.py` (the AC2
+found-but-unsubmitted detector — a pure projection over one persisted trajectory: a 5-member
+total `SubmissionOutcome` enum over a 6-row fixture matrix, gold overlap via
+`metrics.span_hit_kind` BY IDENTITY (one-oracle-reuse), the submitted vs submitted-then-dropped
+split via the EXISTING 0033 `citations_submitted`/`citations_surviving` counts
+(one-counter-reuse), an unparseable tool message ⇒ `DETECTOR_INCONCLUSIVE` never `never-found`,
+`DETECTOR_VERSION = "0043/1"`); `clock_attribution.py` (the AC1 budget attributor + the AC3
+4b-inversion attributor, both pure over persisted trajectories — existence-assert first with a
+typed `trajectory-missing` degrade, never zips `per_turn`/`model_turns`, ALL timing
+ESTIMATE-GRADE labeled with NO measured-latency field read, committed derived table pinned to
+source filenames + sha256); `lever_table.py` (the AC4 stage-1 `FROZEN_LEVER_TABLE_0043` + hash
++ total `select_lever`); `diagnosis_config.py` (the AC5 stage-2 `PREREGISTERED_DIAGNOSIS_CONFIG_0043`
++ `DIAGNOSIS_CONFIG_HASH_0043`, two power floors `min_covered_before_cells=8` AND
+`min_before_found_unsubmitted=3`); `diagnosis_outcome.py` (the AC6 total pure
+`decide_diagnosis_outcome`, 4-branch verdict with `CLOCK_BOUND_UNDER_POWERED` a returned enum
+member never prose); and `diagnosis_run.py` (the gated driver over `run_gated_pool_pilot`,
+ledger keyed `DIAGNOSIS_CONFIG_HASH_0043`, `0041/pilot/2` proof per artifact, STOP-AND-WARN).
+The two-stage freeze is honored by construction: the lever table (hash `96626aca…`) committed
+BEFORE any attribution number, the config (SUT hash `aeed1aca…` post-lever) committed AFTER
+mechanical lever selection and BEFORE any live spend, the driver re-verifying the working-tree
+SUT hash at startup. The LEVER (AC4 FIX) is ONE `messages`-borne sentence appended to
+`context_map.build_initial_prompt` (the submit-early nudge) — the 0034/0038
+`explorer_think=None ⇒ params == {max_tokens: 2048}` byte-frozen pin and the 0042 prompt↔surface
+drift guard both stay green. LIVE (`CLOCK_BOUND_PERSISTS`, net −1): found-but-unsubmitted 6 → 2,
+2 conversions / 3 premature-submission regressions — the 0042 bidirectional predicate surfaced
+the trade; the 4b inversion NAMED `larger-tool-outputs` (byte ratio 2.24), corroborated by a
+zero-degrade 33/33 gated run. See history.md 2026-07-12 (spec 0043).
