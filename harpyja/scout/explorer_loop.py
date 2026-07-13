@@ -194,10 +194,14 @@ def _answer_tool_call(
         spans=spans,
     )
 
-    # Spec 0044: the confidence gate watches RAW symbols results only. A
-    # qualifying result is STASHED here and injected strictly POST-BATCH by
-    # run_explorer_loop (0029: never interleave a message inside an
-    # answer-all-N batch). Fires at most once per case.
+    # Spec 0044 (the live operating point): the confidence gate watches RAW
+    # symbols results only. A qualifying result is STASHED here and injected
+    # strictly POST-BATCH by run_explorer_loop (0029: never interleave a message
+    # inside an answer-all-N batch). Fires at most once per case.
+    # NOTE: spec 0045's REFINED require-corroboration ranking
+    # (`qualifying_confidence_spans`) was measured and typed TRADES_DIRECTIONS
+    # (it cut silence->wrong-confidence 5->1 but reopened found-but-unsubmitted
+    # 1->8), so it is RETIRED — the loop is restored to 0044's gate (net +2).
     if (
         name == "symbols"
         and not session.confidence_fired

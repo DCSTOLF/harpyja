@@ -1,0 +1,54 @@
+{
+  "conditions_true": [
+    "trades-directions",
+    "residual-persists"
+  ],
+  "config_hash": "5a17ed19900316651ef9d0f9f0dd5c98567870e70b4948015be9538842e34ccf",
+  "failed_conjunct": null,
+  "head_to_head": {
+    "comparator_fu": 1,
+    "comparator_net": 2,
+    "comparator_swc": 5,
+    "net_delta_vs_0044": -3
+  },
+  "ledger": "/Users/daniel.stolf/development/harpyja/specs/0045-refinement/refinement_run/refinement_results.json",
+  "ledger_four_sided": {
+    "aggregate_net": -1,
+    "conversions": 4,
+    "covered_joined": 31,
+    "fu_total": 8,
+    "per_model": [
+      {
+        "conversions": 2,
+        "model": "qwen3.5:4b",
+        "net": 2,
+        "regressions": 0,
+        "silence_to_wrong_confidence": 1,
+        "unfired_silence_to_wrong_confidence": 0
+      },
+      {
+        "conversions": 2,
+        "model": "qwen3:14b",
+        "net": -1,
+        "regressions": 3,
+        "silence_to_wrong_confidence": 0,
+        "unfired_silence_to_wrong_confidence": 1
+      },
+      {
+        "conversions": 0,
+        "model": "qwen3:8b",
+        "net": -2,
+        "regressions": 2,
+        "silence_to_wrong_confidence": 0,
+        "unfired_silence_to_wrong_confidence": 0
+      }
+    ],
+    "regressions": 5,
+    "swc_total": 1,
+    "unfired_swc_total": 1
+  },
+  "reopened_direction": "found-but-unsubmitted",
+  "residual": null,
+  "schema_version": "0045/refinement-summary/1",
+  "verdict": "TRADES_DIRECTIONS"
+}

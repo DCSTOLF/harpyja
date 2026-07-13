@@ -1,0 +1,57 @@
+{
+  "note": "STAGE-1 freeze \u2014 committed BEFORE per-cell (b)/(c) attribution (T7). per_cell_bc_detail_computed is False by construction.",
+  "table": {
+    "candidate_signals": [
+      "convergent-evidence",
+      "grep-hit-inside-symbol-containment",
+      "symbols-exact-span",
+      "weak-singleton"
+    ],
+    "headline_facts_0044": {
+      "fired_but_ignored_total": 1,
+      "fired_on_wrong_span_8b": 5,
+      "fired_on_wrong_span_total": 6,
+      "never_fired_found_unsubmitted_cell": "pytest-dev__pytest-10081::qwen3:14b",
+      "source": "0044 committed submission_results.json / per-cell artifacts"
+    },
+    "per_cell_bc_detail_computed": false,
+    "per_model_gate_branch": {
+      "default": "single-gate-refined-ranking",
+      "per_model_only_if": "same-signal-splits-by-model: the SAME signal predicts correctly for 14b and wrongly for 8b (else a per-model bar adds a knob and a generalization risk for no measured cause)"
+    },
+    "rows": [
+      {
+        "antecedent": "the fired-on-wrong-span cells are uniformly weak-singleton (no convergence, no grep-inside-symbol containment) AND the never-fired found-unsubmitted cell carried corroborated evidence the 0044 gate did not credit",
+        "asserts_refinement": true,
+        "credits": [
+          "convergent-evidence",
+          "grep-hit-inside-symbol-containment"
+        ],
+        "demotes": [
+          "weak-singleton"
+        ],
+        "rule_key": "require-corroboration"
+      },
+      {
+        "antecedent": "the fired-on-wrong-span cells fired on a NON-symbols-derived trigger (a bare grep hit) while symbols-derived spans predicted correctly",
+        "asserts_refinement": true,
+        "credits": [
+          "symbols-exact-span"
+        ],
+        "demotes": [
+          "weak-singleton"
+        ],
+        "rule_key": "restrict-to-symbols-derivation"
+      },
+      {
+        "antecedent": "the fired-on-wrong-span cells' (b)/(c) shape is indistinguishable from the never-fired/correct cells within the closed set \u2014 no rule separates; the refinement is NOT asserted",
+        "asserts_refinement": false,
+        "credits": [],
+        "demotes": [],
+        "rule_key": "no-discriminator-separates"
+      }
+    ],
+    "table_id": "0045/discriminator-table/1"
+  },
+  "table_hash": "62638bd7dcc69eee310ea718e24ffdef276f848c80ba22c8238816aafc477003"
+}

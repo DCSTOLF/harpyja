@@ -236,9 +236,17 @@ def test_load_baseline_cells_verifies_sha256(tmp_path):
 
 def test_committed_submission_config_matches_computed_truth():
     """T21 (stage-2 freeze pin): the COMMITTED config artifact names exactly
-    the in-code frozen config — hash, post-lever SUT hash, and every field.
-    A drift between the committed freeze and the code is loud."""
+    the in-code frozen 0044 config.
+
+    Spec 0045 note: 0045 evolved the pinned SUT surface (``confidence_gate.py``,
+    ``explorer_loop.py``) for the refined gate, so the LIVE ``compute_sut_hash()``
+    no longer equals 0044's frozen ``sut_hash`` — the 0044 freeze is now
+    HISTORICAL. This test therefore guards the committed artifact's INTERNAL
+    CONSISTENCY (its stored ``config_hash`` recomputes from its own config dict)
+    and that every field EXCEPT the now-evolved ``sut_hash`` still matches the
+    in-code config. 0045's own frozen config pins the current SUT (T13/T14/T23)."""
     import dataclasses
+    import hashlib
 
     committed_path = (
         _REPO_ROOT / "specs" / "0044-submission" / "submission_config"
@@ -255,12 +263,20 @@ def test_committed_submission_config_matches_computed_truth():
     )
     committed = json.loads(path.read_text(encoding="utf-8"))
     assert committed["schema_version"] == "0044/submission-config/1"
-    assert committed["config_hash"] == SUBMISSION_CONFIG_HASH_0044
-    expected = dataclasses.asdict(_CFG)
-    got = committed["config"]
-    # JSON round-trips tuples as lists — normalize before comparing.
-    normalized = json.loads(
-        json.dumps(expected, sort_keys=True, default=list)
-    )
-    assert got == normalized
-    assert committed["config"]["sut_hash"] == compute_sut_hash()
+    # Internal consistency: config_hash recomputes from the committed config
+    # dict (json.dumps of tuples and lists is identical — the frozen payload).
+    recomputed = hashlib.sha256(
+        json.dumps(committed["config"], sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    assert committed["config_hash"] == recomputed
+    # Every field except the 0045-evolved sut_hash still matches the in-code
+    # config (the drift guard remains live for all non-SUT fields).
+    expected = json.loads(json.dumps(dataclasses.asdict(_CFG), default=list))
+    got = dict(committed["config"])
+    expected.pop("sut_hash")
+    got.pop("sut_hash")
+    assert got == expected
+    # The frozen 0044 sut_hash is a valid digest and now DIFFERS from live
+    # (0045 evolved the SUT) — the historical freeze, made explicit.
+    assert len(committed["config"]["sut_hash"]) == 64
+    assert committed["config"]["sut_hash"] != compute_sut_hash()

@@ -40,6 +40,9 @@ def test_verifier_artifact_schema_is_version_stamped_and_validated():
         "confidence_triggering_signal": None,
         "confidence_firing_turn": None,
         "confidence_firing_spans": None,
+        # Spec 0045: silence->wrong-confidence, presence-required on a CURRENT
+        # artifact (same-change amendment — None on a correct/no-submit run).
+        "silence_to_wrong_confidence": None,
     }
 
     # Should pass validation
@@ -537,9 +540,9 @@ def test_build_trajectory_record_valid_multitool_names_preserved():
 
 def test_verifier_schema_version_and_failure_codes_frozen():
     """AC5: schema version, the six codes, and their precedence are byte-frozen."""
-    # 0031/1 -> ... -> 0043/1 -> 0044/1: spec 0044 additive bump (confidence
-    # facts), reconciled here (same-change amendment discipline).
-    assert VERIFIER_SCHEMA_VERSION == "0044/1"
+    # 0031/1 -> ... -> 0044/1 -> 0045/1: spec 0045 additive bump
+    # (silence->wrong-confidence), reconciled here (same-change amendment).
+    assert VERIFIER_SCHEMA_VERSION == "0045/1"
     assert FAILURE_CODES == frozenset([
         "model-unknown",
         "model-mismatch",
@@ -567,8 +570,8 @@ def test_verify_result_field_by_field_stable_on_valid_trajectory():
     got.pop("timestamp")
 
     assert got == {
-        # 0044 additive bump (confidence facts) — same-change amendment.
-        "schema_version": "0044/1",
+        # 0045 additive bump (silence->wrong-confidence) — same-change amendment.
+        "schema_version": "0045/1",
         "status": "PASSED",
         "failure_reason": None,
         "model_identity": "served_present_and_matching",
@@ -879,10 +882,10 @@ def test_record_discriminates_reasoning_truncated_from_content_truncated_and_cle
 def test_schema_version_is_0034_1():
     """AC2: 0033/1 -> 0034/1 — spec 0034 additive bump (per_turn/think_mode).
     Amended by spec 0038 (serving_transport), spec 0043 (submission_outcome),
-    and spec 0044 (confidence facts; same-change reconciliation): the CURRENT
-    version is 0044/1; 0034/1 and
+    and spec 0044 (confidence facts) and spec 0045 (silence->wrong-confidence;
+    same-change reconciliation): the CURRENT version is 0045/1; 0034/1 and
     0038/1 stay known legacy versions."""
-    assert VERIFIER_SCHEMA_VERSION == "0044/1"
+    assert VERIFIER_SCHEMA_VERSION == "0045/1"
 
 
 def test_legacy_0031_and_0033_artifacts_still_validate():
@@ -1143,11 +1146,12 @@ def test_run_verified_case_written_artifact_carries_submission_outcome(
 
 
 def test_verifier_schema_version_bumped_and_legacy_still_validates():
-    """AC2: 0038/1 -> 0043/1 -> 0044/1 additive bumps; every legacy version
-    still passes the gate; unknown versions still fail loud."""
+    """AC2: 0038/1 -> 0043/1 -> 0044/1 -> 0045/1 additive bumps; every legacy
+    version still passes the gate; unknown versions still fail loud."""
     from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
-    assert VERIFIER_SCHEMA_VERSION == "0044/1"
+    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    assert "0044/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
     assert "0043/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
     assert "0038/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
@@ -1200,14 +1204,14 @@ def test_validate_verifier_artifact_requires_submission_outcome():
 
 
 def test_verifier_schema_version_is_0044_1():
-    """AC4: 0043/1 -> 0044/1 additive bump (confidence fields); every legacy
-    version still passes the gate; unknown versions still fail loud."""
+    """AC4/0045 AC2: 0044/1 -> 0045/1 additive bump (silence->wrong-confidence);
+    every legacy version still passes the gate; unknown versions fail loud."""
     from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
-    assert VERIFIER_SCHEMA_VERSION == "0044/1"
-    for legacy_version in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1"):
+    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    for legacy_version in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1"):
         assert legacy_version in _KNOWN_VERIFIER_SCHEMA_VERSIONS
-    assert "0044/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+    assert "0045/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
 
 def test_build_trajectory_record_carries_confidence_fields():
@@ -1392,3 +1396,122 @@ def test_run_verified_case_written_artifact_carries_observability_fields(
     # The null is attributable: fired on a span that does NOT line-hit gold.
     assert artifact["confidence_null"] == "fired-on-wrong-span"
     validate_verifier_artifact(artifact)
+
+
+# --- Spec 0045 (T11/T12, AC2): silence->wrong-confidence first-class fact ----
+# The invisible cost the 0044 bucket ledger could not see — an empty->wrong-file
+# submission under a FIRED gate — becomes a first-class counted fact, additive
+# bump 0044/1 -> 0045/1, threaded through BOTH seams. A record-only
+# unfired-s->wc cross-check rides the written artifact (the fired-conditioning
+# loophole: distinguish "cost eliminated" from "cost de-attributed").
+
+def _fired_wrong_file_backend(fired: bool):
+    """A backend that returns a WRONG-FILE citation; gate fired or not."""
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.server.types import CodeSpan
+
+    class _B:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [
+                    {"role": "assistant", "content": "",
+                     "tool_calls": [{"id": "s1", "function": {"name": "symbols"}}]},
+                    {"role": "tool", "tool_call_id": "s1", "content":
+                     "[CodeSpan(path='wrong.py', start_line=5, end_line=9, "
+                     "symbol=None, language=None, kind=None)]"},
+                ],
+                "tool_names_invoked": ["symbols"],
+                "tool_names_failure": None,
+                "served_model": "qwen3:8b",
+                "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 1,
+                "citations_submitted": 1,
+                "citations_surviving": 1,
+                "confidence_fired": fired,
+                "confidence_triggering_signal": "symbols-exact-span" if fired else None,
+                "confidence_firing_turn": 1 if fired else None,
+                "confidence_firing_spans": (
+                    [{"path": "wrong.py", "start_line": 5, "end_line": 9}]
+                    if fired else None
+                ),
+            }
+            return [CodeSpan(path="wrong.py", start_line=5, end_line=9)]
+
+    return _eb, _B
+
+
+def _run_swc_case(tmp_path, monkeypatch, fired: bool):
+    import json as _json
+
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+
+    _eb, backend_cls = _fired_wrong_file_backend(fired)
+    monkeypatch.setattr(_eb, "ExplorerBackend", backend_cls)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _res, artifact_path = run_verified_case(
+        case_name="swc-case", settings=_Settings(), gateway=object(),
+        gold_span={"file": "gold.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir, repo_path=str(tmp_path / "repo"), query="find it",
+    )
+    return _json.loads(Path(artifact_path).read_text())
+
+
+def test_written_artifact_carries_silence_to_wrong_confidence(tmp_path, monkeypatch):
+    # FIRED gate + wrong-file submission → silence->wrong-confidence True; the
+    # record-only unfired line is False (it WAS fired).
+    artifact = _run_swc_case(tmp_path, monkeypatch, fired=True)
+    assert artifact["terminal_bucket"] == "wrong-file"
+    assert artifact["silence_to_wrong_confidence"] is True
+    assert artifact["unfired_silence_to_wrong_confidence"] is False
+    validate_verifier_artifact(artifact)
+
+
+def test_written_artifact_carries_unfired_swc_record_only(tmp_path, monkeypatch):
+    # NOT fired + wrong-file submission → the record-only unfired cross-check is
+    # True while the gate-attributed s->wc is False (cost de-attributed, not
+    # eliminated — the fired-conditioning loophole made visible).
+    artifact = _run_swc_case(tmp_path, monkeypatch, fired=False)
+    assert artifact["terminal_bucket"] == "wrong-file"
+    assert artifact["silence_to_wrong_confidence"] is False
+    assert artifact["unfired_silence_to_wrong_confidence"] is True
+    validate_verifier_artifact(artifact)
+
+
+def test_verifier_schema_version_is_0045_1():
+    from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    # Every legacy version — including 0044/1 — still validates (additive).
+    for legacy in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1"):
+        assert legacy in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+
+def test_swc_presence_required_on_0045_1():
+    # A 0045/1 written artifact missing silence_to_wrong_confidence fails loud.
+    base = {
+        "schema_version": "0045/1",
+        "verifier_status": "passed",
+        "requested_model": "qwen3:8b",
+        "endpoint": "http://127.0.0.1:11434/v1",
+        "tiers_run": [0, 1],
+        "model_turns": [],
+        "submission_outcome": None,
+        "confidence_fired": False,
+        "confidence_triggering_signal": None,
+        "confidence_firing_turn": None,
+        "confidence_firing_spans": None,
+        "grep_hits_inside_symbol_spans": 0,
+        "convergent_evidence": False,
+        "confidence_null": None,
+        "unfired_silence_to_wrong_confidence": None,
+        "case": "x",
+    }
+    with pytest.raises(ValueError, match="silence_to_wrong_confidence"):
+        validate_verifier_artifact(base)

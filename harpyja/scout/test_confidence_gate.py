@@ -100,6 +100,97 @@ def test_confidence_signal_label_is_frozen():
     assert CONFIDENCE_SIGNAL == "symbols-exact-span"
 
 
+# --- Spec 0045 (T8/T9, AC3): the REFINED require-corroboration ranking --------
+# The 0044 gate fired on a bare bounded symbols span (a WEAK SINGLETON). The
+# attribution (AC1) showed all 6 fired-on-wrong-span cells fired on exactly that
+# uncorroborated shape, while the never-fired cell's gold sat inside an
+# over-bound symbols batch the gate rejected outright. The refined rule
+# (stage-1-selected: require-corroboration) DEMOTES the weak singleton and
+# CREDITS convergence / grep-inside-symbol containment as the firing routes.
+
+from harpyja.scout.confidence_gate import qualifying_confidence_spans  # noqa: E402
+
+
+def test_weak_singleton_symbols_span_no_longer_fires():
+    # Direction (a): a clean bounded exact symbols span with NO prior
+    # corroboration must NOT fire (it fired under 0044).
+    result = [_span("m.py", 10, 20)]
+    assert qualifying_confidence_spans(result, prior_spans=[]) == []
+    # Same-tool repetition is not corroboration.
+    prior_same_tool = [("symbols", _span("m.py", 10, 20))]
+    assert qualifying_confidence_spans(result, prior_spans=prior_same_tool) == []
+
+
+def test_convergence_corroborated_symbols_span_fires():
+    # Direction (b), convergence route: a symbols span line-overlapping an
+    # earlier DIFFERENT-tool span is corroborated → fires on the overlap.
+    result = [_span("m.py", 10, 40)]
+    prior = [("grep", _span("m.py", 15, 18))]
+    fired = qualifying_confidence_spans(result, prior_spans=prior)
+    assert fired == [_span("m.py", 10, 40)]
+
+
+def test_over_bound_batch_with_one_corroborated_span_fires_on_that_span():
+    # The 0044 never-fired shape: an over-bound symbols batch (>5) that the 0044
+    # gate rejected wholesale — but ONE span is corroborated by a prior grep hit
+    # (containment) → the refined gate fires on the corroborated span only.
+    batch = [_span(f"f{i}.py", i + 1, i + 3) for i in range(CONFIDENCE_MAX_QUALIFYING_SPANS + 2)]
+    batch.append(_span("hit.py", 100, 140))
+    prior = [("grep", _span("hit.py", 110, 112))]
+    fired = qualifying_confidence_spans(batch, prior_spans=prior)
+    assert fired == [_span("hit.py", 100, 140)]
+
+
+def test_degraded_or_markered_result_never_fires_even_if_corroborated():
+    # A marker in the list (ANNOTATION/degraded) disqualifies — clean-only.
+    result = ["symbols-degraded: 'x.py'", _span("m.py", 10, 40)]
+    prior = [("grep", _span("m.py", 15, 18))]
+    assert qualifying_confidence_spans(result, prior_spans=prior) == []
+
+
+def test_corroborated_candidates_still_bounded():
+    # Corroboration cannot smuggle a candidate LIST back in: if more than the
+    # bound of candidates are corroborated, it's a candidate list, not
+    # confidence → no fire.
+    n = CONFIDENCE_MAX_QUALIFYING_SPANS + 1
+    result = [_span(f"m{i}.py", 10, 40) for i in range(n)]
+    prior = [("grep", _span(f"m{i}.py", 15, 18)) for i in range(n)]
+    assert qualifying_confidence_spans(result, prior_spans=prior) == []
+
+
+def test_refined_gate_stays_gold_blind_no_eval_import():
+    # The refined gate consumes scout.confidence_signals (scout->scout), never
+    # eval — the ast pin still holds after the refinement.
+    import ast
+    import inspect
+
+    import harpyja.scout.confidence_gate as gate
+
+    tree = ast.parse(inspect.getsource(gate))
+    for node in ast.walk(tree):
+        names = []
+        if isinstance(node, ast.Import):
+            names = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = [node.module or ""]
+        for name in names:
+            assert not name.startswith("harpyja.eval")
+
+
+def test_refined_ranking_matches_stage1_selected_rule():
+    # The implemented rule IS the stage-1-selected row (require-corroboration):
+    # demotes weak-singleton, credits convergence + containment.
+    from harpyja.eval.refinement_attribution import select_refined_rule
+
+    row = select_refined_rule()
+    assert row.rule_key == "require-corroboration"
+    assert "weak-singleton" in row.demotes
+    assert set(row.credits) == {
+        "convergent-evidence",
+        "grep-hit-inside-symbol-containment",
+    }
+
+
 def test_gate_module_is_gold_blind_no_eval_import():
     # Structural gold-blindness: the SUT-side gate must not import eval code
     # (gold lives in eval/; the fired-on-wrong-span attribution is postflight).

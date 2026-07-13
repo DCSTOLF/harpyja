@@ -1,0 +1,109 @@
+{
+  "config": {
+    "baseline_run": "adoption_0042",
+    "baseline_table_path": "specs/.archive/0043-diagnosis/attribution/attribution_table.json",
+    "baseline_table_sha256": "4fa58df66e4119afd64d476340ba304f253a5f45d172dd5ce13b6f56d12a86a4",
+    "comparator_artifacts_count": 32,
+    "comparator_artifacts_dir": "specs/.archive/0044-submission/submission_run/artifacts",
+    "comparator_config_path": "specs/.archive/0044-submission/submission_config/submission_config.json",
+    "comparator_config_sha256": "f5088aa4fb77f5d6e82900d239c43770e8800a3abf197a791b9503370781255f",
+    "comparator_fu_after": 1,
+    "comparator_net_by_model": [
+      [
+        "qwen3:14b",
+        1
+      ],
+      [
+        "qwen3:8b",
+        0
+      ],
+      [
+        "qwen3.5:4b",
+        1
+      ]
+    ],
+    "comparator_results_path": "specs/.archive/0044-submission/submission_run/submission_results.json",
+    "comparator_results_sha256": "e75b0a29e1bf3b27eb7939b921064fddfeee00b7d63222def70e70ab2bf02616",
+    "comparator_swc_by_model": [
+      [
+        "qwen3:8b",
+        5
+      ]
+    ],
+    "comparator_swc_total": 5,
+    "config_id": "0045/refinement-config/1",
+    "discriminator_table_hash": "62638bd7dcc69eee310ea718e24ffdef276f848c80ba22c8238816aafc477003",
+    "expected_model_readings": [
+      [
+        "qwen3:14b",
+        "fired 5/11 with ZERO regressions in 0044 \u2014 the gate works for it; require-corroboration should not regress it"
+      ],
+      [
+        "qwen3:8b",
+        "the crux: fired 9/11 in 0044 and every miscalibration concentrates here; require-corroboration demotes its weak singletons"
+      ],
+      [
+        "qwen3.5:4b",
+        "INERT (unfired); its 0044 +1 came from the sentence removal, not the gate \u2014 its lever is the parked compression spec"
+      ]
+    ],
+    "explorer_think": null,
+    "gate_proof_version": "0041/exclusivity/1",
+    "ledger_schema_version": "0041/pilot/2",
+    "lm_http_timeout_s": 300.0,
+    "max_qualifying_spans": 5,
+    "min_comparator_swc": 3,
+    "min_comparator_swc_role": "re-derivation guard on the pinned baseline (checked against the freeze-time re-derived comparator swc=5, so it can only pass at runtime) \u2014 NOT a live power check",
+    "min_covered_joined_cells": 8,
+    "never_fired_cell": "pytest-dev__pytest-10081::qwen3:14b",
+    "optional_models": [
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "pilot_case_ids": [
+      "astropy__astropy-12907",
+      "django__django-13516",
+      "matplotlib__matplotlib-21568",
+      "pallets__flask-5014",
+      "pydata__xarray-3993",
+      "pytest-dev__pytest-10081",
+      "scikit-learn__scikit-learn-10844",
+      "psf__requests-1766",
+      "pylint-dev__pylint-7080",
+      "sympy__sympy-16792",
+      "django__django-14315"
+    ],
+    "refined_rule_key": "require-corroboration",
+    "required_models": [
+      "qwen3:14b"
+    ],
+    "rescued_cells_hold_correct": [
+      "pallets__flask-5014::qwen3:14b",
+      "pallets__flask-5014::qwen3:8b"
+    ],
+    "residual_cell": "django__django-14315::qwen3:8b",
+    "scout_max_turns": 10,
+    "scout_wall_clock_s": 240.0,
+    "sut_files": [
+      "harpyja/scout/confidence_gate.py",
+      "harpyja/scout/confidence_signals.py",
+      "harpyja/scout/context_map.py",
+      "harpyja/scout/explorer_backend.py",
+      "harpyja/scout/explorer_loop.py",
+      "harpyja/scout/explorer_tools.py",
+      "harpyja/config/settings.py"
+    ],
+    "sut_hash": "a541a8549d5cff7cadf4d08cb4f145a30bbbc02f31f7fc5a95e5af98de411d71",
+    "verdict_precedence": [
+      "UNDER_POWERED",
+      "TRADES_DIRECTIONS",
+      "RESIDUAL_PERSISTS",
+      "GATE_INERT",
+      "GATE_CALIBRATED",
+      "MISCALIBRATION_REMAINS"
+    ],
+    "verifier_schema_version": "0045/1"
+  },
+  "config_hash": "5a17ed19900316651ef9d0f9f0dd5c98567870e70b4948015be9538842e34ccf",
+  "schema_version": "0045/refinement-config/1"
+}

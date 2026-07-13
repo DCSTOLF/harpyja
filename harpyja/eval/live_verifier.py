@@ -7,7 +7,7 @@ from typing import Any, Mapping
 from harpyja.eval.report import atomic_write_json
 from harpyja.eval.submission_gap import DETECTOR_VERSION as _DETECTOR_VERSION
 
-VERIFIER_SCHEMA_VERSION = "0044/1"
+VERIFIER_SCHEMA_VERSION = "0045/1"
 
 # Spec 0033 (+0034, +0038, +0043, +0044): the version GATE (0026
 # DATASET_SCHEMA_VERSION pattern) — a legacy 0031/1 artifact (no citation-count
@@ -20,7 +20,7 @@ VERIFIER_SCHEMA_VERSION = "0044/1"
 # are REQUIRED-present on a 0044/1 artifact (False/None on a non-firing run) —
 # an attributable null must not be silently omittable from a current artifact.
 _KNOWN_VERIFIER_SCHEMA_VERSIONS = frozenset(
-    {"0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1"}
+    {"0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1", "0045/1"}
 )
 
 # Six enumerated failure reasons (when facts cannot be proven)
@@ -83,6 +83,25 @@ class VerifierResult:
         }
 
 
+_SUBMITTED_NOT_CORRECT_BUCKETS = frozenset({"wrong-file", "right-file-wrong-span"})
+
+
+def classify_silence_to_wrong_confidence(
+    terminal_bucket: str | None, fired: bool
+) -> bool | None:
+    """Spec 0045: the AFTER-side ingredient of silence->wrong-confidence.
+
+    ``True`` iff the gate ``fired`` AND the run submitted a not-correct span
+    (bucket in {wrong-file, right-file-wrong-span}). ``None`` when no bucket was
+    derivable (no gold). Called with ``fired`` inverted for the record-only
+    unfired cross-check. The BEFORE-empty half of the s->wc predicate is joined
+    at ledger time (never here — this is the per-cell projection).
+    """
+    if terminal_bucket is None:
+        return None
+    return fired and terminal_bucket in _SUBMITTED_NOT_CORRECT_BUCKETS
+
+
 def validate_verifier_artifact(artifact: Mapping[str, Any]) -> None:
     """Validate verifier artifact against schema."""
     required_keys = {
@@ -96,7 +115,7 @@ def validate_verifier_artifact(artifact: Mapping[str, Any]) -> None:
 
     # Spec 0043: the loss-class field is presence-required on a 0043/1+ artifact
     # (legacy versions predate it and stay valid — additive, never breaking).
-    if artifact.get("schema_version") in ("0043/1", "0044/1"):
+    if artifact.get("schema_version") in ("0043/1", "0044/1", "0045/1"):
         required_keys = required_keys | {"submission_outcome"}
 
     # Spec 0044: the confidence facts are presence-required on a CURRENT
@@ -105,7 +124,7 @@ def validate_verifier_artifact(artifact: Mapping[str, Any]) -> None:
     # The record-only observability fields (b)/(c) + the null label ride the
     # WRITTEN artifact only (eval-side postflight) and are presence-required
     # there too, so the next spec's gate choice has its data on every artifact.
-    if artifact.get("schema_version") == "0044/1":
+    if artifact.get("schema_version") in ("0044/1", "0045/1"):
         required_keys = required_keys | {
             "confidence_fired",
             "confidence_triggering_signal",
@@ -119,6 +138,15 @@ def validate_verifier_artifact(artifact: Mapping[str, Any]) -> None:
                 "convergent_evidence",
                 "confidence_null",
             }
+
+    # Spec 0045: silence->wrong-confidence is a first-class counted fact,
+    # presence-required on a 0045/1 artifact (bare record AND written; value may
+    # be None when no gold). The record-only unfired cross-check rides the
+    # WRITTEN artifact only (eval-side postflight), presence-required there.
+    if artifact.get("schema_version") == "0045/1":
+        required_keys = required_keys | {"silence_to_wrong_confidence"}
+        if "case" in artifact:
+            required_keys = required_keys | {"unfired_silence_to_wrong_confidence"}
 
     missing = required_keys - set(artifact.keys())
     if missing:
@@ -363,6 +391,7 @@ def build_trajectory_record(
     confidence_triggering_signal: str | None = None,
     confidence_firing_turn: int | None = None,
     confidence_firing_spans: list[dict[str, Any]] | None = None,
+    silence_to_wrong_confidence: bool | None = None,
 ) -> dict[str, Any]:
     """Build trajectory artifact record from captured explorer loop data.
 
@@ -431,6 +460,11 @@ def build_trajectory_record(
         "confidence_triggering_signal": confidence_triggering_signal,
         "confidence_firing_turn": confidence_firing_turn,
         "confidence_firing_spans": confidence_firing_spans,
+        # Spec 0045: the AFTER-side ingredient of silence->wrong-confidence
+        # (fired ∧ submitted-but-not-correct). Gold-dependent, so present-and-None
+        # on the live builder (the bucket arrives from the verify seam) — mirrors
+        # the 0043 submission_outcome threading.
+        "silence_to_wrong_confidence": silence_to_wrong_confidence,
     }
 
     # Add optional fields if provided
@@ -660,6 +694,16 @@ def run_verified_case(
         (gold_span_obj,),
     )
 
+    # Spec 0045: the silence->wrong-confidence fact (AFTER side) + the
+    # record-only unfired cross-check, computed from the gold-derived bucket.
+    _fired = last_trajectory.get("confidence_fired", False)
+    silence_to_wrong_confidence = classify_silence_to_wrong_confidence(
+        traj["terminal_bucket"], _fired
+    )
+    unfired_silence_to_wrong_confidence = classify_silence_to_wrong_confidence(
+        traj["terminal_bucket"], not _fired
+    )
+
     # Build and write artifact
     artifact = {
         "schema_version": VERIFIER_SCHEMA_VERSION,
@@ -704,6 +748,11 @@ def run_verified_case(
             {"model_turns": traj["model_turns"]}
         ),
         "confidence_null": confidence_null,
+        # Spec 0045: silence->wrong-confidence in the SECOND seam too (the
+        # dual-seam checklist's 5th application, written-JSON test-pinned) + the
+        # record-only unfired cross-check (the fired-conditioning loophole).
+        "silence_to_wrong_confidence": silence_to_wrong_confidence,
+        "unfired_silence_to_wrong_confidence": unfired_silence_to_wrong_confidence,
         "timestamp": datetime.utcnow().isoformat(),
         "case": case_name,
     }

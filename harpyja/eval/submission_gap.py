@@ -22,7 +22,6 @@ outcome class. The detector is a PURE PROJECTION over one persisted trajectory:
 
 from __future__ import annotations
 
-import ast
 import enum
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -45,49 +44,10 @@ class SubmissionOutcome(enum.Enum):
     DETECTOR_INCONCLUSIVE = "detector-inconclusive"
 
 
-_CODESPAN_FIELDS = {"path", "start_line", "end_line", "symbol", "language", "kind"}
-
-
-def _parse_tool_content(content: Any) -> tuple[list[CodeSpan], bool]:
-    """Parse one tool-role message's stringified content.
-
-    Returns ``(spans, decodable)``. A non-list string is the 0035 marker shape —
-    no spans, decodable. A list-shaped string that fails exact parsing is
-    undecodable (``([], False)``) — the caller types it, never drops it.
-    """
-    if not isinstance(content, str):
-        return [], False
-    text = content.strip()
-    if not text.startswith("["):
-        # Bare marker string (0035 REPLACEMENT shape) — a known no-span result.
-        return [], True
-    try:
-        tree = ast.parse(text, mode="eval")
-    except SyntaxError:
-        return [], False
-    if not isinstance(tree.body, ast.List):
-        return [], False
-    spans: list[CodeSpan] = []
-    for node in tree.body.elts:
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            # 0042 ANNOTATION shape: a marker string riding ahead of real spans.
-            continue
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "CodeSpan"
-        ):
-            return [], False
-        try:
-            kwargs = {
-                kw.arg: ast.literal_eval(kw.value)
-                for kw in node.keywords
-                if kw.arg in _CODESPAN_FIELDS
-            }
-            spans.append(CodeSpan(**kwargs))
-        except (ValueError, SyntaxError, TypeError):
-            return [], False
-    return spans, True
+# The parser + field allowlist now live canonically in scout (gold-blind, so
+# the 0045 refined gate can consume the same trajectory helpers); re-exported
+# here BY IDENTITY so every existing importer keeps ONE definition (spec 0045).
+from harpyja.scout.confidence_signals import _parse_tool_content  # noqa: E402
 
 
 def _tool_observed_spans(

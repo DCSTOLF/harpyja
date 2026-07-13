@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from harpyja.scout.confidence_signals import spans_overlap_line
 from harpyja.server.types import CodeSpan
 
 # The frozen span-count bound (mirrored as data in the frozen 0044 config).
@@ -68,6 +69,73 @@ def qualifying_symbols_spans(result: Any) -> list[CodeSpan]:
             return []  # file-level is not "exact"
         spans.append(item)
     return spans
+
+
+def _exact(span: Any) -> bool:
+    return (
+        isinstance(span, CodeSpan)
+        and span.start_line is not None
+        and span.end_line is not None
+    )
+
+
+def _is_corroborated(
+    candidate: CodeSpan,
+    prior_spans: list[tuple[str, CodeSpan]],
+    result_tool: str,
+) -> bool:
+    """A candidate span is corroborated iff an earlier DIFFERENT-tool span
+    line-overlaps it (convergence) OR a prior grep hit lies inside it
+    (containment). Same-tool repetition is NOT corroboration.
+
+    Overlap routes through the gold-free ``spans_overlap_line`` (shared by
+    identity with the eval-side oracle's "line" grade — one definition)."""
+    for tool_name, prior in prior_spans:
+        if not _exact(prior) or tool_name == result_tool:
+            continue
+        if spans_overlap_line(candidate, prior):
+            return True
+        if (
+            tool_name == "grep"
+            and prior.path == candidate.path
+            and candidate.start_line <= prior.start_line
+            and prior.end_line <= candidate.end_line
+        ):
+            return True
+    return False
+
+
+def qualifying_confidence_spans(
+    result: Any,
+    prior_spans: list[tuple[str, CodeSpan]] | None = None,
+    result_tool: str = "symbols",
+) -> list[CodeSpan]:
+    """Spec 0045 REFINED gate (require-corroboration, AC3).
+
+    Fires (returns the qualifying spans) only on CORROBORATED exact spans — a
+    bare uncorroborated bounded symbols span (the 0044 weak singleton) no longer
+    fires. Corroboration credits convergence (a different-tool line overlap) and
+    grep-inside-symbol containment against ``prior_spans`` (the earlier
+    tool-result spans, in order). An over-bound batch is admitted only for its
+    corroborated members, and the corroborated set is itself bounded so a
+    candidate list cannot return through the gate.
+
+    Gold-blind: consumes only the trajectory (this result + prior spans).
+    """
+    prior_spans = prior_spans or []
+    if not isinstance(result, list) or not result:
+        return []
+    # Clean-only: a marker string (REPLACEMENT/ANNOTATION) disqualifies.
+    if any(not isinstance(item, CodeSpan) for item in result):
+        return []
+    corroborated = [
+        span
+        for span in result
+        if _exact(span) and _is_corroborated(span, prior_spans, result_tool)
+    ]
+    if not 1 <= len(corroborated) <= CONFIDENCE_MAX_QUALIFYING_SPANS:
+        return []
+    return corroborated
 
 
 def build_confidence_nudge(spans: list[CodeSpan]) -> dict[str, Any]:

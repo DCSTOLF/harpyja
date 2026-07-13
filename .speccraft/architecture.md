@@ -240,6 +240,26 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    eval-side postflight record-only observability fields (grep-inside-symbol-span, convergent
    evidence, `confidence_null`) computed by `eval/submission_observability.py`. See history.md
    2026-07-13 (spec 0044).
+
+   **As of spec 0045 the confidence-gate trajectory SIGNALS live in one gold-blind home,
+   `scout/confidence_signals.py`, and the verifier schema is `0045/1`.** The trajectory-only
+   predicates — `grep_hits_inside_symbol_spans` (grep-hit-inside-a-symbol containment),
+   `convergent_evidence` (≥2 independent tools agreeing on a span), the gold-free span-overlap
+   primitive, `_tool_spans_in_order`, and the `_parse_tool_content` parser — moved OUT of
+   `eval/submission_observability.py` into the NEW gold-blind `scout/confidence_signals.py`
+   (ast-pinned no-eval-import, no gold parameter), and `eval/submission_observability.py` imports
+   them BACK BY IDENTITY (asserted), so the live gate and the eval postflight share ONE
+   definition; `classify_confidence_null` (gold-needing) STAYS eval-side (the gold-entanglement
+   guard). `VERIFIER_SCHEMA_VERSION` bumps `0044/1 → 0045/1` (additive, version-gated),
+   presence-requiring `silence_to_wrong_confidence` PLUS the record-only
+   `unfired_silence_to_wrong_confidence` cross-check on BOTH seams. **The gate's refined
+   require-corroboration RANKING (`scout/confidence_gate.py` `qualifying_confidence_spans`) is a
+   REJECTED operating point: spec 0045 typed `TRADES_DIRECTIONS` (it cut silence→wrong-confidence
+   5 → 1 but reopened found-but-unsubmitted 1 → 8, firing collapsing to 3/33), so it was REVERTED
+   — the explorer loop is restored to 0044's conditioned gate (`qualifying_symbols_spans`, net +2,
+   the live operating point) and `qualifying_confidence_spans` is retired in place. The signals
+   module, the schema, and the record-only cross-check ship regardless; only the ranking is
+   reverted.** See history.md 2026-07-13 (spec 0045).
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0

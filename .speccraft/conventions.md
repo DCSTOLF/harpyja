@@ -287,6 +287,50 @@
 
 ## Measurement & eval harness
 
+- **A cost metric CONDITIONED on a mechanism firing carries a RECORD-ONLY, UNCONDITIONED
+  cross-check counting the same transition when the mechanism did NOT fire — so a refinement
+  that suppresses the mechanism cannot read as "cost eliminated" when it is merely "cost
+  de-attributed."** When a counted cost is causally attributed to a lever
+  (`silence→wrong-confidence` = empty→submitted-but-not-correct AND `confidence_fired`), the
+  conditioning is correct for attribution but has a loophole: a refinement that simply stops the
+  lever firing on the offending cells makes the metric drop BY DEFINITION even though those cells
+  still incur the cost, now UNFIRED. Freezing the predicate blocks deliberate tuning toward that
+  shape but not the mechanism drifting there, so pair the fired-conditioned metric with a
+  record-only per-model line counting the SAME empty→(submitted, non-correct) transition where
+  the lever did NOT fire (`unfired_silence_to_wrong_confidence`), threaded through the same seams
+  and reported BESIDE the conditioned metric — RECORD-ONLY, never in the verdict predicate
+  (adding it mid-run would re-open a definitional argument). It is the cross-check the reader
+  applies to a fired-conditioned drop; on the 0045 live run it caught one cell whose
+  empty→wrong-file cost the fired-conditioned metric had de-attributed to zero. This is the
+  fired-conditioning twin of the 0044 record-only observability posture. (See
+  `harpyja/eval/live_verifier.py` `silence_to_wrong_confidence` +
+  `unfired_silence_to_wrong_confidence`, `harpyja/eval/live_verifier.py` `build_trajectory_record`,
+  spec 0045 AC2/AC7.)
+- **A frozen predicate must have a CONJUNCT PER DIRECTION the lever can err in — a predicate with
+  fewer sides than the lever's error space will sell a TRADE as a win.** When a lever errs in
+  opposite directions on different cells (a confidence gate too loose on some, too tight on
+  others), a uniform tighten/loosen cannot fix it — it trades one error for the other. A two-sided
+  net (conversions − regressions) or a three-sided ledger that omits the reopened direction would
+  type such a trade a success: the 0045 refined gate cut silence→wrong-confidence 5 → 1 but
+  resurrected found-but-unsubmitted 1 → 8, and only the FOUR-SIDED predicate (conversions /
+  regressions / s→wc / fu), with a `TRADES_DIRECTIONS` member carrying a disjunct per direction
+  `((s→wc < X ∧ fu > Y) ∨ (fu < Y ∧ s→wc > X))`, surfaced it. This is the make-the-invisible-
+  countable discipline applied to the predicate SHAPE: count the reopened cost as a first-class
+  side, don't let it net-cancel. (See `harpyja/eval/refinement_outcome.py`
+  `decide_refinement_outcome` `TRADES_DIRECTIONS`, spec 0045 — 4th instance after 0033/0043/0044.)
+- **A frozen SUT-hash pin AGES: when a later spec evolves the SUT an earlier spec's frozen config
+  hashed, the earlier committed pin's `sut_hash` no longer equals the live recompute — reconcile
+  by asserting the DIVERGENCE explicitly (the freeze is HISTORICAL), never by deleting the pin or
+  letting it rot false.** A committed-config pin test that asserts
+  `committed["config"]["sut_hash"] == compute_sut_hash()` is correct only while the SUT is
+  byte-stable; once a successor spec touches the hashed modules (0045 evolving
+  `confidence_gate.py` + adding `confidence_signals.py`), that equality breaks. The reconciling
+  move is to amend the earlier pin test to assert every field EXCEPT `sut_hash` still matches the
+  in-code config AND that the frozen digest is a valid 64-char sha that now DIFFERS from the live
+  recompute — the historical freeze made explicit, its provenance preserved. This is the
+  anti-tautology freeze discipline extended across spec boundaries: a frozen hash is a
+  point-in-time attestation, not a live invariant, and a successor must reconcile it deliberately.
+  (See the amended `test_committed_submission_config_matches_computed_truth`, spec 0045.)
 - **Live integration artifacts write to the persistent, gitignored `eval_work/live_artifacts/<test>/<UTC-basic-timestamp>-<pid>/` — never a `TemporaryDirectory`** (spec 0035, harness-side/non-SUT). Three bucket-unanswerable re-runs were forced by tempdir-discarded artifacts (0032 astropy, 0033-T14, 0034-AC5): a live run's artifact IS the answer to every follow-up question, so it must survive the test process. The helper (`harpyja/eval/live_artifacts.py`) reuses the SAME outside-repo `atomic_write_json` (inside-repo refusal + atomic semantics inherited, never re-implemented); the measurement TARGET (`repo_path`, the worktree) must be a separate tree from the artifact dir or the refusal fires (pinned both ways); the base path is NOT a `Settings` field (eval-knobs-disjoint). This item is harness/test-file-only, so a following measurement spec can still claim SUT-byte-frozen. (See `harpyja/eval/live_artifacts.py`, `test_live_artifacts.py`, spec 0035 AC6/AC7.)
 - A measurement/eval harness observes the system under test through its **real public
   seam** and never mutates its config or behavior — it measures, it does not modify.

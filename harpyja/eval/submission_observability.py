@@ -29,78 +29,27 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from harpyja.eval.metrics import Span, span_hit_kind
-from harpyja.eval.submission_gap import _parse_tool_content
+
+# (b)/(c) + the trajectory scanner MOVED to scout (gold-blind) so the 0045
+# refined gate consumes the SAME definitions; imported BACK by identity here —
+# one definition, no drift (spec 0045 §Invariants "ONE definition per signal").
+# The gold-NEEDING ``classify_confidence_null`` stays eval-side (below).
+from harpyja.scout.confidence_signals import (
+    convergent_evidence,
+    grep_hits_inside_symbol_spans,
+    tool_spans_in_order,
+)
 from harpyja.server.types import CodeSpan
 
+# Legacy private alias kept for any in-repo importer of the pre-0045 name.
+_tool_spans_in_order = tool_spans_in_order
 
-def _tool_spans_in_order(
-    trajectory: Mapping[str, Any],
-) -> list[tuple[int, str, CodeSpan]]:
-    """(position, tool_name, span) for every decodable tool-result span, in
-    trajectory order. Tool names are attributed via the tool_call_id map from
-    the assistant messages' tool_calls."""
-    id_to_name: dict[str, str] = {}
-    out: list[tuple[int, str, CodeSpan]] = []
-    pos = 0
-    for turn in trajectory.get("model_turns", []):
-        if turn.get("role") == "assistant":
-            for call in turn.get("tool_calls") or []:
-                name = (call.get("function") or {}).get("name")
-                call_id = call.get("id")
-                if call_id and name:
-                    id_to_name[call_id] = name
-            continue
-        if turn.get("role") != "tool":
-            continue
-        name = id_to_name.get(turn.get("tool_call_id", ""))
-        if name is None:
-            continue
-        spans, _decodable = _parse_tool_content(turn.get("content"))
-        for span in spans:
-            out.append((pos, name, span))
-        pos += 1
-    return out
-
-
-def grep_hits_inside_symbol_spans(trajectory: Mapping[str, Any]) -> int:
-    """(b): count grep spans contained in an EARLIER symbols span (same file)."""
-    spans = _tool_spans_in_order(trajectory)
-    count = 0
-    for pos, name, grep_span in spans:
-        if name != "grep":
-            continue
-        if grep_span.start_line is None or grep_span.end_line is None:
-            continue
-        for sym_pos, sym_name, sym_span in spans:
-            if sym_name != "symbols" or sym_pos >= pos:
-                continue
-            if (
-                sym_span.path == grep_span.path
-                and sym_span.start_line is not None
-                and sym_span.end_line is not None
-                and sym_span.start_line <= grep_span.start_line
-                and grep_span.end_line <= sym_span.end_line
-            ):
-                count += 1
-                break
-    return count
-
-
-def convergent_evidence(trajectory: Mapping[str, Any]) -> bool:
-    """(c): ≥2 distinct tools returned overlapping spans on the same file —
-    overlap judged through the ONE oracle's "line" grade."""
-    spans = _tool_spans_in_order(trajectory)
-    for _pos_a, name_a, span_a in spans:
-        if span_a.start_line is None or span_a.end_line is None:
-            continue
-        for _pos_b, name_b, span_b in spans:
-            if name_b == name_a:
-                continue
-            if span_b.start_line is None or span_b.end_line is None:
-                continue
-            if span_hit_kind(span_a, span_b) == "line":
-                return True
-    return False
+__all__ = [
+    "classify_confidence_null",
+    "convergent_evidence",
+    "grep_hits_inside_symbol_spans",
+    "tool_spans_in_order",
+]
 
 
 def classify_confidence_null(

@@ -19,6 +19,26 @@ from harpyja.eval.submission_observability import (
 from harpyja.server.types import CodeSpan
 
 
+def test_observability_containment_is_scout_function_by_identity():
+    # Spec 0045: (b)/(c) moved to scout (gold-blind); eval re-exports BY IDENTITY
+    # so ONE definition survives — no drift between the live gate and postflight.
+    from harpyja.scout import confidence_signals as sig
+
+    assert grep_hits_inside_symbol_spans is sig.grep_hits_inside_symbol_spans
+    assert convergent_evidence is sig.convergent_evidence
+    assert so.tool_spans_in_order is sig.tool_spans_in_order
+
+
+def test_classify_confidence_null_stays_eval_side_uses_gold():
+    # The gold-NEEDING classifier is NOT moved to scout — it takes `expected`.
+    import inspect
+
+    from harpyja.scout import confidence_signals as sig
+
+    assert "expected" in inspect.signature(classify_confidence_null).parameters
+    assert not hasattr(sig, "classify_confidence_null")
+
+
 def _span_repr(path, start, end):
     return (
         f"CodeSpan(path='{path}', start_line={start}, end_line={end}, "
