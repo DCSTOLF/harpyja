@@ -1,0 +1,17 @@
+{
+  "frozen_before": "any attribution number computed (stage-1 freeze, spec 0043 T8)",
+  "schema_version": "0043/lever-table/1",
+  "table": {
+    "dawdle_min_turns": 2,
+    "ranking": [
+      "after_locate_dawdle_high -> submit-early-prompt-nudge",
+      "per_turn_cost_high -> cheaper-navigation-output-clamp",
+      "wall_clock_expiry_dominant -> bounded-wall-clock-raise",
+      "default -> submit-early-prompt-nudge"
+    ],
+    "reasoning_chars_high_per_turn": 10000,
+    "table_id": "0043/lever-table/1",
+    "wall_clock_dominant_fraction": 0.5
+  },
+  "table_hash": "96626acabe191669bd38799452b3d0f29831283d231f5bc61c87065c6446709f"
+}

@@ -1,0 +1,3328 @@
+{
+  "cases": [
+    {
+      "assistant_turns": 7,
+      "bucket": "right-file-wrong-span",
+      "case": "astropy__astropy-12907",
+      "completion_tokens_per_turn": [
+        501,
+        239,
+        312,
+        289,
+        844,
+        345,
+        396
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2189,
+        968,
+        1247,
+        1212,
+        3686,
+        1217,
+        1504
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/astropy__astropy-12907_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 7,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 8,
+      "bucket": "wrong-file",
+      "case": "django__django-13516",
+      "completion_tokens_per_turn": [
+        759,
+        726,
+        384,
+        1048,
+        266,
+        308,
+        554,
+        904
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3410,
+        3263,
+        1729,
+        4658,
+        1108,
+        1277,
+        1862,
+        3783
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/django__django-13516_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "empty",
+      "case": "pallets__flask-5014",
+      "completion_tokens_per_turn": [
+        471,
+        279,
+        324,
+        359,
+        532,
+        359,
+        324,
+        593,
+        374
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        1938,
+        1127,
+        1313,
+        1509,
+        2240,
+        1459,
+        1333,
+        2378,
+        1009
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pallets__flask-5014_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 8,
+      "turns_after_locate": 3,
+      "turns_to_locate": 6
+    },
+    {
+      "assistant_turns": 8,
+      "bucket": "correct",
+      "case": "pydata__xarray-3993",
+      "completion_tokens_per_turn": [
+        556,
+        328,
+        231,
+        456,
+        443,
+        454,
+        512,
+        668
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2355,
+        1323,
+        809,
+        1994,
+        1552,
+        1828,
+        2048,
+        2671
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pydata__xarray-3993_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 8,
+      "turns_after_locate": 4,
+      "turns_to_locate": 4
+    },
+    {
+      "assistant_turns": 3,
+      "bucket": "correct",
+      "case": "pytest-dev__pytest-10081",
+      "completion_tokens_per_turn": [
+        882,
+        903,
+        787
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3785,
+        2711,
+        2461
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 9,
+      "turns_after_locate": 2,
+      "turns_to_locate": 1
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "correct",
+      "case": "scikit-learn__scikit-learn-10844",
+      "completion_tokens_per_turn": [
+        263,
+        383,
+        773,
+        347,
+        432,
+        495
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        1015,
+        1626,
+        2778,
+        1524,
+        1688,
+        1769
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 8,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 7,
+      "bucket": "right-file-wrong-span",
+      "case": "psf__requests-1766",
+      "completion_tokens_per_turn": [
+        562,
+        582,
+        478,
+        357,
+        1124,
+        730,
+        695
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2439,
+        2617,
+        2005,
+        1440,
+        4782,
+        2994,
+        2141
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/psf__requests-1766_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 7,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "wrong-file",
+      "case": "pylint-dev__pylint-7080",
+      "completion_tokens_per_turn": [
+        835,
+        394,
+        470,
+        658
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3811,
+        1771,
+        1948,
+        2837
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 4,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 7,
+      "bucket": "empty",
+      "case": "sympy__sympy-16792",
+      "completion_tokens_per_turn": [
+        440,
+        229,
+        658,
+        341,
+        1077,
+        1130,
+        1013
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        1998,
+        853,
+        2639,
+        1490,
+        4928,
+        5204,
+        3322
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/sympy__sympy-16792_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 6,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "wrong-file",
+      "case": "django__django-14315",
+      "completion_tokens_per_turn": [
+        657,
+        1343,
+        425,
+        272,
+        443,
+        643
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2910,
+        6298,
+        1813,
+        1142,
+        1916,
+        2900
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/django__django-14315_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 6,
+      "turns_after_locate": 2,
+      "turns_to_locate": 4
+    },
+    {
+      "assistant_turns": 8,
+      "bucket": "wrong-file",
+      "case": "astropy__astropy-12907",
+      "completion_tokens_per_turn": [
+        611,
+        517,
+        166,
+        290,
+        869,
+        281,
+        303,
+        433
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2797,
+        2387,
+        670,
+        1263,
+        3613,
+        1119,
+        1146,
+        1840
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/astropy__astropy-12907_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 8,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "django__django-13516",
+      "completion_tokens_per_turn": [
+        397,
+        388,
+        381,
+        390,
+        546,
+        802,
+        930,
+        1136,
+        485,
+        557
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "stop",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1747,
+        1649,
+        1659,
+        1799,
+        2529,
+        3547,
+        4446,
+        5337,
+        2145,
+        2404
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/django__django-13516_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 9,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "matplotlib__matplotlib-21568",
+      "completion_tokens_per_turn": [
+        361,
+        546,
+        293,
+        420,
+        1273,
+        864,
+        1517,
+        886,
+        927,
+        597
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1575,
+        2474,
+        1247,
+        1792,
+        5787,
+        4025,
+        6585,
+        4119,
+        4273,
+        2764
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 5,
+      "bucket": "right-file-wrong-span",
+      "case": "pallets__flask-5014",
+      "completion_tokens_per_turn": [
+        224,
+        1484,
+        394,
+        415,
+        467
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        922,
+        6320,
+        1687,
+        1628,
+        1990
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pallets__flask-5014_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 5,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "correct",
+      "case": "pydata__xarray-3993",
+      "completion_tokens_per_turn": [
+        202,
+        381,
+        350,
+        508,
+        649,
+        529
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        821,
+        1609,
+        1417,
+        1998,
+        2824,
+        2038
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pydata__xarray-3993_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 6,
+      "turns_after_locate": 3,
+      "turns_to_locate": 3
+    },
+    {
+      "assistant_turns": 7,
+      "bucket": null,
+      "case": "pytest-dev__pytest-10081",
+      "completion_tokens_per_turn": [
+        574,
+        169,
+        373,
+        445,
+        631,
+        488,
+        528,
+        2048
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "length"
+      ],
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2511,
+        667,
+        1573,
+        1963,
+        2862,
+        1975,
+        2082,
+        8992
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "http-timeout",
+      "tool_call_count": 7,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "empty",
+      "case": "scikit-learn__scikit-learn-10844",
+      "completion_tokens_per_turn": [
+        320,
+        525,
+        690,
+        690
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1289,
+        2396,
+        3104,
+        3027
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 4,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "empty",
+      "case": "psf__requests-1766",
+      "completion_tokens_per_turn": [
+        352,
+        876,
+        478,
+        559
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1418,
+        3717,
+        1965,
+        2447
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/psf__requests-1766_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 4,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "empty",
+      "case": "pylint-dev__pylint-7080",
+      "completion_tokens_per_turn": [
+        838,
+        249,
+        279,
+        606
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        3747,
+        1041,
+        1181,
+        2711
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 5,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "empty",
+      "case": "sympy__sympy-16792",
+      "completion_tokens_per_turn": [
+        538,
+        239,
+        432,
+        675
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2479,
+        1042,
+        1942,
+        2952
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/sympy__sympy-16792_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 4,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "empty",
+      "case": "django__django-14315",
+      "completion_tokens_per_turn": [
+        505,
+        767,
+        497,
+        573
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2321,
+        3492,
+        2216,
+        2659
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_8b/django__django-14315_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 4,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "django__django-13516",
+      "completion_tokens_per_turn": [
+        241,
+        52,
+        140,
+        157,
+        91,
+        124,
+        35,
+        109,
+        98,
+        84
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        1111,
+        196,
+        370,
+        522,
+        416,
+        371,
+        96,
+        452,
+        436,
+        351
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/django__django-13516_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "matplotlib__matplotlib-21568",
+      "completion_tokens_per_turn": [
+        126,
+        167,
+        125,
+        237,
+        74,
+        156,
+        214,
+        100,
+        85,
+        196
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        554,
+        508,
+        416,
+        886,
+        221,
+        642,
+        958,
+        351,
+        145,
+        677
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "empty",
+      "case": "pallets__flask-5014",
+      "completion_tokens_per_turn": [
+        113,
+        118,
+        53,
+        121,
+        89,
+        178,
+        143,
+        187,
+        164
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        450,
+        370,
+        null,
+        314,
+        194,
+        577,
+        331,
+        476,
+        485
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pallets__flask-5014_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 9,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "correct",
+      "case": "pydata__xarray-3993",
+      "completion_tokens_per_turn": [
+        86,
+        125,
+        129,
+        117,
+        116,
+        318
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        370,
+        365,
+        304,
+        325,
+        243,
+        974
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pydata__xarray-3993_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 6,
+      "turns_after_locate": 2,
+      "turns_to_locate": 4
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "pytest-dev__pytest-10081",
+      "completion_tokens_per_turn": [
+        194,
+        107,
+        71,
+        73,
+        51,
+        101,
+        44,
+        90,
+        78,
+        157
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        512,
+        446,
+        58,
+        277,
+        170,
+        470,
+        134,
+        396,
+        273,
+        704
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 5,
+      "bucket": "right-file-wrong-span",
+      "case": "scikit-learn__scikit-learn-10844",
+      "completion_tokens_per_turn": [
+        102,
+        99,
+        113,
+        97,
+        244
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        386,
+        315,
+        318,
+        148,
+        625
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 5,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "empty",
+      "case": "psf__requests-1766",
+      "completion_tokens_per_turn": [
+        95,
+        112,
+        120,
+        95,
+        192,
+        95,
+        218,
+        130,
+        707
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        394,
+        381,
+        349,
+        350,
+        735,
+        294,
+        883,
+        313,
+        2531
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/psf__requests-1766_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 9,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": null,
+      "case": "sympy__sympy-16792",
+      "completion_tokens_per_turn": [
+        182,
+        196,
+        75,
+        132,
+        93,
+        93,
+        83,
+        142,
+        104,
+        102
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        868,
+        629,
+        305,
+        553,
+        343,
+        345,
+        312,
+        621,
+        454,
+        453
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/sympy__sympy-16792_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "http-timeout",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "django__django-14315",
+      "completion_tokens_per_turn": [
+        101,
+        58,
+        152,
+        117,
+        186,
+        182,
+        100,
+        195,
+        202,
+        105
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        424,
+        125,
+        481,
+        362,
+        594,
+        529,
+        322,
+        816,
+        653,
+        110
+      ],
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/django__django-14315_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": 6,
+      "turns_to_locate": 4
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "empty",
+      "case": "astropy__astropy-12907",
+      "completion_tokens_per_turn": [
+        364,
+        470,
+        375,
+        596,
+        340,
+        453,
+        491,
+        483,
+        590
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        1561,
+        1933,
+        1622,
+        2509,
+        1434,
+        2078,
+        2032,
+        2206,
+        2499
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/astropy__astropy-12907_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 9,
+      "turns_after_locate": 0,
+      "turns_to_locate": 9
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "wrong-file",
+      "case": "django__django-13516",
+      "completion_tokens_per_turn": [
+        819,
+        251,
+        441,
+        511,
+        510,
+        385,
+        307,
+        882,
+        1591
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3689,
+        1055,
+        1875,
+        2447,
+        2215,
+        1538,
+        1161,
+        3797,
+        7187
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/django__django-13516_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 9,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 5,
+      "bucket": "right-file-wrong-span",
+      "case": "matplotlib__matplotlib-21568",
+      "completion_tokens_per_turn": [
+        659,
+        588,
+        476,
+        709,
+        405
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2861,
+        2486,
+        2020,
+        1951,
+        1694
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 4,
+      "turns_after_locate": 3,
+      "turns_to_locate": 2
+    },
+    {
+      "assistant_turns": 8,
+      "bucket": "correct",
+      "case": "pallets__flask-5014",
+      "completion_tokens_per_turn": [
+        600,
+        647,
+        400,
+        256,
+        554,
+        352,
+        440,
+        452
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2767,
+        2925,
+        1642,
+        1016,
+        2385,
+        1278,
+        1343,
+        1805
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/pallets__flask-5014_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 7,
+      "turns_after_locate": 3,
+      "turns_to_locate": 5
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "correct",
+      "case": "pydata__xarray-3993",
+      "completion_tokens_per_turn": [
+        815,
+        511,
+        1171,
+        307
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3466,
+        1836,
+        3983,
+        1047
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/pydata__xarray-3993_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 4,
+      "turns_after_locate": 3,
+      "turns_to_locate": 1
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "empty",
+      "case": "pytest-dev__pytest-10081",
+      "completion_tokens_per_turn": [
+        594,
+        556,
+        910,
+        1842,
+        256,
+        635
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2753,
+        2566,
+        4122,
+        8441,
+        1066,
+        2923
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 6,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 4,
+      "bucket": "correct",
+      "case": "scikit-learn__scikit-learn-10844",
+      "completion_tokens_per_turn": [
+        766,
+        903,
+        749,
+        667
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3197,
+        3820,
+        1823,
+        2951
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 3,
+      "turns_after_locate": 3,
+      "turns_to_locate": 1
+    },
+    {
+      "assistant_turns": 8,
+      "bucket": "empty",
+      "case": "psf__requests-1766",
+      "completion_tokens_per_turn": [
+        649,
+        1107,
+        343,
+        416,
+        1273,
+        542,
+        318,
+        478
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2886,
+        4940,
+        1480,
+        1726,
+        5384,
+        2314,
+        1353,
+        2123
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/psf__requests-1766_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 7,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "empty",
+      "case": "pylint-dev__pylint-7080",
+      "completion_tokens_per_turn": [
+        559,
+        1007,
+        1025,
+        370,
+        974,
+        761
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2499,
+        4466,
+        4200,
+        1505,
+        4164,
+        3104
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 6,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "empty",
+      "case": "sympy__sympy-16792",
+      "completion_tokens_per_turn": [
+        646,
+        235,
+        395,
+        1102,
+        800,
+        585
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "stop"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        2802,
+        1014,
+        1624,
+        4929,
+        2962,
+        1857
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/sympy__sympy-16792_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 4,
+      "turns_after_locate": 3,
+      "turns_to_locate": 3
+    },
+    {
+      "assistant_turns": 7,
+      "bucket": "wrong-file",
+      "case": "django__django-14315",
+      "completion_tokens_per_turn": [
+        744,
+        696,
+        545,
+        454,
+        540,
+        324,
+        501
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:14b",
+      "reasoning_chars_per_turn": [
+        3348,
+        3203,
+        2504,
+        1969,
+        2441,
+        1284,
+        2272
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_14b/django__django-14315_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 7,
+      "turns_after_locate": 4,
+      "turns_to_locate": 3
+    },
+    {
+      "assistant_turns": 5,
+      "bucket": "right-file-wrong-span",
+      "case": "astropy__astropy-12907",
+      "completion_tokens_per_turn": [
+        410,
+        271,
+        337,
+        407,
+        346
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1770,
+        1191,
+        1360,
+        1847,
+        1490
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/astropy__astropy-12907_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 5,
+      "turns_after_locate": 1,
+      "turns_to_locate": 4
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "django__django-13516",
+      "completion_tokens_per_turn": [
+        589,
+        373,
+        975,
+        518,
+        667,
+        830,
+        734,
+        634,
+        356,
+        408
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2593,
+        1589,
+        4318,
+        2263,
+        3117,
+        3962,
+        3392,
+        2891,
+        1601,
+        1706
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/django__django-13516_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "matplotlib__matplotlib-21568",
+      "completion_tokens_per_turn": [
+        366,
+        280,
+        422,
+        280,
+        441,
+        723,
+        913,
+        823,
+        426,
+        495
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1528,
+        1169,
+        1834,
+        1199,
+        2082,
+        3313,
+        4097,
+        3804,
+        1364,
+        2287
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 11,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 5,
+      "bucket": "correct",
+      "case": "pallets__flask-5014",
+      "completion_tokens_per_turn": [
+        357,
+        367,
+        537,
+        532,
+        477
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1545,
+        1572,
+        2220,
+        1867,
+        2084
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/pallets__flask-5014_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 4,
+      "turns_after_locate": 3,
+      "turns_to_locate": 2
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "pydata__xarray-3993",
+      "completion_tokens_per_turn": [
+        473,
+        401,
+        285,
+        485,
+        567,
+        1088,
+        521,
+        284,
+        390,
+        380
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "stop",
+        "stop",
+        "stop",
+        "stop"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2008,
+        1759,
+        1142,
+        1899,
+        2297,
+        3560,
+        1018,
+        1206,
+        1642,
+        1462
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/pydata__xarray-3993_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 5,
+      "turns_after_locate": 7,
+      "turns_to_locate": 3
+    },
+    {
+      "assistant_turns": 8,
+      "bucket": "wrong-file",
+      "case": "pytest-dev__pytest-10081",
+      "completion_tokens_per_turn": [
+        706,
+        598,
+        557,
+        345,
+        677,
+        619,
+        571,
+        520
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        3231,
+        2757,
+        2612,
+        1448,
+        2949,
+        2500,
+        1512,
+        2216
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 7,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 3,
+      "bucket": "correct",
+      "case": "scikit-learn__scikit-learn-10844",
+      "completion_tokens_per_turn": [
+        397,
+        424,
+        448
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1652,
+        1651,
+        1739
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 3,
+      "turns_after_locate": 2,
+      "turns_to_locate": 1
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "psf__requests-1766",
+      "completion_tokens_per_turn": [
+        811,
+        612,
+        317,
+        374,
+        266,
+        399,
+        592,
+        367,
+        443,
+        323
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        3490,
+        2883,
+        1243,
+        1630,
+        1038,
+        1707,
+        2459,
+        1459,
+        1802,
+        1295
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/psf__requests-1766_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "pylint-dev__pylint-7080",
+      "completion_tokens_per_turn": [
+        925,
+        750,
+        333,
+        554,
+        400,
+        550,
+        451,
+        385,
+        634,
+        624
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        3812,
+        3398,
+        1481,
+        2317,
+        1701,
+        2443,
+        2087,
+        1683,
+        1977,
+        2779
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "sympy__sympy-16792",
+      "completion_tokens_per_turn": [
+        370,
+        284,
+        404,
+        432,
+        286,
+        318,
+        308,
+        753,
+        530,
+        287
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        1635,
+        1215,
+        1740,
+        1860,
+        1134,
+        1354,
+        1311,
+        3506,
+        2357,
+        1194
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/sympy__sympy-16792_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 6,
+      "bucket": "correct",
+      "case": "django__django-14315",
+      "completion_tokens_per_turn": [
+        447,
+        247,
+        1230,
+        231,
+        477,
+        496
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "stop",
+        "tool_calls",
+        "stop",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3:8b",
+      "reasoning_chars_per_turn": [
+        2230,
+        954,
+        5522,
+        904,
+        1243,
+        2075
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_8b/django__django-14315_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 4,
+      "turns_after_locate": 5,
+      "turns_to_locate": 1
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "astropy__astropy-12907",
+      "completion_tokens_per_turn": [
+        177,
+        83,
+        125,
+        125,
+        159,
+        222,
+        143,
+        141,
+        293,
+        116
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        641,
+        246,
+        348,
+        463,
+        456,
+        803,
+        404,
+        318,
+        1129,
+        113
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/astropy__astropy-12907_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "matplotlib__matplotlib-21568",
+      "completion_tokens_per_turn": [
+        99,
+        144,
+        135,
+        106,
+        100,
+        110,
+        94,
+        110,
+        120,
+        238
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        423,
+        88,
+        430,
+        375,
+        271,
+        267,
+        139,
+        306,
+        344,
+        835
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "pallets__flask-5014",
+      "completion_tokens_per_turn": [
+        88,
+        114,
+        91,
+        58,
+        148,
+        175,
+        686,
+        155,
+        99,
+        199
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        342,
+        341,
+        303,
+        null,
+        469,
+        518,
+        2619,
+        465,
+        157,
+        478
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/pallets__flask-5014_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": 7,
+      "turns_to_locate": 3
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "correct",
+      "case": "pydata__xarray-3993",
+      "completion_tokens_per_turn": [
+        119,
+        69,
+        111,
+        105,
+        115,
+        144,
+        99,
+        199,
+        498,
+        513
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        510,
+        186,
+        388,
+        297,
+        226,
+        387,
+        163,
+        548,
+        2152,
+        1960
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/pydata__xarray-3993_verifier_artifact.json",
+      "submission_outcome": "submitted",
+      "terminal_cause": "submitted",
+      "tool_call_count": 10,
+      "turns_after_locate": 6,
+      "turns_to_locate": 4
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "empty",
+      "case": "pytest-dev__pytest-10081",
+      "completion_tokens_per_turn": [
+        167,
+        58,
+        14,
+        66,
+        219,
+        85,
+        117,
+        97,
+        176
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        695,
+        191,
+        null,
+        189,
+        692,
+        73,
+        352,
+        251,
+        539
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 9,
+      "turns_after_locate": 1,
+      "turns_to_locate": 8
+    },
+    {
+      "assistant_turns": 5,
+      "bucket": "empty",
+      "case": "scikit-learn__scikit-learn-10844",
+      "completion_tokens_per_turn": [
+        78,
+        82,
+        98,
+        309,
+        591
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        313,
+        162,
+        145,
+        909,
+        1711
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "submission_outcome": "submitted-then-dropped",
+      "terminal_cause": "submitted",
+      "tool_call_count": 5,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "psf__requests-1766",
+      "completion_tokens_per_turn": [
+        105,
+        131,
+        119,
+        148,
+        94,
+        90,
+        94,
+        56,
+        104,
+        92
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        385,
+        361,
+        424,
+        581,
+        392,
+        305,
+        323,
+        142,
+        375,
+        308
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/psf__requests-1766_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 9,
+      "bucket": "empty",
+      "case": "pylint-dev__pylint-7080",
+      "completion_tokens_per_turn": [
+        103,
+        72,
+        95,
+        224,
+        99,
+        158,
+        99,
+        117,
+        48
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        368,
+        273,
+        320,
+        808,
+        347,
+        511,
+        287,
+        373,
+        67
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "submission_outcome": "never-found",
+      "terminal_cause": "wall-clock",
+      "tool_call_count": 9,
+      "turns_after_locate": null,
+      "turns_to_locate": null
+    },
+    {
+      "assistant_turns": 10,
+      "bucket": "empty",
+      "case": "django__django-14315",
+      "completion_tokens_per_turn": [
+        131,
+        125,
+        90,
+        75,
+        134,
+        126,
+        55,
+        153,
+        64,
+        69
+      ],
+      "degrade": null,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls"
+      ],
+      "ledger_degrade": null,
+      "model": "qwen3.5:4b",
+      "reasoning_chars_per_turn": [
+        436,
+        506,
+        220,
+        128,
+        353,
+        377,
+        null,
+        503,
+        141,
+        115
+      ],
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/django__django-14315_verifier_artifact.json",
+      "submission_outcome": "found-unsubmitted",
+      "terminal_cause": "turn-cap",
+      "tool_call_count": 10,
+      "turns_after_locate": 7,
+      "turns_to_locate": 3
+    }
+  ],
+  "degraded_cells": [
+    {
+      "bucket": null,
+      "case": "matplotlib__matplotlib-21568",
+      "degrade": "trajectory-missing",
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "model": "qwen3:14b",
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_14b/matplotlib__matplotlib-21568_verifier_artifact.json"
+    },
+    {
+      "bucket": null,
+      "case": "astropy__astropy-12907",
+      "degrade": "trajectory-missing",
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "model": "qwen3.5:4b",
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/astropy__astropy-12907_verifier_artifact.json"
+    },
+    {
+      "bucket": null,
+      "case": "pylint-dev__pylint-7080",
+      "degrade": "trajectory-missing",
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: backend-error)",
+      "model": "qwen3.5:4b",
+      "run": "pilot_0040",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/pilot_0040/qwen3_5_4b/pylint-dev__pylint-7080_verifier_artifact.json"
+    },
+    {
+      "bucket": null,
+      "case": "django__django-13516",
+      "degrade": "trajectory-missing",
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "model": "qwen3.5:4b",
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/django__django-13516_verifier_artifact.json"
+    },
+    {
+      "bucket": null,
+      "case": "sympy__sympy-16792",
+      "degrade": "trajectory-missing",
+      "ledger_degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "model": "qwen3.5:4b",
+      "run": "adoption_0042",
+      "source_path": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/adoption_0042/qwen3_5_4b/sympy__sympy-16792_verifier_artifact.json"
+    }
+  ],
+  "detector_version": "0043/1",
+  "inversion_evidence": {
+    "qwen3.5:4b": {
+      "degrade_count": 5,
+      "mean_prompt_chars": 18723.777777777777,
+      "mean_tool_result_bytes": 18244.666666666668,
+      "mean_turns": 9.0
+    },
+    "qwen3:14b": {
+      "degrade_count": 1,
+      "mean_prompt_chars": 11621.47619047619,
+      "mean_tool_result_bytes": 10679.952380952382,
+      "mean_turns": 6.523809523809524
+    },
+    "qwen3:8b": {
+      "degrade_count": 1,
+      "mean_prompt_chars": 6453.045454545455,
+      "mean_tool_result_bytes": 5618.363636363636,
+      "mean_turns": 6.954545454545454
+    }
+  },
+  "inversion_finding": {
+    "cause": "larger-tool-outputs",
+    "missing_measurement": null,
+    "model": "qwen3.5:4b"
+  },
+  "lever_decision": {
+    "lever": "submit-early-prompt-nudge",
+    "rationale_requirement": null,
+    "requires_rationale": false
+  },
+  "lever_signals": {
+    "after_locate_dawdle_high": true,
+    "per_turn_cost_high": false,
+    "wall_clock_expiry_dominant": false
+  },
+  "lever_table_hash": "96626acabe191669bd38799452b3d0f29831283d231f5bc61c87065c6446709f",
+  "run_http_timeout_s": 300.0,
+  "run_max_turns": 10,
+  "run_wall_clock_s": 240.0,
+  "schema_version": "0043/attribution/1",
+  "sources": [
+    {
+      "filename": "astropy__astropy-12907_verifier_artifact.json",
+      "sha256": "56efb00b1dbafe21ce33117d1e8b3a94838d51bd6b51594e4cae71730d5364b9"
+    },
+    {
+      "filename": "django__django-13516_verifier_artifact.json",
+      "sha256": "6c50b8aea14b6013eeeff7328588798a8f9443d6dad84a940b549963976f04ad"
+    },
+    {
+      "filename": "pallets__flask-5014_verifier_artifact.json",
+      "sha256": "5d965ae652a5d2d9f1ef332e6cb857ea89a8a32ffaba2cdc420612e93868f6f1"
+    },
+    {
+      "filename": "pydata__xarray-3993_verifier_artifact.json",
+      "sha256": "a612585ebe197cc991fb3591b968c78118332f80967687901e4c32cd55bdb2ee"
+    },
+    {
+      "filename": "pytest-dev__pytest-10081_verifier_artifact.json",
+      "sha256": "e0e0d49a77a37500e78db6bc17083da06b38f804e028ed33919579b786cb5a82"
+    },
+    {
+      "filename": "scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "sha256": "aa6fca41177cd24d05412ec8b78c07d07e5bc13ac7aba48868cb1ce616641a6c"
+    },
+    {
+      "filename": "psf__requests-1766_verifier_artifact.json",
+      "sha256": "ad7e498e8439408d9342c311a7a4792f6d0b7eab9f2b68f03647face7f91b8ce"
+    },
+    {
+      "filename": "pylint-dev__pylint-7080_verifier_artifact.json",
+      "sha256": "7dbe4c223aafa6bb308ad1c04f6e5cc1ee8c0750b9a78e19c48be6b425e215e1"
+    },
+    {
+      "filename": "sympy__sympy-16792_verifier_artifact.json",
+      "sha256": "9773e7e987fd28f7da2526b748cabeb52be1462b3a94bbf959302ed5df84b238"
+    },
+    {
+      "filename": "django__django-14315_verifier_artifact.json",
+      "sha256": "491e6e47ffee4b792f2569b35b34bfd7b989d15f8bd4470c619ee31efee4c038"
+    },
+    {
+      "filename": "astropy__astropy-12907_verifier_artifact.json",
+      "sha256": "49e3aca1ba54f500821c54e0e449c7f6bc79d7f12fcb8146b8a7d77f8763e106"
+    },
+    {
+      "filename": "django__django-13516_verifier_artifact.json",
+      "sha256": "811f6a4b041fe95040391c7ae7a3216767bec2aa729fce4e593fe8dda7eeeef4"
+    },
+    {
+      "filename": "matplotlib__matplotlib-21568_verifier_artifact.json",
+      "sha256": "d72f2d11d1a5f1aba7cd2efdd4af19a5e03c182435443323a584fc031038f0be"
+    },
+    {
+      "filename": "pallets__flask-5014_verifier_artifact.json",
+      "sha256": "e6cb088bcc750b45a2dc69ca97d517140a14e82b8afc971026a344b5b6e07293"
+    },
+    {
+      "filename": "pydata__xarray-3993_verifier_artifact.json",
+      "sha256": "8f0e831834787744ffc1973cadec5d068618c58bffeffdc88c8d2cdae9b50f8d"
+    },
+    {
+      "filename": "pytest-dev__pytest-10081_verifier_artifact.json",
+      "sha256": "2d4f1d39c6b186e2d08698352657d67dfb25699de3cdf2c84d75756516153bac"
+    },
+    {
+      "filename": "scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "sha256": "9237705e1460efc63cb5f8b1ec6eb6396b09dc6861da72a30c18d6c42307d87c"
+    },
+    {
+      "filename": "psf__requests-1766_verifier_artifact.json",
+      "sha256": "99c831bd36cef39cdb2470e33a9618ba047e3d6c97bd0c6f6c3761a7ea924269"
+    },
+    {
+      "filename": "pylint-dev__pylint-7080_verifier_artifact.json",
+      "sha256": "c7f0daafa4a8bad2e70137b7af6bd069ffc16c106c8430a0841fc70e0523be60"
+    },
+    {
+      "filename": "sympy__sympy-16792_verifier_artifact.json",
+      "sha256": "a033852c60b5e6aa67eba4ef091db01c37722a7059fd3c8d1fd5abd9383262c2"
+    },
+    {
+      "filename": "django__django-14315_verifier_artifact.json",
+      "sha256": "031aa5f408d2a95a9fe6d0d89eefdcb4aeed7341c94c1a817499f2a09f864c9c"
+    },
+    {
+      "filename": "django__django-13516_verifier_artifact.json",
+      "sha256": "fc2ae697372669b8829fd802d5f49c08a0ebd9fc926e2263aab7d83840c86123"
+    },
+    {
+      "filename": "matplotlib__matplotlib-21568_verifier_artifact.json",
+      "sha256": "3ec203387b6b7a5067affbe8d052ca4733feff677082038751af9d27e0ea5f4d"
+    },
+    {
+      "filename": "pallets__flask-5014_verifier_artifact.json",
+      "sha256": "f483412709eb62225597d86b08b1b3ff1ee19a7d5674d8acdf025a566beca59d"
+    },
+    {
+      "filename": "pydata__xarray-3993_verifier_artifact.json",
+      "sha256": "845af4e38d2add8295f7b1860800c4e3bb3f2186c26700c2f68344609d74d509"
+    },
+    {
+      "filename": "pytest-dev__pytest-10081_verifier_artifact.json",
+      "sha256": "93827eb52162cb3319719267a716dc3fcb1dc0812648dd5d5c550e121e26af72"
+    },
+    {
+      "filename": "scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "sha256": "167018b7846d4f8d2d376f442c62bbbeb6ac85ba1143f88b839a00ba5af69020"
+    },
+    {
+      "filename": "psf__requests-1766_verifier_artifact.json",
+      "sha256": "30ec5663898b5d1ac6b9f371101379c5500a4dca1c64420b324a2b8759d87b42"
+    },
+    {
+      "filename": "sympy__sympy-16792_verifier_artifact.json",
+      "sha256": "abb3cc0d58ad636606651fcbe08717e06973a8d6cf98a0435918d2f910bb6fef"
+    },
+    {
+      "filename": "django__django-14315_verifier_artifact.json",
+      "sha256": "222dafe4f63cf34008f601461438fdb7aec0495f24da30b0970f8af02b667557"
+    },
+    {
+      "filename": "astropy__astropy-12907_verifier_artifact.json",
+      "sha256": "0dade0224bd888a177a646d260f37f60d5b5de9ae19f5091d35d19a093794f1b"
+    },
+    {
+      "filename": "django__django-13516_verifier_artifact.json",
+      "sha256": "0fb990a95e625265502c7d98553a49880ed30c30f5e2e7244dee87dfcce3ad48"
+    },
+    {
+      "filename": "matplotlib__matplotlib-21568_verifier_artifact.json",
+      "sha256": "b6d4e2d82261f09ce957a6126480e9fe036822f1ac2b129027abe73a9286a207"
+    },
+    {
+      "filename": "pallets__flask-5014_verifier_artifact.json",
+      "sha256": "2f64e796be80e7f86edaa136ad2c04c26161e7b1dc75858731295ad6daca16cb"
+    },
+    {
+      "filename": "pydata__xarray-3993_verifier_artifact.json",
+      "sha256": "bc0716076d4cce176439ef9694c5fb2c21b53a97288e048f854b98f6e860dac9"
+    },
+    {
+      "filename": "pytest-dev__pytest-10081_verifier_artifact.json",
+      "sha256": "99c64c4fc6f17034e58ce72de2a2f0d80693a5c3b0e6bb89be331413bdb31316"
+    },
+    {
+      "filename": "scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "sha256": "7f3eee7b8f94b86bd65e5abb56fa65332d889f74319c3017aa28a9b5ab5aaee9"
+    },
+    {
+      "filename": "psf__requests-1766_verifier_artifact.json",
+      "sha256": "cf337388646dd260ae7cfcd111c53e666a870e520e610dfb051ecf13b53b60d5"
+    },
+    {
+      "filename": "pylint-dev__pylint-7080_verifier_artifact.json",
+      "sha256": "de9461c35ad75c66d25d1218ca975d3d4ef253d76781d01d65f3a014924f09b0"
+    },
+    {
+      "filename": "sympy__sympy-16792_verifier_artifact.json",
+      "sha256": "5942dd65ac76a7b98aa342f056fbff4a4f47a92adc39ef14f9450e392b79f13b"
+    },
+    {
+      "filename": "django__django-14315_verifier_artifact.json",
+      "sha256": "ccabecab7deccb8ca74dfadc0a82244f98b9515792538cd8b2267c6fb4fe905d"
+    },
+    {
+      "filename": "astropy__astropy-12907_verifier_artifact.json",
+      "sha256": "e3e95de0119df1212e243cfd4daaafd41a4a1f9e5469aa766ecd149f797b063d"
+    },
+    {
+      "filename": "django__django-13516_verifier_artifact.json",
+      "sha256": "272935939aba503b46a7547700d63ddacf45a930949d8fbb255530fcf9769b2a"
+    },
+    {
+      "filename": "matplotlib__matplotlib-21568_verifier_artifact.json",
+      "sha256": "236d83bed5593a07c22f8abffa7576bcaf868f4de2a63ca4590111b5aafd7f8c"
+    },
+    {
+      "filename": "pallets__flask-5014_verifier_artifact.json",
+      "sha256": "783d6e8919bcc9e3d3459be12d80aad18c14ae7ec31e32ac9191f8eb95bea68f"
+    },
+    {
+      "filename": "pydata__xarray-3993_verifier_artifact.json",
+      "sha256": "d6527b9631d83d016672388e8f908da559d768cdc47754b7218e87706378663e"
+    },
+    {
+      "filename": "pytest-dev__pytest-10081_verifier_artifact.json",
+      "sha256": "d41921a6d5edcb6fa1dd329de90796a164d5d6fdc9f01bc0ed3ab7e4fb56d210"
+    },
+    {
+      "filename": "scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "sha256": "7512c90d999655cbc71eb25d9cc95ed0902748c43cfd3fca5e718d7794209187"
+    },
+    {
+      "filename": "psf__requests-1766_verifier_artifact.json",
+      "sha256": "95c68371fb3c929ce28d3fc820ba32bb980d0f4631b91be7f82294a07dd0343f"
+    },
+    {
+      "filename": "pylint-dev__pylint-7080_verifier_artifact.json",
+      "sha256": "e4019e582240db6de24e5d45ed412561e23e484fd7107efe5278e00a9251ad96"
+    },
+    {
+      "filename": "sympy__sympy-16792_verifier_artifact.json",
+      "sha256": "cc2c4426a5a37ec3bd227e87a05ae7e4446a0bac28776dcf89c3f492c6d76d87"
+    },
+    {
+      "filename": "django__django-14315_verifier_artifact.json",
+      "sha256": "1b0e19e07c7efd891c22b6a1575032e7210243a8650725e0d30e039edc29fc14"
+    },
+    {
+      "filename": "astropy__astropy-12907_verifier_artifact.json",
+      "sha256": "803d53c770d9c61fbfd558754a6711ad6b179066d5c128014598122f23ea89b3"
+    },
+    {
+      "filename": "matplotlib__matplotlib-21568_verifier_artifact.json",
+      "sha256": "1a239158d6fd590cd3102caf0bbcaf8bbc7827b8a3de7b78e406cdbce5f2f1e6"
+    },
+    {
+      "filename": "pallets__flask-5014_verifier_artifact.json",
+      "sha256": "ece6a52665ec65ebbb5867ef17f7dd3e6bdb8cfdf97f8b90228d159ca2051e3f"
+    },
+    {
+      "filename": "pydata__xarray-3993_verifier_artifact.json",
+      "sha256": "bfe7851e11ab4ff26ef391cc64b538693d128dbb25a6b14850566bb8dc86525e"
+    },
+    {
+      "filename": "pytest-dev__pytest-10081_verifier_artifact.json",
+      "sha256": "a6465146617b53369bc6d21f28e7d1b744cf9983dc34e98e0ac8e4c2c92ead78"
+    },
+    {
+      "filename": "scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "sha256": "38524bb434b62e75db810ddd7dba7f646ff308ab7b3dd124763534dbfc39a3a0"
+    },
+    {
+      "filename": "psf__requests-1766_verifier_artifact.json",
+      "sha256": "bf60831e8f903cf57ab5d03449e901baea03adf8d9212cbb6b6a381f1f5494de"
+    },
+    {
+      "filename": "pylint-dev__pylint-7080_verifier_artifact.json",
+      "sha256": "14fd2b167ef53aab7047428ac1c54e2861f417b79ac04cd558d3e00ea619d05d"
+    },
+    {
+      "filename": "django__django-14315_verifier_artifact.json",
+      "sha256": "489b6dc4a6f6f90e9b337e2d80b242d60e5416a9dafa410f1728553b7493ac96"
+    }
+  ],
+  "summary": {
+    "adoption_0042::qwen3.5:4b": {
+      "cells": 9,
+      "found_unsubmitted": 3,
+      "located": 4,
+      "submission_outcomes": {
+        "found-unsubmitted": 3,
+        "never-found": 4,
+        "submitted": 1,
+        "submitted-then-dropped": 1
+      },
+      "terminal_causes": {
+        "submitted": 2,
+        "turn-cap": 5,
+        "wall-clock": 2
+      }
+    },
+    "adoption_0042::qwen3:14b": {
+      "cells": 11,
+      "found_unsubmitted": 2,
+      "located": 7,
+      "submission_outcomes": {
+        "found-unsubmitted": 2,
+        "never-found": 3,
+        "submitted": 6
+      },
+      "terminal_causes": {
+        "submitted": 6,
+        "wall-clock": 5
+      }
+    },
+    "adoption_0042::qwen3:8b": {
+      "cells": 11,
+      "found_unsubmitted": 1,
+      "located": 5,
+      "submission_outcomes": {
+        "found-unsubmitted": 1,
+        "never-found": 5,
+        "submitted": 5
+      },
+      "terminal_causes": {
+        "submitted": 5,
+        "turn-cap": 6
+      }
+    },
+    "pilot_0040::qwen3.5:4b": {
+      "cells": 9,
+      "found_unsubmitted": 1,
+      "located": 2,
+      "submission_outcomes": {
+        "found-unsubmitted": 1,
+        "never-found": 6,
+        "submitted": 2
+      },
+      "terminal_causes": {
+        "http-timeout": 1,
+        "submitted": 2,
+        "turn-cap": 4,
+        "wall-clock": 2
+      }
+    },
+    "pilot_0040::qwen3:14b": {
+      "cells": 10,
+      "found_unsubmitted": 1,
+      "located": 4,
+      "submission_outcomes": {
+        "found-unsubmitted": 1,
+        "never-found": 1,
+        "submitted": 8
+      },
+      "terminal_causes": {
+        "submitted": 8,
+        "wall-clock": 2
+      }
+    },
+    "pilot_0040::qwen3:8b": {
+      "cells": 11,
+      "found_unsubmitted": 0,
+      "located": 1,
+      "submission_outcomes": {
+        "never-found": 8,
+        "submitted": 3
+      },
+      "terminal_causes": {
+        "http-timeout": 1,
+        "submitted": 3,
+        "turn-cap": 2,
+        "wall-clock": 5
+      }
+    }
+  },
+  "timing_estimates": {
+    "adoption_0042::qwen3.5:4b": {
+      "astropy__astropy-12907": {
+        "grade": "estimate",
+        "seconds": null
+      },
+      "django__django-14315": {
+        "grade": "estimate",
+        "seconds": 451.388377
+      },
+      "matplotlib__matplotlib-21568": {
+        "grade": "estimate",
+        "seconds": 67.300773
+      },
+      "pallets__flask-5014": {
+        "grade": "estimate",
+        "seconds": 207.310884
+      },
+      "psf__requests-1766": {
+        "grade": "estimate",
+        "seconds": 158.06317
+      },
+      "pydata__xarray-3993": {
+        "grade": "estimate",
+        "seconds": 331.069365
+      },
+      "pylint-dev__pylint-7080": {
+        "grade": "estimate",
+        "seconds": 262.534961
+      },
+      "pytest-dev__pytest-10081": {
+        "grade": "estimate",
+        "seconds": 313.674078
+      },
+      "scikit-learn__scikit-learn-10844": {
+        "grade": "estimate",
+        "seconds": 185.793074
+      }
+    },
+    "adoption_0042::qwen3:14b": {
+      "astropy__astropy-12907": {
+        "grade": "estimate",
+        "seconds": null
+      },
+      "django__django-13516": {
+        "grade": "estimate",
+        "seconds": 307.698088
+      },
+      "django__django-14315": {
+        "grade": "estimate",
+        "seconds": 202.412727
+      },
+      "matplotlib__matplotlib-21568": {
+        "grade": "estimate",
+        "seconds": 284.268234
+      },
+      "pallets__flask-5014": {
+        "grade": "estimate",
+        "seconds": 554.382314
+      },
+      "psf__requests-1766": {
+        "grade": "estimate",
+        "seconds": 251.445321
+      },
+      "pydata__xarray-3993": {
+        "grade": "estimate",
+        "seconds": 151.911944
+      },
+      "pylint-dev__pylint-7080": {
+        "grade": "estimate",
+        "seconds": 241.564971
+      },
+      "pytest-dev__pytest-10081": {
+        "grade": "estimate",
+        "seconds": 960.010188
+      },
+      "scikit-learn__scikit-learn-10844": {
+        "grade": "estimate",
+        "seconds": 162.30988
+      },
+      "sympy__sympy-16792": {
+        "grade": "estimate",
+        "seconds": 310.307203
+      }
+    },
+    "adoption_0042::qwen3:8b": {
+      "astropy__astropy-12907": {
+        "grade": "estimate",
+        "seconds": null
+      },
+      "django__django-13516": {
+        "grade": "estimate",
+        "seconds": 173.819549
+      },
+      "django__django-14315": {
+        "grade": "estimate",
+        "seconds": 92.469456
+      },
+      "matplotlib__matplotlib-21568": {
+        "grade": "estimate",
+        "seconds": 390.509115
+      },
+      "pallets__flask-5014": {
+        "grade": "estimate",
+        "seconds": 93.708345
+      },
+      "psf__requests-1766": {
+        "grade": "estimate",
+        "seconds": 127.639198
+      },
+      "pydata__xarray-3993": {
+        "grade": "estimate",
+        "seconds": 154.474837
+      },
+      "pylint-dev__pylint-7080": {
+        "grade": "estimate",
+        "seconds": 180.893567
+      },
+      "pytest-dev__pytest-10081": {
+        "grade": "estimate",
+        "seconds": 180.998066
+      },
+      "scikit-learn__scikit-learn-10844": {
+        "grade": "estimate",
+        "seconds": 40.108318
+      },
+      "sympy__sympy-16792": {
+        "grade": "estimate",
+        "seconds": 120.141855
+      }
+    },
+    "pilot_0040::qwen3.5:4b": {
+      "django__django-13516": {
+        "grade": "estimate",
+        "seconds": 21033.889668
+      },
+      "django__django-14315": {
+        "grade": "estimate",
+        "seconds": 570.785794
+      },
+      "matplotlib__matplotlib-21568": {
+        "grade": "estimate",
+        "seconds": 235.202662
+      },
+      "pallets__flask-5014": {
+        "grade": "estimate",
+        "seconds": 278.614937
+      },
+      "psf__requests-1766": {
+        "grade": "estimate",
+        "seconds": 265.173779
+      },
+      "pydata__xarray-3993": {
+        "grade": "estimate",
+        "seconds": 116.391786
+      },
+      "pytest-dev__pytest-10081": {
+        "grade": "estimate",
+        "seconds": 250.390619
+      },
+      "scikit-learn__scikit-learn-10844": {
+        "grade": "estimate",
+        "seconds": 105.483238
+      },
+      "sympy__sympy-16792": {
+        "grade": "estimate",
+        "seconds": null
+      }
+    },
+    "pilot_0040::qwen3:14b": {
+      "astropy__astropy-12907": {
+        "grade": "estimate",
+        "seconds": null
+      },
+      "django__django-13516": {
+        "grade": "estimate",
+        "seconds": 265.944289
+      },
+      "django__django-14315": {
+        "grade": "estimate",
+        "seconds": 192.604364
+      },
+      "pallets__flask-5014": {
+        "grade": "estimate",
+        "seconds": 424.355056
+      },
+      "psf__requests-1766": {
+        "grade": "estimate",
+        "seconds": 232.770466
+      },
+      "pydata__xarray-3993": {
+        "grade": "estimate",
+        "seconds": 205.005878
+      },
+      "pylint-dev__pylint-7080": {
+        "grade": "estimate",
+        "seconds": 119.965452
+      },
+      "pytest-dev__pytest-10081": {
+        "grade": "estimate",
+        "seconds": 3895.398341
+      },
+      "scikit-learn__scikit-learn-10844": {
+        "grade": "estimate",
+        "seconds": 504.653578
+      },
+      "sympy__sympy-16792": {
+        "grade": "estimate",
+        "seconds": 273.729557
+      }
+    },
+    "pilot_0040::qwen3:8b": {
+      "astropy__astropy-12907": {
+        "grade": "estimate",
+        "seconds": 23165.954721
+      },
+      "django__django-13516": {
+        "grade": "estimate",
+        "seconds": 176.751974
+      },
+      "django__django-14315": {
+        "grade": "estimate",
+        "seconds": 306.898384
+      },
+      "matplotlib__matplotlib-21568": {
+        "grade": "estimate",
+        "seconds": 224.6962
+      },
+      "pallets__flask-5014": {
+        "grade": "estimate",
+        "seconds": 107.250241
+      },
+      "psf__requests-1766": {
+        "grade": "estimate",
+        "seconds": 294.920749
+      },
+      "pydata__xarray-3993": {
+        "grade": "estimate",
+        "seconds": 84.512443
+      },
+      "pylint-dev__pylint-7080": {
+        "grade": "estimate",
+        "seconds": 253.887728
+      },
+      "pytest-dev__pytest-10081": {
+        "grade": "estimate",
+        "seconds": null
+      },
+      "scikit-learn__scikit-learn-10844": {
+        "grade": "estimate",
+        "seconds": 503.282327
+      },
+      "sympy__sympy-16792": {
+        "grade": "estimate",
+        "seconds": 256.485926
+      }
+    }
+  },
+  "timing_grade": "estimate"
+}

@@ -1,0 +1,26 @@
+{
+  "case_id": "astropy__astropy-12907",
+  "citations_submitted": null,
+  "citations_surviving": null,
+  "detector_version": "0043/1",
+  "endpoint": "http://127.0.0.1:11434/v1",
+  "exclusivity_proof_ref": {
+    "config_hash": "4c7a871a8b209821b9a82eb616463f6bb6ff136f447acf43d95419c0fa6e25ea",
+    "ledger": "/Users/daniel.stolf/development/harpyja/specs/0043-diagnosis/diagnosis_run/diagnosis_results.json",
+    "ledger_schema_version": "0041/pilot/2"
+  },
+  "model": "qwen3.5:4b",
+  "requested_model": "qwen3.5:4b",
+  "schema_version": "0043/diagnosis-cell/1",
+  "served_model": "qwen3.5:4b",
+  "submission_outcome": "never-found",
+  "terminal_bucket": "empty",
+  "tool_names_invoked": [
+    "ls",
+    "grep",
+    "symbols"
+  ],
+  "verifier_artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/diagnosis_0043/qwen3_5_4b/astropy__astropy-12907_verifier_artifact.json",
+  "verifier_schema_version": "0043/1",
+  "verifier_status": "PASSED"
+}

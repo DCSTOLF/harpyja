@@ -1,0 +1,57 @@
+{
+  "config": {
+    "config_id": "0043/diagnosis-config/1",
+    "counted_buckets": [
+      "correct",
+      "right-file-wrong-span",
+      "wrong-file",
+      "empty"
+    ],
+    "detector_version": "0043/1",
+    "explorer_think": null,
+    "gate_proof_version": "0041/exclusivity/1",
+    "ledger_schema_version": "0041/pilot/2",
+    "lever_table_hash": "96626acabe191669bd38799452b3d0f29831283d231f5bc61c87065c6446709f",
+    "levers_under_test": [
+      "submit-early-prompt-nudge"
+    ],
+    "lm_http_timeout_s": 300.0,
+    "min_before_found_unsubmitted": 3,
+    "min_covered_before_cells": 8,
+    "optional_models": [
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "pilot_case_ids": [
+      "astropy__astropy-12907",
+      "django__django-13516",
+      "matplotlib__matplotlib-21568",
+      "pallets__flask-5014",
+      "pydata__xarray-3993",
+      "pytest-dev__pytest-10081",
+      "scikit-learn__scikit-learn-10844",
+      "psf__requests-1766",
+      "pylint-dev__pylint-7080",
+      "sympy__sympy-16792",
+      "django__django-14315"
+    ],
+    "required_models": [
+      "qwen3:14b"
+    ],
+    "scout_max_turns": 10,
+    "scout_wall_clock_s": 240.0,
+    "sut_files": [
+      "harpyja/scout/context_map.py",
+      "harpyja/scout/explorer_backend.py",
+      "harpyja/scout/explorer_loop.py",
+      "harpyja/scout/explorer_tools.py",
+      "harpyja/config/settings.py"
+    ],
+    "sut_hash": "aeed1acab739da1f3a098f071dc8a5361f51e4a13e63d7642623cd1fca79c5f1"
+  },
+  "config_hash": "4c7a871a8b209821b9a82eb616463f6bb6ff136f447acf43d95419c0fa6e25ea",
+  "frozen_after": "stage-1 lever selection over the committed T9 attribution",
+  "frozen_before": "any live re-measurement spend (stage-2 freeze, spec 0043 T11)",
+  "schema_version": "0043/diagnosis-config/1",
+  "sut_state": "post-lever (T13 submit-early nudge landed; params pin verbatim)"
+}
