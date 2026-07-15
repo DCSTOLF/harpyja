@@ -306,6 +306,45 @@
   `harpyja/eval/live_verifier.py` `silence_to_wrong_confidence` +
   `unfired_silence_to_wrong_confidence`, `harpyja/eval/live_verifier.py` `build_trajectory_record`,
   spec 0045 AC2/AC7.)
+- **A frozen NET band can only GATE a stochastic re-measurement if the estimator under it
+  is a MULTI-DRAW estimate — a point estimate from ONE stochastic run is not one, and a
+  single-draw band will flag drift on noise.** A sanity band frozen before the numbers
+  (0046's baseline `[1, 3]`) is sound only if the quantity it bounds is stable enough that
+  a same-config re-run lands inside it; on pilot-N stochastic models (qwen3, 33 cells) it
+  is not. 0044's operating point drew conv 3 / reg 1 (net +2); the SAME reverted gate on
+  the SAME 33 cells drew conv 3 / reg 3 (net 0) — a 2-regression swing on ~7 correct cells,
+  well within run-to-run variance — and the frozen band correctly typed
+  `BASELINE_DRIFT_STOP`, refusing to certify a comparison point that did not reproduce. The
+  discipline is: DO NOT loosen the band post-hoc and DO NOT run the downstream arm "for
+  observability" (both are the steering the freeze exists to prevent); instead certify the
+  comparison point with a MULTI-DRAW estimate — the median of 2–3 draws, or a band derived
+  from the observed per-run variance — before a frozen NET band can gate a re-measurement.
+  When the instrument's run-to-run noise reaches the effect sizes the levers are being
+  tuned against, the honest reading is not "the lever traded" but "the instrument can no
+  longer resolve whether it traded" — and the next move is enlarging the pool, not
+  re-levering. This extends the two-stage-freeze/frozen-predicate discipline down one
+  level: a frozen band is only as sound as the estimator beneath it. (See
+  `harpyja/eval/reactive_outcome.py` `decide_reactive_outcome` `BASELINE_DRIFT_STOP`,
+  `specs/0046-submission/outcome.md`, spec 0046 AC5.)
+- **A two-arm lever comparison on ONE SUT wires the BEHAVIOR behind a single-bit
+  `explorer_`-scoped toggle (baseline off / new on) — an observability-only lever
+  (record-but-don't-change) produces a NO_EFFECT null BY CONSTRUCTION, because the arms are
+  behaviorally identical and net is 0 a priori.** When a spec measures a NEW policy against
+  a BASELINE on the same code, the two arms must differ in exactly one thing: the behavior
+  under test. If the "new" arm only RECORDS extra fields (triggers fired, confirmation
+  outcome) without changing what the model does or what gets emitted, both arms run the
+  identical SUT and any measured delta is pure noise — the comparison cannot come out
+  anything but null. The clean construction is a single-bit toggle (0046's
+  `explorer_reactive_confirm`, default OFF = baseline byte-identical to the prior operating
+  point; ON = the new behavior: reactive nudge-suppression on a disconfirming trigger + the
+  confirm-before-submit partition), so both arms share ONE byte-identical SUT and only the
+  flag differs — and the production default stays the known-good baseline. This was caught
+  MID-IMPLEMENTATION in 0046 (T1–T12 were observability-only; Option A wired the real
+  behavior behind the toggle) and is the two-arm twin of the harness-never-mutates-SUT
+  rule: the toggle is the sanctioned single point of behavioral difference, and a record-only
+  field is a DIAGNOSTIC beside the verdict, never the lever itself. (See
+  `harpyja/config/settings.py` `explorer_reactive_confirm`, `harpyja/scout/reactive_policy.py`
+  + `harpyja/scout/confirm.py`, spec 0046 AC2/AC3.)
 - **A frozen predicate must have a CONJUNCT PER DIRECTION the lever can err in — a predicate with
   fewer sides than the lever's error space will sell a TRADE as a win.** When a lever errs in
   opposite directions on different cells (a confidence gate too loose on some, too tight on
@@ -1230,6 +1269,66 @@
   `metrics.span_hit_kind` BY IDENTITY. (See `harpyja/scout/confidence_gate.py`,
   `harpyja/scout/explorer_loop.py` `_answer_tool_call` stash + the post-batch `"confidence-nudge"`
   injection + the `LoopResult.confidence_*` facts, spec 0044 AC2/AC3.)
+- **A committed fixture derived from a THIRD-PARTY dataset is pinned by CONTENT IDENTITY — a
+  per-case re-derivation from a fresh source snapshot asserted byte-identical to the committed
+  bytes — NEVER by the library's incidental fingerprint.** A HuggingFace `datasets`
+  `_fingerprint` is a cache/transform-state token that changes across datasets-lib versions and
+  cache states even for byte-identical content — it is NOT the dataset's content revision, and
+  pinning against it rots false on a benign environment change (the original SWE-bench convert
+  mislabeled `_fingerprint` as `hf_revision` and would have flagged spurious drift). The
+  drift-guard instead RE-DERIVES each already-pinned case from the freshly-loaded snapshot and
+  asserts it byte-identical to the committed fixture, STOP-AND-WARN on a real content change or a
+  now-missing pinned case; the observed fingerprint is recorded as INFORMATIONAL provenance
+  (`source_fingerprint_observed` / `source_fingerprint_frozen`), never as the gate. This is
+  strictly stronger than a fingerprint check (it verifies the bytes the fixture actually depends
+  on) and is the eval-fixture twin of the derived-artifact self-authentication rule (a sidecar
+  fingerprint over the data's own bytes, not its producer's identity). (See
+  `harpyja/eval/swebench_eval.py` `assert_pool_append_preserves_existing_labels` +
+  `line_sha_map`, `swebench_verified.provenance.json` `source_fingerprint_*`, spec 0047 T11/T20.)
+- **When a SHARED committed fixture is ENLARGED, snapshot the prior state and REDIRECT the
+  historical drift-guards to the snapshot via their pure cores — never rewrite the historical
+  claim against the grown fixture.** A fixture shared across specs (e.g. the terse eval set) is
+  pinned by earlier specs' drift-guards that RECOMPUTE a historical claim from the LIVE fixture;
+  enlarging the fixture would break those recomputations, and editing the historical claim to the
+  new numbers would silently falsify what the earlier spec actually measured. Instead commit a
+  point-in-time snapshot of the pre-enlargement state (`pre_enlargement_terse_snapshot.jsonl`) and
+  repoint each historical guard to LOAD the snapshot through the SAME pure projection core the
+  live path uses (`ab_power_precheck`-style), touching zero live loaders — so history is preserved
+  EXACTLY and the live pool is free to grow. This is the fixture-level application of the
+  migrate-before-you-delete / claim-pin discipline: the old claim keeps its old evidence, the new
+  work runs on the enlarged live surface, and neither perturbs the other. (See
+  `harpyja/eval/test_terse_floor.py` / `test_think_ab_precheck.py` / `test_think_ab_claim.py`
+  redirected to `specs/0047-enlargement/pre_enlargement_terse_snapshot.jsonl`, spec 0047 T20.)
+- **A schema guard cannot catch a PLAUSIBLE-BUT-FABRICATED label — audit a hand-eyeballed SAMPLE
+  of any authored/model-produced dataset before committing it.** A well-formed value that PASSES
+  every schema/enum/hash check can still be semantically wrong when a label is produced by a model
+  plus fabricating driver code: spec 0047's driver set `concept_span = gold` for every "divergent"
+  concept-vs-patch verdict — a self-contradiction (concept == patch IS "same") that validated
+  cleanly and was caught ONLY by a 20-case `audit_sample.json` eyeball, then fixed deterministically
+  (fabricated-divergent → the conservative substantiable `same` default; the model's opinion
+  retained as ADVISORY provenance for a future repo-aware pass). Emit a bounded audit sample
+  alongside any authored fixture and inspect it; a label whose correctness needs evidence the
+  labeler cannot access (here a repo-aware distinct concept span) is tagged to the DEFENSIBLE
+  default, not fabricated, and the gap is recorded as a named limitation. Keep the load-bearing,
+  DETERMINISTICALLY-computed axis (0047's reachability, 44/9 — the `RETRIEVAL_FUNDAMENTAL` confound
+  guard) separate from the advisory one so the fabrication cannot contaminate it. (See
+  `harpyja/eval/enlargement_authoring.py` `tag_enlarged_row` / `audit_sample`,
+  `specs/0047-enlargement/findings.md` tag-quality section, spec 0047 T15/AC3.)
+- **A frozen-config RE-FREEZE is LEGITIMATE — not steering — when the instrument STRUCTURALLY
+  cannot reach the target under the old constant, provided the relaxation is MINIMAL and its
+  derivation is recorded.** The freeze-before-numbers discipline forbids loosening a rule to
+  rescue a result, but it does NOT forbid correcting a constant that a hard structural fact makes
+  unsatisfiable: 0036's ≤3/repo cap × SWE-bench_Verified's 12 repos hard-ceilings new raw at 36,
+  below the derived 96-raw need — the ≤3/repo invariant and the size-to-40-conceptual target are
+  mutually incompatible on a 12-repo benchmark. The sanctioned path is to re-freeze to the MINIMAL
+  relaxation that makes the target attainable (≤8/repo → 12×8=96 = the derived need), record the
+  justification in a `*_derivation` string on the frozen config, mint a NEW config hash
+  (`819af2e6…`), and name the accepted cost (per-repo overfit) + the deferred alternative
+  (broadening to new repos — a distinct spec). The distinction from steering: the constant is
+  changed because the OLD value cannot be met by ANY execution (a structural benchmark fact),
+  the change is derived and minimal, and it lands BEFORE the outcome numbers — not tuned toward a
+  desired verdict after seeing them. (See `harpyja/eval/enlargement.py` `EnlargementConfig`
+  `max_per_repo` / `max_per_repo_derivation`, `ENLARGEMENT_CONFIG_HASH_0047`, spec 0047 OQ3.)
 
 ## Trajectory-verified measurement
 

@@ -1,0 +1,25 @@
+[run] arms: author=codex verifier=claude
+[run] preflight OK: author=codex
+[run] preflight OK: verifier=claude
+[convert] loading princeton-nlp/SWE-bench_Verified (split=test) …
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[convert] NOTE: HF fingerprint '1fdfd21ba2621130' != frozen '9730d2e041ee274e', but the pinned slice is CONTENT-identical (benign arrow-fingerprint change); recording both.
+
+[run] enlargement complete.
+  conceptual_n=44 lexical_n=9
+  attrition: leaky=17 blind_ineligible=22 dropped=17
+  verdicts: {
+  "bakeoff:qwen3:14b-vs-qwen3:8b": "powered",
+  "bakeoff:qwen3:14b-vs-qwen3.5:4b": "powered",
+  "bakeoff:qwen3:8b-vs-qwen3.5:4b": "powered",
+  "ab-feasibility": "powered",
+  "policy-baseline-variance": "powered"
+}
+  AUDIT ME: harpyja/eval/fixtures/audit_sample.json (20 cases)
+  provenance: harpyja/eval/fixtures/swebench_verified.provenance.json
+Exception ignored in: <function ResourceTracker.__del__ at 0x10f6979c0>
+Traceback (most recent call last):
+  File "/Users/daniel.stolf/development/harpyja/.venv/lib/python3.12/site-packages/multiprocess/resource_tracker.py", line 80, in __del__
+  File "/Users/daniel.stolf/development/harpyja/.venv/lib/python3.12/site-packages/multiprocess/resource_tracker.py", line 89, in _stop
+  File "/Users/daniel.stolf/development/harpyja/.venv/lib/python3.12/site-packages/multiprocess/resource_tracker.py", line 102, in _stop_locked
+AttributeError: '_thread.RLock' object has no attribute '_recursion_count'

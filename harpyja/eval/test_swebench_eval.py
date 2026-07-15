@@ -626,3 +626,83 @@ def test_preflight_subparser_wired():
     ns = parser.parse_args(["preflight"])
     assert ns.cmd == "preflight"
     assert callable(ns.func)
+
+
+# --------------------------------------------------------------------------- #
+# Spec 0047 — audited-convert append integrity + drift-guard (AC1)
+# --------------------------------------------------------------------------- #
+
+
+def _raw_row(cid: str, repo: str = "owner/repo") -> dict:
+    return {
+        "case_id": cid,
+        "query": f"issue {cid}",
+        "repo": repo,
+        "expected_spans": [{"path": "m.py", "start_line": 10, "end_line": 12}],
+        "classification": "point",
+        "base_commit": "deadbeef",
+        "language": "python",
+        "new_file_only": False,
+    }
+
+
+def test_append_converted_cases_preserves_existing_bytes_exactly():
+    from harpyja.eval.swebench_eval import append_converted_cases, line_sha_map
+
+    existing = [_raw_row("a__a-1"), _raw_row("c__c-3")]
+    baseline = line_sha_map(existing)
+    merged = append_converted_cases(existing, [_raw_row("b__b-2")])
+    merged_map = line_sha_map(merged)
+    # every existing case's serialized bytes are byte-identical after append
+    for cid, sha in baseline.items():
+        assert merged_map[cid] == sha
+    # output is sorted by case_id and the new case is present
+    assert [r["case_id"] for r in merged] == ["a__a-1", "b__b-2", "c__c-3"]
+
+
+def test_append_converted_cases_rejects_duplicate_case_ids():
+    from harpyja.eval.swebench_eval import append_converted_cases
+
+    existing = [_raw_row("a__a-1")]
+    with pytest.raises(ValueError, match="duplicate"):
+        append_converted_cases(existing, [_raw_row("a__a-1", repo="other/repo")])
+
+
+def test_extend_provenance_chains_source_snapshot_and_new_sha(tmp_path):
+    from harpyja.eval.swebench_eval import _write_jsonl, extend_provenance
+
+    prior = {
+        "hf_dataset_id": "princeton-nlp/SWE-bench_Verified",
+        "hf_revision": "old-rev",
+        "hf_split": "test",
+        "raw_fixture_sha256": "0" * 64,
+        "sample_case_ids": ["a__a-1"],
+    }
+    raw = tmp_path / "raw.jsonl"
+    _write_jsonl(raw, [_raw_row("a__a-1"), _raw_row("b__b-2")])
+    updated = extend_provenance(
+        prior, raw, new_ids=["b__b-2"], snapshot={"hf_revision": "new-rev"}
+    )
+    # the prior sha is superseded but PRESERVED (never silently dropped)
+    assert updated["prior_raw_fixture_sha256"] == "0" * 64
+    assert updated["raw_fixture_sha256"] != "0" * 64
+    assert len(updated["raw_fixture_sha256"]) == 64
+    assert "b__b-2" in updated["sample_case_ids"]
+    assert "a__a-1" in updated["sample_case_ids"]
+    assert updated["hf_revision"] == "new-rev"
+
+
+def test_assert_pool_append_preserves_existing_labels_reuses_raw_pin():
+    from harpyja.eval.swebench_eval import (
+        assert_pool_append_preserves_existing_labels,
+        line_sha_map,
+    )
+
+    existing = [_raw_row("a__a-1"), _raw_row("b__b-2")]
+    baseline = line_sha_map(existing)
+    # unchanged existing labels pass
+    assert_pool_append_preserves_existing_labels(existing + [_raw_row("c__c-3")], baseline)
+    # a mutated existing label is caught loudly
+    drifted = [dict(existing[0], base_commit="TAMPERED"), existing[1]]
+    with pytest.raises(ValueError, match="drift"):
+        assert_pool_append_preserves_existing_labels(drifted, baseline)

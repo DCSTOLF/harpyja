@@ -442,6 +442,73 @@ def _sha256_file(path: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Spec 0047 — audited-convert APPEND (enlarge the pool past 50; AC1)
+#
+# The existing raw labels are the SOLE authority and are reused VERBATIM — never
+# re-transcribed, never re-derived. New cases are APPENDED, sha256-pinned, and the
+# provenance chain is extended (the prior sha superseded but preserved). A per-case
+# line-sha drift-guard proves the committed labels byte-identical BEFORE any join.
+# --------------------------------------------------------------------------- #
+
+def line_sha_map(rows: list[dict]) -> dict[str, str]:
+    """Map case_id → sha256 of the case's canonical JSON line — the per-case
+    drift-guard baseline (the same `_write_jsonl` serialization is byte-identical)."""
+    out: dict[str, str] = {}
+    for r in rows:
+        line = json.dumps(r, ensure_ascii=False)
+        out[r["case_id"]] = hashlib.sha256(line.encode("utf-8")).hexdigest()
+    return out
+
+
+def append_converted_cases(existing_rows: list[dict], new_cases: list[dict]) -> list[dict]:
+    """Append new audited-convert cases to the existing pool, rejecting duplicate
+    case_ids loudly (never silently merged/overwritten). Output is sorted by case_id
+    (the `cmd_convert` deterministic-output discipline); existing rows are copied
+    verbatim so their serialized bytes are unchanged."""
+    seen = {r["case_id"] for r in existing_rows}
+    merged = list(existing_rows)
+    for c in new_cases:
+        cid = c["case_id"]
+        if cid in seen:
+            raise ValueError(f"duplicate case_id on append: {cid!r}")
+        seen.add(cid)
+        merged.append(c)
+    merged.sort(key=lambda c: c["case_id"])
+    return merged
+
+
+def assert_pool_append_preserves_existing_labels(
+    rows: list[dict], baseline_sha_map: dict[str, str]
+) -> None:
+    """Raise unless every case in `baseline_sha_map` still serializes byte-identical
+    in `rows` — the drift-guard that reuses the `assert_raw_pin` sha discipline so
+    existing labels are proven unchanged before any downstream join runs."""
+    current = line_sha_map(rows)
+    for cid, sha in baseline_sha_map.items():
+        actual = current.get(cid)
+        if actual != sha:
+            raise ValueError(
+                f"existing label drift for {cid!r}: {actual} != baseline {sha} — "
+                f"refusing to enlarge a pool whose committed labels changed"
+            )
+
+
+def extend_provenance(
+    prov: dict, raw_path: Path, *, new_ids: list[str], snapshot: dict
+) -> dict:
+    """Extend the committed provenance for the enlarged raw fixture: supersede the
+    `raw_fixture_sha256` (preserving the prior as `prior_raw_fixture_sha256`), grow
+    `sample_case_ids`, and record the source snapshot's `hf_revision`."""
+    updated = dict(prov)
+    updated["prior_raw_fixture_sha256"] = prov.get("raw_fixture_sha256")
+    updated["raw_fixture_sha256"] = _sha256_file(Path(raw_path))
+    updated["sample_case_ids"] = sorted(set(prov.get("sample_case_ids", [])) | set(new_ids))
+    if snapshot.get("hf_revision"):
+        updated["hf_revision"] = snapshot["hf_revision"]
+    return updated
+
+
+# --------------------------------------------------------------------------- #
 # per-case-repo driver (AC5, AC6, AC7, AC8, AC11) — the multi-repo gap
 # --------------------------------------------------------------------------- #
 

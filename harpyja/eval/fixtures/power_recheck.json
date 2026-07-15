@@ -1,0 +1,17 @@
+{
+  "blind_ineligible_count": 22,
+  "conceptual_n": 44,
+  "config_hash": "819af2e623ced63c0132206eeb274ae908750db49ef1bd0cb450cea8e67a5402",
+  "coverage": 44,
+  "dropped_count": 17,
+  "leaky_count": 17,
+  "lexical_n": 9,
+  "questions": {
+    "ab-feasibility": "powered",
+    "bakeoff:qwen3:14b-vs-qwen3.5:4b": "powered",
+    "bakeoff:qwen3:14b-vs-qwen3:8b": "powered",
+    "bakeoff:qwen3:8b-vs-qwen3.5:4b": "powered",
+    "policy-baseline-variance": "powered"
+  },
+  "schema_version": "0047/power/1"
+}

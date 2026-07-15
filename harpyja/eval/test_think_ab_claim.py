@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import json
+from pathlib import Path
 
 from harpyja.eval.think_ab import (
     AB_CONFIG_HASH_0039,
@@ -14,7 +16,35 @@ from harpyja.eval.think_ab_claim import (
     committed_ab_claim_path,
     load_committed_ab_claim,
 )
-from harpyja.eval.think_ab_precheck import run_precheck
+from harpyja.eval.think_ab_precheck import (
+    ab_power_precheck,
+    load_committed_pilot_ledger,
+)
+
+
+# spec 0047 enlarged the live terse fixture; 0039's committed claim is about the 19-case
+# pool, re-verified against the snapshot 0047 preserved (see test_think_ab_precheck).
+def _snapshot_path() -> Path:
+    # archive-first (the 0036 pilot-ledger convention): 0047's dir moves to .archive on close.
+    root = Path(__file__).resolve().parents[2]
+    name = "pre_enlargement_terse_snapshot.jsonl"
+    arch = root / "specs" / ".archive" / "0047-enlargement" / name
+    return arch if arch.is_file() else root / "specs" / "0047-enlargement" / name
+
+
+_TERSE_SNAPSHOT_PRE_0047 = _snapshot_path()
+
+
+def _snapshot_precheck(cfg):
+    reach = {
+        row["case_id"]: row["reachability"]
+        for row in (
+            json.loads(x)
+            for x in _TERSE_SNAPSHOT_PRE_0047.read_text(encoding="utf-8").splitlines()
+            if x.strip()
+        )
+    }
+    return ab_power_precheck(load_committed_pilot_ledger(), reach, cfg, full_conceptual_n=15)
 
 
 def test_committed_ab_claim_matches_computed_verdict():
@@ -23,7 +53,7 @@ def test_committed_ab_claim_matches_computed_verdict():
     # gated branch the computed truth is the AC5 pre-check outcome.
     claim = load_committed_ab_claim()
     assert claim["config_hash"] == AB_CONFIG_HASH_0039
-    computed = run_precheck(PREREGISTERED_AB_CONFIG_0039)
+    computed = _snapshot_precheck(PREREGISTERED_AB_CONFIG_0039)
     if claim["status"] == "gated-under-powered-stop":
         assert computed.outcome == PRECHECK_STOP
         assert claim["precheck"] == dataclasses.asdict(computed)

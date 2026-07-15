@@ -19,6 +19,19 @@ from harpyja.eval.terse_dataset import (
 _FIX = Path(__file__).parent / "fixtures"
 _RAW = _FIX / "swebench_verified.raw.jsonl"
 _PROV = _FIX / "swebench_verified.provenance.json"
+# spec 0047 ENLARGED the live terse fixture (19→53). 0036's committed claims are pinned
+# against the pre-enlargement 19-case pool, preserved as a snapshot by 0047. The live
+# raw/prov are reused (the 19 case_ids are a subset of the enlarged raw; the pin holds).
+def _snapshot_path() -> Path:
+    # archive-first (the 0036 pilot-ledger convention): 0047's dir moves to .archive on
+    # close; fall back to the live spec dir if it has not been consolidated yet.
+    root = Path(__file__).resolve().parents[2]
+    name = "pre_enlargement_terse_snapshot.jsonl"
+    arch = root / "specs" / ".archive" / "0047-enlargement" / name
+    return arch if arch.is_file() else root / "specs" / "0047-enlargement" / name
+
+
+_TERSE_SNAPSHOT_PRE_0047 = _snapshot_path()
 
 
 def _terse_row(case_id="astropy__astropy-12907", **over) -> dict:
@@ -189,9 +202,7 @@ def test_committed_pilot_fixture_is_tagged_and_stratum_reported():
     # min_n=12 static floor is the FULL set's gate, deliberately not asserted here.
     from harpyja.eval.terse_dataset import conceptual_stratum_report
 
-    ds = load_terse_dataset(
-        Path(__file__).parent / "fixtures" / "swebench_verified.terse.jsonl", _RAW, _PROV
-    )
+    ds = load_terse_dataset(_TERSE_SNAPSHOT_PRE_0047, _RAW, _PROV)
     assert ds.cases, "committed fixture joined to zero cases"
     assert all(c.reachability in {"lexical", "conceptual"} for c in ds.cases)
     lex_n, con_n, status = conceptual_stratum_report(ds, pilot_sized=True)
@@ -219,9 +230,7 @@ def test_committed_full_set_report_matches_computed_truth():
     assert report_path.exists(), "full_set_report.json not committed"
     report = json.loads(report_path.read_text())
 
-    ds = load_terse_dataset(
-        Path(__file__).parent / "fixtures" / "swebench_verified.terse.jsonl", _RAW, _PROV
-    )
+    ds = load_terse_dataset(_TERSE_SNAPSHOT_PRE_0047, _RAW, _PROV)
     floor = validate_terse_set_floor(ds)
     lex_n, con_n, status = conceptual_stratum_report(ds)
     target_met = meets_full_n_target(ds, PREREGISTERED_AC8_CONFIG_0036)

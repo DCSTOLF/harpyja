@@ -1,0 +1,15 @@
+[convert] loading princeton-nlp/SWE-bench_Verified (split=test) …
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[convert] NOTE: HF fingerprint '1fdfd21ba2621130' != frozen '9730d2e041ee274e', but the pinned slice is CONTENT-identical (benign arrow-fingerprint change); recording both.
+[run] claude attempt 1 failed: rc=1 stderr=
+[run] claude attempt 2 failed: rc=1 stderr=
+[run] claude attempt 3 failed: rc=1 stderr=
+
+[STOP-AND-WARN] operator CLI claude failed after 3 attempts: rc=1 stderr=
+(ledger preserved — fix, then re-run to resume)
+Exception ignored in: <function ResourceTracker.__del__ at 0x1101df7e0>
+Traceback (most recent call last):
+  File "/Users/daniel.stolf/development/harpyja/.venv/lib/python3.12/site-packages/multiprocess/resource_tracker.py", line 80, in __del__
+  File "/Users/daniel.stolf/development/harpyja/.venv/lib/python3.12/site-packages/multiprocess/resource_tracker.py", line 89, in _stop
+  File "/Users/daniel.stolf/development/harpyja/.venv/lib/python3.12/site-packages/multiprocess/resource_tracker.py", line 102, in _stop_locked
+AttributeError: '_thread.RLock' object has no attribute '_recursion_count'

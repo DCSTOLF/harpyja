@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from harpyja.eval.ac8_pilot import AC8_CONFIG_HASH_0036
 from harpyja.eval.think_ab import PRECHECK_STOP, PREREGISTERED_AB_CONFIG_0039
 from harpyja.eval.think_ab_precheck import (
@@ -9,10 +12,34 @@ from harpyja.eval.think_ab_precheck import (
     ab_power_precheck,
     committed_pilot_ledger_path,
     load_committed_pilot_ledger,
-    run_precheck,
 )
 
 _CFG = PREREGISTERED_AB_CONFIG_0039
+
+# spec 0047 ENLARGED the live terse fixture (19→53), so `run_precheck()` (which reads it
+# live) now reflects the enlarged pool. 0039's HISTORICAL feasibility finding was about
+# the 19-case pool; it is re-verified here against the pre-enlargement snapshot 0047
+# preserved, via the pure `ab_power_precheck` core (zero-touch to 0039's live loader).
+def _snapshot_path() -> Path:
+    # archive-first (the 0036 pilot-ledger convention): 0047's dir moves to .archive on close.
+    root = Path(__file__).resolve().parents[2]
+    name = "pre_enlargement_terse_snapshot.jsonl"
+    arch = root / "specs" / ".archive" / "0047-enlargement" / name
+    return arch if arch.is_file() else root / "specs" / "0047-enlargement" / name
+
+
+_TERSE_SNAPSHOT_PRE_0047 = _snapshot_path()
+
+
+def _snapshot_reachability() -> dict[str, str]:
+    return {
+        row["case_id"]: row["reachability"]
+        for row in (
+            json.loads(x)
+            for x in _TERSE_SNAPSHOT_PRE_0047.read_text(encoding="utf-8").splitlines()
+            if x.strip()
+        )
+    }
 
 
 def _fake_ledger(buckets: dict[str, str], model: str = _CFG.lm_model) -> dict:
@@ -98,12 +125,14 @@ def test_precheck_loads_committed_ledger_archive_first():
 
 
 def test_precheck_projects_only_first_10_of_19_conceptual_subset():
-    # THE REAL COMMITTED EVIDENCE: the pilot covered only the first 10 of 19
-    # cases → the projectable conceptual subset is 7 (< 15); the 14b arm
-    # located 3 of them → projected upper bound round(15*3/7) = 6 < 8 → the
-    # pre-check fires UNDER_POWERED_STOP. This is the spec's honest arithmetic,
-    # test-pinned to the committed truth.
-    outcome = run_precheck(_CFG)
+    # THE REAL COMMITTED EVIDENCE (pre-0047 pool): the pilot covered only the first
+    # 10 of 19 cases → the projectable conceptual subset is 7 (< 15); the 14b arm
+    # located 3 of them → projected upper bound round(15*3/7) = 6 < 8 → the pre-check
+    # fires UNDER_POWERED_STOP. Re-verified against the pre-enlargement snapshot (the
+    # live fixture is now enlarged) via the pure core, so the historical finding holds.
+    outcome = ab_power_precheck(
+        load_committed_pilot_ledger(), _snapshot_reachability(), _CFG, full_conceptual_n=15
+    )
     assert outcome.piloted_conceptual_n == 7
     assert outcome.full_conceptual_n == 15
     assert outcome.located_conceptual == 3

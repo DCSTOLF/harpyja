@@ -260,6 +260,37 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    the live operating point) and `qualifying_confidence_spans` is retired in place. The signals
    module, the schema, and the record-only cross-check ship regardless; only the ranking is
    reverted.** See history.md 2026-07-13 (spec 0045).
+
+   **As of spec 0046 the explorer carries two OFF-BY-DEFAULT submission levers behind a
+   single-bit toggle, and 0045's corroboration ranking is REVERTED.**
+   `Settings.explorer_reactive_confirm` (default `False`) gates a two-mechanism dissolution
+   of the 0043→0045 submission trade: when `True` (the new arm) (1) `scout/reactive_policy.py`
+   — a closed, set-valued, ORDER-STABLE, GOLD-BLIND trigger enum (`REACTIVE_TRIGGERS =
+   {symbols-empty, hit-in-comment, tool-disagreement}`, `fired_triggers` /
+   `should_keep_exploring`, ast-pinned no-eval-import, NO budget knob of its own — triggered
+   exploration stays bounded by the existing `scout_max_turns` / `scout_wall_clock_s` caps)
+   SUPPRESSES the 0044 confidence submit-nudge while a disconfirming trigger is present (keep
+   exploring — can change the terminal bucket); and (2) `scout/confirm.py` — a DETERMINISTIC
+   host-side `submit_citations` interceptor (`ConfirmationOutcome ∈ {PASS, FAIL,
+   CONFIRM_ERROR, NO_CANDIDATE}`, `extract_query_key_identifiers` reading the QUERY ONLY,
+   lexical/symbolic containment, flag-on-FAIL/CONFIRM_ERROR, `derive_submit_disposition`)
+   runs in the submit path, reusing the EXISTING host `read_span` — it ADDS NO TOOL (the
+   suite stays EXACTLY the five `{grep, glob, read_span, ls, symbols}`), MAKES NO MODEL CALL,
+   and uses NO GOLD. The two modules are SEPARABLE by construction (AC3a): `reactive_policy` /
+   `confidence_gate` import NEITHER the `confirm` module NOR `ConfirmationOutcome` / the
+   confirmation fields / `derive_submit_disposition` (asserted structurally), so the 0045
+   firing↔output-path conflation is impossible. When `False` (the DEFAULT, and the only
+   production behavior to date) the explorer is BYTE-IDENTICAL to the pure-0044 operating
+   point. The whole delta rides `messages` / record fields + the submit-path interceptor
+   only, so the 0034/0038 `explorer_think=None ⇒ params == {max_tokens: 2048}` byte-pin
+   SURVIVES. The confirmation facts thread through `explorer_backend.build_trajectory_record`;
+   the verifier bumps `VERIFIER_SCHEMA_VERSION 0045/1 → 0046/1` (additive, version-gated)
+   presence-requiring four fields (`reactive_triggers_fired` / `confirmation_ran` /
+   `confirmation_outcome` / `submit_disposition`) on BOTH seams. **State: the mechanism is
+   unit-verified and byte-pinned but UNMEASURED against a valid baseline — spec 0046 typed
+   `BASELINE_DRIFT_STOP` (a single-run band could not certify the comparison point; the new
+   arm was not run), so both levers ship toggleable and instrumented, awaiting a powered
+   baseline from pool enlargement.** See history.md 2026-07-14 (spec 0046).
 6. `harpyja/deep/` — `dspy.RLM` explorer (Tier 2), reached only via `mode=deep`. Live
    as of Wave 4: `DeepBackend` Protocol (`run(query, seed, tools) -> list[CodeSpan]`,
    injected, no top-level `import dspy`) + `DeepEngine` (self-seeds its own Tier-0
@@ -546,6 +577,63 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    the fields appended last-with-defaults in `_AGGREGATE_DEFAULTS` (legacy 0026 blocks still
    validate); `loop-wallclock-exhausted` is the PRE-EXISTING spec-0024 between-turns ceiling
    merely surfaced per-cause, not new scope. See history.md 2026-07-07 (spec 0027).
+
+   **As of spec 0046 the package carries the `reactive_*` measurement family** — still
+   measurement, not a runtime tier (the SUT levers live in `harpyja/scout/`, gated OFF by
+   default). `reactive_config.py` (`PREREGISTERED_REACTIVE_CONFIG_0046` +
+   `REACTIVE_CONFIG_HASH_0046` + `compute_sut_hash` over gate + reactive_policy + confirm +
+   confidence_signals; baseline band `[1, 3]` frozen; the `flagged-wrong-emitted` ceiling as
+   a baseline-relative fraction < 1 and the flag-rate range as frozen RULES whose literals
+   are committed only after the baseline arm), `reactive_observability.py`
+   (`classify_reactive_side` / `reactive_ledger`: the FIVE counted sides + the conserved
+   s→wc + `flagged-wrong-emitted` SUM — the de-attribution guard — the two record-only
+   cross-checks, and the flag-rate diagnostic, mirror-not-share vs the 0044
+   `submission_observability`), `reactive_outcome.py` (`ReactiveVerdict` + total-pure
+   `decide_reactive_outcome` over per-model five-sided tuples with a `submit_disposition`-keyed
+   4b reconciliation, precedence first-true — the `BASELINE_DRIFT_STOP` branch is what
+   STOPPED spec 0046 before the new-arm verdict), and `reactive_run.py` (`run_reactive_cells`
+   per arm via `run_gated_pool_pilot`, dual-hash-verified, resumable). See history.md
+   2026-07-14 (spec 0046).
+
+   **As of spec 0047 the blind-clean eval POOL is ENLARGED 19 → 53 (conceptual stratum
+   15 → 44, raw fixture 50 → 123) and the package carries the `enlargement*` measurement
+   family** — still measurement, not a runtime tier; NO SUT change and no live model run
+   (the audited convert + two-model blind authoring are authoring-time, offline-of-the-SUT,
+   never touching the Model Gateway / air-gap seam). The committed fixtures
+   `swebench_verified.{raw,terse,authoring,provenance}` are the enlarged instrument
+   baseline; the sha256 provenance chain is preserved (`prior_raw_fixture_sha256` kept, new
+   `raw_fixture_sha256`), and the source snapshot is now pinned by CONTENT IDENTITY (a
+   per-case byte re-derivation) with the HF arrow `_fingerprint` demoted to informational
+   `source_fingerprint_*` provenance. `enlargement.py` is the new owning module: a
+   frozen+hashed `EnlargementConfig` (`ENLARGEMENT_CONFIG_HASH_0047 = 819af2e6…`;
+   Decision A — `raw_convert_target` pinned upfront, blind-clean OUTPUT floats with
+   attrition; floor copied by identity from
+   `benchmark_fit.PREREGISTERED_CONFIG.MIN_DISCORDANT_PAIRS`, conceptual floor from
+   `terse_dataset._CONCEPTUAL_FLOOR_FULL`; `max_per_repo` RE-FROZEN 3 → 8 with a recorded
+   `max_per_repo_derivation` because SWE-bench_Verified has only 12 repos), `SamplingFrame`
+   (`0047/frame/1`) + `select_candidates` (pinned-50 exclusion, ≤`max_per_repo`,
+   deterministic by `case_id`), a FIVE-member frozen `PowerVerdict` (`POWERED` /
+   `STILL_UNDER_POWERED` / `DISCORDANCE_STILL_INSUFFICIENT` /
+   `INSUFFICIENT_ENLARGED_COVERAGE` / `VARIANCE_REQUIRES_MULTI_DRAW`) committed before the
+   numbers, `theoretical_discordance_ceiling(conceptual_n) = conceptual_n` (tag-count-only,
+   no located sets — the AC6 scope fix), `expected_variance_at_n` / `single_draw_suffices`,
+   and `PowerRecheckResult` (`0047/power/1`, archive-first load) whose committed
+   `power_recheck.json` types all 5 downstream questions `POWERED` at N=44. `swebench_eval.py`
+   gained the audited-convert append (`append_converted_cases` dup-reject, `line_sha_map` +
+   `assert_pool_append_preserves_existing_labels` byte-identical drift-guard,
+   `extend_provenance`); `enlargement_authoring.py` (`author_enlarged_set` reusing 0036
+   `author_terse_set`, `assemble_enlarged_authoring_artifact` / `assemble_enlarged_terse`
+   drift-guards, deterministic `tag_enlarged_row`, `audit_sample`); `enlargement_run.py` (a
+   resumable ledger-backed convert→author→tag→assemble→recheck pipeline, arms injected) with
+   the operator entrypoint `specs/0047-enlargement/enlargement_run/run_enlargement.sh`; and
+   `enlargement_arms.py` (backend-selectable `claude`|`codex` arms, author ≠ verifier
+   enforced structurally). Attrition on the run: 22 blind-ineligible + 17 leaky-dropped, 34
+   kept (author=Codex, verifier=Claude). The three 0036/0039 historical drift-guards are
+   redirected to `specs/0047-enlargement/pre_enlargement_terse_snapshot.jsonl` (history
+   preserved byte-exact, live pool grows). This proves NECESSITY (the N-blocker is removed
+   for feasibility); EMPIRICAL discordance (`DISCORDANCE_STILL_INSUFFICIENT` — model
+   homogeneity vs data volume) is DEFERRED to the bake-off. See history.md 2026-07-14
+   (spec 0047).
 
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
