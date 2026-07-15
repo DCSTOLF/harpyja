@@ -1,0 +1,102 @@
+{
+  "baseline_band": [
+    1,
+    3
+  ],
+  "baseline_net_vs_pretable": 0,
+  "config": {
+    "baseline_band": [
+      1,
+      3
+    ],
+    "beneficiary_model": "qwen3:14b",
+    "config_id": "0046/reactive-config/1",
+    "detector_version": "0043/1",
+    "expected_model_readings": [
+      [
+        "qwen3:14b",
+        "benefits from submit-discipline (0044: fired 5/11, zero regressions)"
+      ],
+      [
+        "qwen3:8b",
+        "where miscalibration concentrates; its dawdle IS verification \u2014 a LOW trigger rate is a SUCCESS, not a failure"
+      ],
+      [
+        "qwen3.5:4b",
+        "inert to submission levers (constraint is tool-output bytes/prefill). CONFIRM adds no turn; a 4b net-negative on a triggered-and-explored cell is an inert-with-cost null, NOT trades-again"
+      ]
+    ],
+    "explorer_think": null,
+    "flag_rate_max": null,
+    "flag_rate_rule": "flag-rate is a record-only per-model diagnostic (flagged fraction of confirmed cells); its upper-bound range is derived post-baseline (T27)",
+    "flagged_wrong_emitted_ceiling": null,
+    "flagged_wrong_emitted_ceiling_fraction": 0.5,
+    "gate_proof_version": "0041/exclusivity/1",
+    "inert_model": "qwen3.5:4b",
+    "ledger_schema_version": "0041/pilot/2",
+    "levers_under_test": [
+      "revert-0045-require-corroboration",
+      "reactive-submit-best-span-default",
+      "confirm-before-submit-interceptor"
+    ],
+    "lm_http_timeout_s": 300.0,
+    "min_baseline_swc": 3,
+    "min_covered_baseline_cells": 8,
+    "named_cells": [
+      "pallets__flask-5014::qwen3:14b",
+      "pallets__flask-5014::qwen3:8b",
+      "django__django-14315::qwen3:8b",
+      "pytest-dev__pytest-10081::qwen3:14b"
+    ],
+    "optional_models": [
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "pilot_case_ids": [
+      "astropy__astropy-12907",
+      "django__django-13516",
+      "matplotlib__matplotlib-21568",
+      "pallets__flask-5014",
+      "pydata__xarray-3993",
+      "pytest-dev__pytest-10081",
+      "scikit-learn__scikit-learn-10844",
+      "psf__requests-1766",
+      "pylint-dev__pylint-7080",
+      "sympy__sympy-16792",
+      "django__django-14315"
+    ],
+    "required_models": [
+      "qwen3:14b"
+    ],
+    "scout_max_turns": 10,
+    "scout_wall_clock_s": 240.0,
+    "sut_files": [
+      "harpyja/scout/confidence_gate.py",
+      "harpyja/scout/confidence_signals.py",
+      "harpyja/scout/reactive_policy.py",
+      "harpyja/scout/confirm.py",
+      "harpyja/scout/context_map.py",
+      "harpyja/scout/explorer_backend.py",
+      "harpyja/scout/explorer_loop.py",
+      "harpyja/scout/explorer_tools.py",
+      "harpyja/config/settings.py"
+    ],
+    "sut_hash": "f41c43d095131a27af6c7743774cf5a9e4a59161de1169300c126d75de1b6d3e",
+    "verdict_precedence": [
+      "under-powered",
+      "trades-again",
+      "dissolves-trade",
+      "no-effect"
+    ]
+  },
+  "config_hash": "b244f47e8e3d967dcb7fecbe59e051756ce39ac257127a2662a5c11d15ede690",
+  "config_id": "0046/reactive-config/1",
+  "derived_thresholds": {
+    "baseline_swc": 6,
+    "flagged_wrong_emitted_ceiling": 3,
+    "flagged_wrong_emitted_ceiling_fraction": 0.5,
+    "note": "derived post-baseline (T27), applied at decision time; the frozen config keeps the literal None so REACTIVE_CONFIG_HASH_0046 stays stable"
+  },
+  "outcome": "BASELINE_DRIFT_STOP",
+  "sut_hash": "f41c43d095131a27af6c7743774cf5a9e4a59161de1169300c126d75de1b6d3e"
+}

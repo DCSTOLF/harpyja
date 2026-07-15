@@ -1,0 +1,5 @@
+STATUS: completed
+cells_remaining: 3
+  remaining: matplotlib__matplotlib-21568::qwen3:14b
+  remaining: django__django-13516::qwen3.5:4b
+  remaining: pytest-dev__pytest-10081::qwen3.5:4b

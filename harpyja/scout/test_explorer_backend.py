@@ -46,11 +46,12 @@ def _scripted(*responses):
     return model_call
 
 
-def _backend(tmp_path, *, gateway=None, model_call=None, search=None):
+def _backend(tmp_path, *, gateway=None, model_call=None, search=None, reactive_confirm=False):
+    import dataclasses as _dc
     return ExplorerBackend(
         gateway=gateway or ModelGateway(api_base="http://127.0.0.1:11434/v1"),
         repo_path=str(tmp_path),
-        settings=Settings(),
+        settings=_dc.replace(Settings(), explorer_reactive_confirm=reactive_confirm),
         manifest=[],
         search_engine=search or _FakeSearch(),
         model_call=model_call,
@@ -1049,3 +1050,157 @@ def test_trajectory_record_carries_confidence_fired_signal_and_turn(tmp_path):
     assert traj2["confidence_triggering_signal"] is None
     assert traj2["confidence_firing_turn"] is None
     assert traj2["confidence_firing_spans"] is None
+
+
+# --- Spec 0046 (T9, AC3b): confirm-before-submit at the backend submit seam ---
+# The interceptor sits in the SUBMIT PATH (backend), NOT the firing condition.
+# Confirm-FAIL / CONFIRM_ERROR emit the citation WITH a flag (recorded outcome),
+# never silence; confirmation gates the OUTPUT, never the firing/exploration.
+
+
+def _write(tmp_path, rel, text):
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def test_confirm_fail_emits_flagged_citation_not_silence(tmp_path):
+    _write(tmp_path, "m.py", "def something_else():\n    return 1\n    return 2\n")
+    model = _scripted({"content": "", "tool_calls": [
+        _tc("submit_citations", citations=[{"path": "m.py", "start_line": 1, "end_line": 3}])]})
+    backend = _backend(tmp_path, model_call=model, reactive_confirm=True)
+    spans = backend.run("where is separability_matrix defined", [])
+    assert spans, "a confirm-FAIL citation must still be EMITTED (flagged), never silenced"
+    assert backend.last_confirmation_ran is True
+    assert backend.last_confirmation_outcome == "FAIL"
+    assert backend.last_submit_disposition == "confirm-failed-flagged"
+
+
+def test_confirm_pass_emits_clean(tmp_path):
+    _write(tmp_path, "m.py", "def separability_matrix(model):\n    return _impl(model)\n")
+    model = _scripted({"content": "", "tool_calls": [
+        _tc("submit_citations", citations=[{"path": "m.py", "start_line": 1, "end_line": 2}])]})
+    backend = _backend(tmp_path, model_call=model, reactive_confirm=True)
+    spans = backend.run("where is separability_matrix defined", [])
+    assert spans
+    assert backend.last_confirmation_outcome == "PASS"
+    assert backend.last_submit_disposition == "confirmed-then-submitted"
+
+
+def test_confirm_error_emits_flagged_same_route_distinct_cause(tmp_path):
+    # A query with no extractable key identifier -> CONFIRM_ERROR (could-not-vouch):
+    # the citation is still emitted, via the SAME flag route as FAIL, with a
+    # DISTINCT recorded cause.
+    _write(tmp_path, "m.py", "def widget():\n    pass\n")
+    model = _scripted({"content": "", "tool_calls": [
+        _tc("submit_citations", citations=[{"path": "m.py", "start_line": 1, "end_line": 2}])]})
+    backend = _backend(tmp_path, model_call=model, reactive_confirm=True)
+    spans = backend.run("?? !!", [])
+    assert spans
+    assert backend.last_confirmation_outcome == "CONFIRM_ERROR"
+    assert backend.last_submit_disposition == "confirm-failed-flagged"
+
+
+def test_confirm_fail_confidence_firing_unchanged_vs_pass(tmp_path):
+    # Confirmation is downstream of firing: the confidence-gate firing fact is
+    # identical whether confirmation passes or fails (it cannot throttle firing).
+    _write(tmp_path, "pass.py", "def separability_matrix():\n    return 1\n")
+    _write(tmp_path, "fail.py", "def other():\n    return 1\n")
+
+    def _run(path):
+        model = _scripted({"content": "", "tool_calls": [
+            _tc("submit_citations", citations=[{"path": path, "start_line": 1, "end_line": 2}])]})
+        b = _backend(tmp_path, model_call=model, reactive_confirm=True)
+        b.run("where is separability_matrix", [])
+        return b
+
+    pass_b = _run("pass.py")
+    fail_b = _run("fail.py")
+    assert pass_b.last_confirmation_outcome == "PASS"
+    assert fail_b.last_confirmation_outcome == "FAIL"
+    assert pass_b.last_trajectory["confidence_fired"] == fail_b.last_trajectory["confidence_fired"]
+
+
+def test_interceptor_reuses_read_span_tools_still_five(tmp_path):
+    from harpyja.scout.explorer_tools import build_explorer_tools
+
+    tools = build_explorer_tools(str(tmp_path), Settings(), search_engine=_FakeSearch())
+    assert set(tools) == {"grep", "glob", "read_span", "ls", "symbols"}
+
+
+# --- Spec 0046 (T10, AC4a): reactive facts on the trajectory record + byte-pin -
+def test_trajectory_record_carries_four_reactive_fields(tmp_path):
+    _write(tmp_path, "m.py", "def other():\n    return 1\n    return 2\n")
+    model = _scripted({"content": "", "tool_calls": [
+        _tc("submit_citations", citations=[{"path": "m.py", "start_line": 1, "end_line": 3}])]})
+    backend = _backend(tmp_path, model_call=model, reactive_confirm=True)
+    backend.run("where is separability_matrix", [])
+    rec = backend.last_trajectory
+    assert rec["reactive_triggers_fired"] == backend.last_reactive_triggers
+    assert rec["confirmation_ran"] is True
+    assert rec["confirmation_outcome"] == "FAIL"
+    assert rec["submit_disposition"] == "confirm-failed-flagged"
+
+
+def test_params_pin_survives_reactive_and_confirm(tmp_path):
+    """Spec 0046: the reactive policy + confirm interceptor ride `messages` /
+    record fields + the submit-path interceptor only — the 0034/0038 byte pin
+    (explorer_think=None => params == {max_tokens: 2048}) survives VERBATIM."""
+    captured = {}
+
+    class _Gw:
+        api_base = "http://127.0.0.1:11434/v1"
+
+        def assert_local(self, resolver=None):
+            pass
+
+        def complete_with_tools(self, messages, tools, **params):
+            captured.update(params)
+            return {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+                    "finish_reason": "tool_calls", "model": "m", "reasoning": None,
+                    "completion_tokens": 7}
+
+    backend = ExplorerBackend(
+        gateway=_Gw(), repo_path=str(tmp_path), settings=Settings(),
+        manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert captured == {"max_tokens": 2048}  # the 0034/0038 pin, verbatim
+
+
+# --- Spec 0046 (Option A): the lever is gated OFF by default (baseline arm) ----
+def test_confirm_interceptor_gated_off_by_default(tmp_path):
+    _write(tmp_path, "m.py", "def other():\n    return 1\n")
+    model = _scripted({"content": "", "tool_calls": [
+        _tc("submit_citations", citations=[{"path": "m.py", "start_line": 1, "end_line": 2}])]})
+    backend = _backend(tmp_path, model_call=model)  # default Settings: flag off
+    backend.run("where is separability_matrix", [])
+    assert backend.last_confirmation_ran is False
+    assert backend.last_confirmation_outcome is None
+    # baseline flagged-wrong-emitted == 0 by construction (no confirmation split)
+
+
+def test_params_pin_survives_reactive_confirm_enabled(tmp_path):
+    import dataclasses as _dc
+    captured = {}
+
+    class _Gw:
+        api_base = "http://127.0.0.1:11434/v1"
+
+        def assert_local(self, resolver=None):
+            pass
+
+        def complete_with_tools(self, messages, tools, **params):
+            captured.update(params)
+            return {"content": "", "tool_calls": [_tc("submit_citations", citations=[])],
+                    "finish_reason": "tool_calls", "model": "m", "reasoning": None,
+                    "completion_tokens": 7}
+
+    backend = ExplorerBackend(
+        gateway=_Gw(), repo_path=str(tmp_path),
+        settings=_dc.replace(Settings(), explorer_reactive_confirm=True),
+        manifest=[], search_engine=_FakeSearch(),
+    )
+    backend.run("q", [])
+    assert captured == {"max_tokens": 2048}  # both levers ride messages/records only

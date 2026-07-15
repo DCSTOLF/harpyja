@@ -43,6 +43,12 @@ def test_verifier_artifact_schema_is_version_stamped_and_validated():
         # Spec 0045: silence->wrong-confidence, presence-required on a CURRENT
         # artifact (same-change amendment — None on a correct/no-submit run).
         "silence_to_wrong_confidence": None,
+        # Spec 0046: the reactive + confirm facts, presence-required on a CURRENT
+        # artifact (same-change amendment — no-trigger / no-confirmation shape).
+        "reactive_triggers_fired": [],
+        "confirmation_ran": False,
+        "confirmation_outcome": None,
+        "submit_disposition": None,
     }
 
     # Should pass validation
@@ -542,7 +548,7 @@ def test_verifier_schema_version_and_failure_codes_frozen():
     """AC5: schema version, the six codes, and their precedence are byte-frozen."""
     # 0031/1 -> ... -> 0044/1 -> 0045/1: spec 0045 additive bump
     # (silence->wrong-confidence), reconciled here (same-change amendment).
-    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    assert VERIFIER_SCHEMA_VERSION == "0046/1"
     assert FAILURE_CODES == frozenset([
         "model-unknown",
         "model-mismatch",
@@ -570,8 +576,10 @@ def test_verify_result_field_by_field_stable_on_valid_trajectory():
     got.pop("timestamp")
 
     assert got == {
-        # 0045 additive bump (silence->wrong-confidence) — same-change amendment.
-        "schema_version": "0045/1",
+        # 0046 additive bump (reactive + confirm facts) — same-change amendment.
+        # (VerifierResult.to_dict carries no per-cell reactive fields; only the
+        # version stamp moves.)
+        "schema_version": "0046/1",
         "status": "PASSED",
         "failure_reason": None,
         "model_identity": "served_present_and_matching",
@@ -885,7 +893,7 @@ def test_schema_version_is_0034_1():
     and spec 0044 (confidence facts) and spec 0045 (silence->wrong-confidence;
     same-change reconciliation): the CURRENT version is 0045/1; 0034/1 and
     0038/1 stay known legacy versions."""
-    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    assert VERIFIER_SCHEMA_VERSION == "0046/1"
 
 
 def test_legacy_0031_and_0033_artifacts_still_validate():
@@ -1150,7 +1158,7 @@ def test_verifier_schema_version_bumped_and_legacy_still_validates():
     version still passes the gate; unknown versions still fail loud."""
     from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
-    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    assert VERIFIER_SCHEMA_VERSION == "0046/1"
     assert "0044/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
     assert "0043/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
     assert "0038/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
@@ -1208,10 +1216,10 @@ def test_verifier_schema_version_is_0044_1():
     every legacy version still passes the gate; unknown versions fail loud."""
     from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
-    assert VERIFIER_SCHEMA_VERSION == "0045/1"
-    for legacy_version in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1"):
+    assert VERIFIER_SCHEMA_VERSION == "0046/1"
+    for legacy_version in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1", "0045/1"):
         assert legacy_version in _KNOWN_VERIFIER_SCHEMA_VERSIONS
-    assert "0045/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+    assert "0046/1" in _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
 
 def test_build_trajectory_record_carries_confidence_fields():
@@ -1487,7 +1495,7 @@ def test_written_artifact_carries_unfired_swc_record_only(tmp_path, monkeypatch)
 def test_verifier_schema_version_is_0045_1():
     from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
 
-    assert VERIFIER_SCHEMA_VERSION == "0045/1"
+    assert VERIFIER_SCHEMA_VERSION == "0046/1"
     # Every legacy version — including 0044/1 — still validates (additive).
     for legacy in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1"):
         assert legacy in _KNOWN_VERIFIER_SCHEMA_VERSIONS
@@ -1515,3 +1523,82 @@ def test_swc_presence_required_on_0045_1():
     }
     with pytest.raises(ValueError, match="silence_to_wrong_confidence"):
         validate_verifier_artifact(base)
+
+
+# --- Spec 0046 (T11/T12, AC4a): schema 0045/1 -> 0046/1 dual-seam --------------
+def test_verifier_schema_version_is_0046_1():
+    """0045/1 -> 0046/1 additive bump (four reactive fields); every legacy
+    version still passes the gate; unknown versions fail loud."""
+    from harpyja.eval.live_verifier import _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+    assert VERIFIER_SCHEMA_VERSION == "0046/1"
+    for legacy in ("0031/1", "0033/1", "0034/1", "0038/1", "0043/1", "0044/1", "0045/1"):
+        assert legacy in _KNOWN_VERIFIER_SCHEMA_VERSIONS
+
+
+def test_reactive_fields_presence_required_on_0046_1():
+    import pytest
+
+    from harpyja.eval.live_verifier import validate_verifier_artifact
+
+    base = {
+        "schema_version": "0046/1", "verifier_status": "PASSED",
+        "requested_model": "qwen3:14b", "endpoint": "x", "tiers_run": [0, 1],
+        "model_turns": [], "submission_outcome": None,
+        "confidence_fired": False, "confidence_triggering_signal": None,
+        "confidence_firing_turn": None, "confidence_firing_spans": None,
+        "silence_to_wrong_confidence": None,
+    }
+    with pytest.raises(ValueError):
+        validate_verifier_artifact(base)  # missing the four reactive fields
+    base |= {
+        "reactive_triggers_fired": [], "confirmation_ran": False,
+        "confirmation_outcome": None, "submit_disposition": None,
+    }
+    validate_verifier_artifact(base)  # now valid — no raise
+
+
+def test_written_artifact_carries_four_reactive_fields(tmp_path, monkeypatch):
+    """The 0033 written-JSON lesson: the four reactive fields survive
+    run_verified_case's HAND-ASSEMBLED artifact (dual-seam), asserted against the
+    written JSON."""
+    import json as _json
+
+    import harpyja.scout.explorer_backend as _eb
+    from harpyja.config.settings import Settings as _Settings
+    from harpyja.eval.live_verifier import run_verified_case
+
+    class _StubBackend:
+        def __init__(self, **kwargs):
+            self.last_trajectory = None
+
+        def run(self, query, seed):
+            self.last_trajectory = {
+                "schema_version": VERIFIER_SCHEMA_VERSION,
+                "model_turns": [{"role": "assistant", "content": "",
+                                 "tool_calls": [{"function": {"name": "grep"}}]}],
+                "tool_names_invoked": ["grep"], "tool_names_failure": None,
+                "served_model": "qwen3:14b", "endpoint": "http://127.0.0.1:11434/v1",
+                "turns_used": 1, "citations_submitted": 1, "citations_surviving": 1,
+                "per_turn": [], "think_mode": "default-omitted",
+                "serving_transport": "v1-chat-completions",
+                "reactive_triggers_fired": ["symbols-empty"],
+                "confirmation_ran": True, "confirmation_outcome": "FAIL",
+                "submit_disposition": "confirm-failed-flagged",
+            }
+            return []
+
+    monkeypatch.setattr(_eb, "ExplorerBackend", _StubBackend)
+    (tmp_path / "repo" / ".harpyja").mkdir(parents=True)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _res, artifact_path = run_verified_case(
+        case_name="fake-case", settings=_Settings(), gateway=object(),
+        gold_span={"file": "a.py", "start_line": 1, "end_line": 2},
+        out_dir=out_dir, repo_path=str(tmp_path / "repo"), query="find it",
+    )
+    artifact = _json.loads(Path(artifact_path).read_text())
+    assert artifact["reactive_triggers_fired"] == ["symbols-empty"]
+    assert artifact["confirmation_ran"] is True
+    assert artifact["confirmation_outcome"] == "FAIL"
+    assert artifact["submit_disposition"] == "confirm-failed-flagged"

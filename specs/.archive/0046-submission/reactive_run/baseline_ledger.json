@@ -1,0 +1,454 @@
+{
+  "config_hash": "b244f47e8e3d967dcb7fecbe59e051756ce39ac257127a2662a5c11d15ede690::baseline",
+  "entries": {
+    "astropy__astropy-12907::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/astropy__astropy-12907_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "astropy__astropy-12907::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/astropy__astropy-12907_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "right-file-wrong-span"
+    },
+    "astropy__astropy-12907::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/astropy__astropy-12907_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "right-file-wrong-span"
+    },
+    "django__django-13516::qwen3.5:4b": {
+      "arm": "baseline",
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "terminal_bucket": null
+    },
+    "django__django-13516::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/django__django-13516_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "django__django-13516::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/django__django-13516_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "wrong-file"
+    },
+    "django__django-14315::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/django__django-14315_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "found-unsubmitted",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "django__django-14315::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/django__django-14315_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "wrong-file"
+    },
+    "django__django-14315::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/django__django-14315_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "wrong-file"
+    },
+    "matplotlib__matplotlib-21568::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "symbols-empty"
+      ],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "matplotlib__matplotlib-21568::qwen3:14b": {
+      "arm": "baseline",
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "terminal_bucket": null
+    },
+    "matplotlib__matplotlib-21568::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/matplotlib__matplotlib-21568_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "found-unsubmitted",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pallets__flask-5014::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/pallets__flask-5014_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "found-unsubmitted",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pallets__flask-5014::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/pallets__flask-5014_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "correct"
+    },
+    "pallets__flask-5014::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/pallets__flask-5014_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "found-unsubmitted",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "psf__requests-1766::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/psf__requests-1766_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "correct"
+    },
+    "psf__requests-1766::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/psf__requests-1766_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "correct"
+    },
+    "psf__requests-1766::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/psf__requests-1766_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "symbols-empty"
+      ],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pydata__xarray-3993::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/pydata__xarray-3993_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted-then-dropped",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pydata__xarray-3993::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/pydata__xarray-3993_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "symbols-empty"
+      ],
+      "submission_outcome": "submitted",
+      "submit_disposition": "triggered-and-explored",
+      "terminal_bucket": "correct"
+    },
+    "pydata__xarray-3993::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/pydata__xarray-3993_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "correct"
+    },
+    "pylint-dev__pylint-7080::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "symbols-empty",
+        "hit-in-comment"
+      ],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pylint-dev__pylint-7080::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "hit-in-comment",
+        "tool-disagreement"
+      ],
+      "submission_outcome": "submitted",
+      "submit_disposition": "triggered-and-explored",
+      "terminal_bucket": "wrong-file"
+    },
+    "pylint-dev__pylint-7080::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/pylint-dev__pylint-7080_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pytest-dev__pytest-10081::qwen3.5:4b": {
+      "arm": "baseline",
+      "degrade": "no-trajectory: Explorer did not capture trajectory (scout cause: model-unreachable)",
+      "terminal_bucket": null
+    },
+    "pytest-dev__pytest-10081::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "hit-in-comment"
+      ],
+      "submission_outcome": "found-unsubmitted",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "pytest-dev__pytest-10081::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/pytest-dev__pytest-10081_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "hit-in-comment",
+        "tool-disagreement"
+      ],
+      "submission_outcome": "submitted",
+      "submit_disposition": "triggered-and-explored",
+      "terminal_bucket": "right-file-wrong-span"
+    },
+    "scikit-learn__scikit-learn-10844::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "symbols-empty"
+      ],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "scikit-learn__scikit-learn-10844::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "correct"
+    },
+    "scikit-learn__scikit-learn-10844::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/scikit-learn__scikit-learn-10844_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "correct"
+    },
+    "sympy__sympy-16792::qwen3.5:4b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_5_4b/sympy__sympy-16792_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "sympy__sympy-16792::qwen3:14b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_14b/sympy__sympy-16792_verifier_artifact.json",
+      "confidence_fired": false,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [
+        "hit-in-comment",
+        "tool-disagreement"
+      ],
+      "submission_outcome": "never-found",
+      "submit_disposition": "no-candidate",
+      "terminal_bucket": "empty"
+    },
+    "sympy__sympy-16792::qwen3:8b": {
+      "arm": "baseline",
+      "artifact": "/Users/daniel.stolf/development/harpyja/eval_work/live_artifacts/reactive_0046/baseline/qwen3_8b/sympy__sympy-16792_verifier_artifact.json",
+      "confidence_fired": true,
+      "confirmation_outcome": null,
+      "confirmation_ran": false,
+      "degrade": null,
+      "reactive_triggers_fired": [],
+      "submission_outcome": "submitted",
+      "submit_disposition": "never-triggered",
+      "terminal_bucket": "wrong-file"
+    }
+  },
+  "exclusivity": {
+    "checks": [
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "start",
+        "residents": [
+          "qwen3:14b"
+        ],
+        "timestamp": "2026-07-14T09:58:36.043464+00:00"
+      },
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "pre-block:qwen3:14b",
+        "residents": [
+          "qwen3:14b"
+        ],
+        "timestamp": "2026-07-14T09:58:36.045976+00:00"
+      },
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "pre-block:qwen3:8b",
+        "residents": [
+          "qwen3:14b"
+        ],
+        "timestamp": "2026-07-14T10:28:08.512499+00:00"
+      },
+      {
+        "clean": true,
+        "foreign": [],
+        "label": "pre-block:qwen3.5:4b",
+        "residents": [
+          "qwen3:8b"
+        ],
+        "timestamp": "2026-07-14T10:49:50.001740+00:00"
+      }
+    ],
+    "exclusivity_check_kind": "start-plus-per-block",
+    "model_set": [
+      "qwen3:14b",
+      "qwen3:8b",
+      "qwen3.5:4b"
+    ],
+    "schema_version": "0041/exclusivity/1",
+    "unseeable_residuals": [
+      "intra-block-window",
+      "same-tag-contention"
+    ]
+  },
+  "schema_version": "0041/pilot/2"
+}

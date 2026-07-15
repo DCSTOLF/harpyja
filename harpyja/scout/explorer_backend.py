@@ -27,6 +27,7 @@ from harpyja.eval.live_verifier import build_trajectory_record
 from harpyja.gateway.gateway import AirGapError
 from harpyja.index.manifest import ManifestEntry
 from harpyja.scout import errors
+from harpyja.scout.confirm import confirm_before_submit, derive_submit_disposition
 from harpyja.scout.context_map import build_initial_prompt
 from harpyja.scout.errors import ScoutUnavailable
 from harpyja.scout.explorer_loop import (
@@ -231,6 +232,13 @@ class ExplorerBackend:
         # None until the first run; captured after a successful run to support
         # trajectory-verified live measurement.
         self.last_trajectory: dict[str, Any] | None = None
+        # Spec 0046 (AC3/AC4): the confirm-before-submit facts from the last run.
+        # confirmation runs in the SUBMIT PATH (this backend seam), never the loop
+        # (which stays confirmation-agnostic — the AC3a separation). Reset per run.
+        self.last_confirmation_ran: bool = False
+        self.last_confirmation_outcome: str | None = None
+        self.last_submit_disposition: str | None = None
+        self.last_reactive_triggers: list[str] = []
         # Track the served model from the last response for trajectory capture
         self._last_served_model: str | None = None
         # Spec 0034 — per-turn (reasoning_chars, completion_tokens, finish_reason)
@@ -279,6 +287,11 @@ class ExplorerBackend:
         self.last_turns_used = None  # reset per run
         self._last_served_model = None  # reset per run
         self._per_turn = []  # reset per run (spec 0034)
+        # Spec 0046: reset the confirm-before-submit facts per run.
+        self.last_confirmation_ran = False
+        self.last_confirmation_outcome = None
+        self.last_submit_disposition = None
+        self.last_reactive_triggers = []
         try:
             return self._run_loop(query)
         except ScoutUnavailable:
@@ -299,8 +312,37 @@ class ExplorerBackend:
             manifest=self._manifest,
         )
 
+        # Spec 0046 (AC3): confirm-before-submit rides the SUBMIT PATH. The
+        # interceptor reuses the EXISTING host-side read_span (no new registered
+        # tool) to check the candidate span carries the query's intent; the
+        # outcome (PASS / FAIL / CONFIRM_ERROR / NO_CANDIDATE) is stashed and, on
+        # FAIL/CONFIRM_ERROR, the citation is still emitted (flagged), never
+        # silenced. Gating the OUTPUT, not the ACTION.
+        read_span_fn = tools["read_span"]
+        confirmation: dict[str, Any] = {"ran": False, "outcome": None, "has_candidate": False}
+        # Spec 0046 (Option A): the reactive + confirm levers are gated by ONE
+        # explorer-scoped flag. Baseline arm (off): pure 0044 — no confirmation
+        # runs (confirmation_outcome stays None => flagged-wrong-emitted == 0).
+        reactive_confirm = bool(getattr(self._settings, "explorer_reactive_confirm", False))
+
         def submit(citations: Sequence[Mapping[str, Any]]) -> SubmitResult:
-            return submit_citations(citations, self._repo_path, self._settings)
+            res = submit_citations(citations, self._repo_path, self._settings)
+            candidate = res.spans[0] if res.spans else None
+            confirmation["has_candidate"] = candidate is not None
+            if reactive_confirm and candidate is not None:
+                confirmation["ran"] = True
+                confirmation["outcome"] = confirm_before_submit(query, candidate, read_span_fn)
+            return res
+
+        # Spec 0046 (AC2): the reactive policy's hit-in-comment trigger reads
+        # source text host-side via the same read_span (gold-blind: source, not
+        # gold); one-line reads.
+        def line_reader(path: str, line: int) -> str | None:
+            try:
+                r = read_span_fn(path, line, line)
+            except Exception:
+                return None
+            return r.get("content") if isinstance(r, dict) else None
 
         model_call = self._model_call or self._default_model_call()
 
@@ -325,6 +367,8 @@ class ExplorerBackend:
                 context_map=context_map,
                 settings=self._settings,
                 clock=self._clock,
+                line_reader=line_reader,
+                reactive_enabled=reactive_confirm,
             )
         except (RipgrepMissingError, AirGapError):
             raise  # Tier-0 / air-gap floors — never a degrade
@@ -340,6 +384,20 @@ class ExplorerBackend:
         # LoopResult (submit and both exhaustion outcomes) — before any degrade raise,
         # so the migrated 0022 measurement survives exhausted runs too.
         self.last_turns_used = result.turns_used
+
+        # Spec 0046 (AC3/AC4): finalize the confirm-before-submit facts. The
+        # submit_disposition is derived from the reactive triggers (loop) + the
+        # confirmation outcome (submit seam) + whether a candidate was submitted,
+        # so a null is attributable across all five shapes.
+        _outcome = confirmation["outcome"]
+        self.last_confirmation_ran = confirmation["ran"]
+        self.last_confirmation_outcome = str(_outcome) if _outcome is not None else None
+        self.last_reactive_triggers = list(result.reactive_triggers_fired)
+        self.last_submit_disposition = derive_submit_disposition(
+            result.reactive_triggers_fired,
+            _outcome,
+            has_candidate=confirmation["has_candidate"],
+        )
 
         # Spec 0031 (live): capture trajectory after the loop (before any degrade raise)
         # for trajectory-verified live measurement. The trajectory carries model_turns,
@@ -363,6 +421,12 @@ class ExplorerBackend:
             confidence_triggering_signal=result.confidence_triggering_signal,
             confidence_firing_turn=result.confidence_firing_turn,
             confidence_firing_spans=result.confidence_firing_spans,
+            # Spec 0046: the reactive triggers (loop) + confirm-before-submit
+            # facts (submit seam) — SUT-recorded, gold-blind.
+            reactive_triggers_fired=result.reactive_triggers_fired,
+            confirmation_ran=self.last_confirmation_ran,
+            confirmation_outcome=self.last_confirmation_outcome,
+            submit_disposition=self.last_submit_disposition,
         )
 
         if result.outcome == SUBMITTED:

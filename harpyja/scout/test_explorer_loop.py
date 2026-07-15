@@ -1049,3 +1049,154 @@ def test_degraded_symbols_result_does_not_fire_nudge():
     )
     assert result.confidence_fired is False
     assert _nudge_indices(result.history) == []
+
+
+# --- Spec 0046 (T5, AC2): reactive policy recorded on the loop result ---------
+from dataclasses import replace  # noqa: E402
+
+
+def _tools_with_symbols(symbols_spans, grep_span=None):
+    grep_span = grep_span or CodeSpan(path="a.py", start_line=1, end_line=1)
+
+    def grep(pattern, scope=None):
+        return [grep_span]
+
+    def symbols(path=None, name=None):
+        return symbols_spans
+
+    return {
+        "grep": grep,
+        "glob": lambda pattern: [],
+        "read_span": lambda path, start, end: {},
+        "ls": lambda path=".": [],
+        "symbols": symbols,
+    }
+
+
+def test_loop_records_reactive_triggers_fired():
+    # A `symbols` call returning empty is a disconfirming trigger -> recorded.
+    tools = _tools_with_symbols([])
+    model = _scripted(
+        _msg(_tc("symbols", call_id="s1", path="a.py")),
+        _msg(_tc("submit_citations", call_id="c2", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert "symbols-empty" in result.reactive_triggers_fired
+
+
+def test_loop_no_trigger_submits_best_span():
+    # grep + symbols agree on a.py, symbols non-empty -> nothing disconfirms ->
+    # empty trigger set (the reactive default is submit-best).
+    tools = _tools_with_symbols([CodeSpan(path="a.py", start_line=5, end_line=9)])
+    model = _scripted(
+        _msg(_tc("grep", call_id="g1", pattern="x")),
+        _msg(_tc("symbols", call_id="s1", path="a.py")),
+        _msg(_tc("submit_citations", call_id="c2", citations=[{"path": "a.py"}])),
+    )
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(),
+    )
+    assert result.outcome == SUBMITTED
+    assert result.reactive_triggers_fired == []
+
+
+def test_triggered_explore_terminates_at_turn_cap():
+    # A persistently-triggering model that never submits still terminates at the
+    # EXISTING turn cap — the reactive policy has no budget knob (0043 bounded).
+    tools = _tools_with_symbols([])
+    model = _scripted(_msg(_tc("symbols", call_id="s1", path="a.py")))
+    settings = replace(Settings(), scout_max_turns=3)
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=settings,
+    )
+    assert result.outcome == TURNS_EXHAUSTED
+    assert result.turns_used == 3
+
+
+def test_triggered_explore_terminates_at_wall_clock():
+    tools = _tools_with_symbols([])
+    model = _scripted(_msg(_tc("symbols", call_id="s1", path="a.py")))
+    ticks = iter([0.0, 0.0, 10_000.0, 10_000.0, 10_000.0])
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=Settings(), clock=lambda: next(ticks),
+    )
+    assert result.outcome == WALLCLOCK_EXHAUSTED
+
+
+def test_keep_exploring_without_named_trigger_is_countable_violation():
+    # A non-submit terminal with NO trigger fired is the visible policy
+    # violation: nothing disconfirmed the candidate, yet the loop kept
+    # exploring. Its countable signature is (outcome != SUBMITTED, no triggers).
+    tools = _tools_with_symbols([CodeSpan(path="a.py", start_line=5, end_line=9)])
+    model = _scripted(_msg(_tc("grep", call_id="g1", pattern="x")))
+    settings = replace(Settings(), scout_max_turns=2)
+    result = run_explorer_loop(
+        model_call=model, tools=tools, submit=_submit_ok,
+        context_map="map", settings=settings,
+    )
+    assert result.outcome != SUBMITTED
+    assert result.reactive_triggers_fired == []
+
+
+# --- Spec 0046 (Option A, AC2 behavior): reactive nudge SUPPRESSION ------------
+def _tools_grep_symbols(grep_span, symbols_spans):
+    def grep(pattern, scope=None):
+        return [grep_span]
+
+    def symbols(path=None, name=None):
+        return symbols_spans
+
+    return {
+        "grep": grep, "glob": lambda pattern: [],
+        "read_span": lambda path, start, end: {}, "ls": lambda path=".": [],
+        "symbols": symbols,
+    }
+
+
+def _script_grep_symbols_submit(submit_path):
+    return _scripted(
+        _msg(_tc("grep", call_id="g", pattern="x")),
+        _msg(_tc("symbols", call_id="s", path=submit_path)),
+        _msg(_tc("submit_citations", call_id="c",
+                 citations=[{"path": submit_path, "start_line": 10, "end_line": 20}])),
+    )
+
+
+def test_baseline_confidence_nudge_fires_when_reactive_disabled():
+    # A qualifying symbols result fires the 0044 nudge (pure baseline behavior).
+    tools = _tools_grep_symbols(CodeSpan("b.py", 1, 1), [CodeSpan("b.py", 10, 20)])
+    r = run_explorer_loop(
+        model_call=_script_grep_symbols_submit("b.py"), tools=tools, submit=_submit_ok,
+        context_map="m", settings=Settings(), reactive_enabled=False)
+    assert r.confidence_fired is True
+    assert r.reactive_nudge_suppressed is False
+
+
+def test_reactive_enabled_suppresses_nudge_when_trigger_present():
+    # grep hits a.py, the qualifying symbols result owns b.py -> tool-disagreement.
+    # With the reactive lever ON, the submit-nudge is SUPPRESSED (keep exploring).
+    tools = _tools_grep_symbols(CodeSpan("a.py", 1, 1), [CodeSpan("b.py", 10, 20)])
+    r = run_explorer_loop(
+        model_call=_script_grep_symbols_submit("b.py"), tools=tools, submit=_submit_ok,
+        context_map="m", settings=Settings(), reactive_enabled=True)
+    assert r.confidence_fired is False
+    assert r.reactive_nudge_suppressed is True
+    assert "tool-disagreement" in r.reactive_triggers_fired
+
+
+def test_reactive_enabled_nudge_still_fires_when_no_trigger():
+    # grep + symbols agree on b.py -> no trigger -> the submit-best default holds:
+    # the nudge fires even with the reactive lever on.
+    tools = _tools_grep_symbols(CodeSpan("b.py", 1, 1), [CodeSpan("b.py", 10, 20)])
+    r = run_explorer_loop(
+        model_call=_script_grep_symbols_submit("b.py"), tools=tools, submit=_submit_ok,
+        context_map="m", settings=Settings(), reactive_enabled=True)
+    assert r.confidence_fired is True
+    assert r.reactive_nudge_suppressed is False

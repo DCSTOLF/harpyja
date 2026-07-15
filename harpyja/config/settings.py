@@ -177,6 +177,16 @@ class Settings:
     # (the llama.cpp chat-template-era mechanism); the recorded `think_mode` on the
     # trajectory disambiguates (native wins on double-set). `explorer_`-scoped.
     explorer_think: bool | None = None
+    # Spec 0046 (AC2/AC3) — `explorer_reactive_confirm` — the reactive-submit +
+    # confirm-before-submit levers, OFF by default (the baseline arm is pure
+    # 0044). When True (the new arm): (1) the reactive policy SUPPRESSES the
+    # 0044 confidence submit-nudge while a disconfirming trigger is present
+    # (keep exploring — can change the terminal bucket); (2) the confirm
+    # interceptor runs in the submit path (records the PASS/FAIL/CONFIRM_ERROR
+    # partition; baseline leaves confirmation_outcome None => flagged-wrong-
+    # emitted == 0 by construction). Rides `messages`/record fields only — the
+    # 0034/0038 params byte-pin is unaffected.
+    explorer_reactive_confirm: bool = False
 
     def __post_init__(self) -> None:
         # Fires on every construction path — defaults, toml/env merge, and

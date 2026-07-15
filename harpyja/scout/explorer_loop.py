@@ -39,6 +39,10 @@ from harpyja.scout.confidence_gate import (
     build_confidence_nudge,
     qualifying_symbols_spans,
 )
+from harpyja.scout.reactive_policy import (
+    LineReader,
+    fired_triggers,
+)
 from harpyja.scout.submit import SubmitResult
 from harpyja.server.types import CodeSpan
 from harpyja.symbols.ripgrep import RipgrepMissingError
@@ -82,6 +86,15 @@ class LoopResult:
     confidence_triggering_signal: str | None = None
     confidence_firing_turn: int | None = None
     confidence_firing_spans: list[dict[str, Any]] | None = None
+    # Spec 0046 (AC2): the disconfirming triggers that fired over the trajectory
+    # (gold-blind, set-valued). Empty means nothing contradicted the candidate —
+    # the reactive default is submit-best; a non-submit terminal with an empty
+    # set is the countable "kept exploring without a named trigger" violation.
+    reactive_triggers_fired: list[str] = field(default_factory=list)
+    # Spec 0046 (Option A, AC2): the reactive lever SUPPRESSED the 0044 submit
+    # nudge because a disconfirming trigger was present (keep exploring). False
+    # in the baseline arm (lever off) and when no trigger fired.
+    reactive_nudge_suppressed: bool = False
 
 
 def _parse_arguments(raw: Any) -> dict[str, Any]:
@@ -238,6 +251,8 @@ class _Session:
         self.confidence_fired = False
         self.confidence_firing_turn: int | None = None
         self.confidence_spans: list[CodeSpan] | None = None
+        # Spec 0046: the reactive lever suppressed the submit nudge at least once.
+        self.reactive_nudge_suppressed = False
 
     def messages(self) -> list[dict[str, Any]]:
         return [r["msg"] for r in self.records]
@@ -316,6 +331,20 @@ def _stamp_confidence(result: LoopResult, session: _Session) -> LoopResult:
     return result
 
 
+def _finalize(
+    result: LoopResult, session: _Session, line_reader: LineReader | None
+) -> LoopResult:
+    """Stamp the 0044 confidence facts AND the 0046 reactive triggers onto a
+    terminal result. The trigger set is a gold-blind projection over the
+    trajectory (the loop's own messages), computed once at termination."""
+    _stamp_confidence(result, session)
+    result.reactive_triggers_fired = fired_triggers(
+        {"model_turns": session.messages()}, line_reader=line_reader
+    )
+    result.reactive_nudge_suppressed = session.reactive_nudge_suppressed
+    return result
+
+
 def run_explorer_loop(
     *,
     model_call: ModelCall,
@@ -324,6 +353,8 @@ def run_explorer_loop(
     context_map: str,
     settings: Any,
     clock: Clock = time.monotonic,
+    line_reader: LineReader | None = None,
+    reactive_enabled: bool = False,
 ) -> LoopResult:
     """Drive the bounded loop to a terminal citation list (or a bounded stop)."""
     session = _Session(context_map)
@@ -332,9 +363,10 @@ def run_explorer_loop(
 
     for _ in range(settings.scout_max_turns):
         if clock() - start >= settings.scout_wall_clock_s:
-            return _stamp_confidence(
+            return _finalize(
                 LoopResult(WALLCLOCK_EXHAUSTED, None, turns_used, session.messages()),
                 session,
+                line_reader,
             )
 
         turns_used += 1
@@ -344,9 +376,10 @@ def run_explorer_loop(
         # tool_call rode along, its args may be silently incomplete. Bail before any
         # tool dispatch so a truncated turn degrades instead of being mis-read.
         if response.get("finish_reason") == "length":
-            return _stamp_confidence(
+            return _finalize(
                 LoopResult(GENERATION_TRUNCATED, None, turns_used, session.messages()),
                 session,
+                line_reader,
             )
         session.add(
             {
@@ -370,7 +403,7 @@ def run_explorer_loop(
             if result is not None:
                 # Terminal (submit_citations) was encountered; return immediately.
                 result.turns_used = turns_used
-                return _stamp_confidence(result, session)
+                return _finalize(result, session, line_reader)
 
         # Spec 0044: the confidence-conditioned nudge, injected strictly at the
         # POST-BATCH boundary (0029: every tool_call_id above is answered; a
@@ -381,18 +414,34 @@ def run_explorer_loop(
         # enters note_navigation, so loop-detection and turn accounting are
         # untouched.
         if session.pending_confidence and not session.confidence_fired:
-            session.add(
-                build_confidence_nudge(session.pending_confidence),
-                "confidence-nudge",
+            # Spec 0046 (Option A): the reactive lever gates the submit nudge on
+            # the ABSENCE of a disconfirming trigger. Default is submit-best
+            # (fire the nudge); a named trigger SUPPRESSES it (keep exploring) —
+            # pending_confidence is left set so a later turn that clears the
+            # trigger can still fire. The baseline arm (reactive_enabled=False)
+            # keeps 0044's unconditional post-batch fire.
+            suppress = reactive_enabled and bool(
+                fired_triggers(
+                    {"model_turns": session.messages()}, line_reader=line_reader
+                )
             )
-            session.confidence_fired = True
-            session.confidence_firing_turn = turns_used
-            session.confidence_spans = session.pending_confidence
-            session.pending_confidence = None
+            if suppress:
+                session.reactive_nudge_suppressed = True
+            else:
+                session.add(
+                    build_confidence_nudge(session.pending_confidence),
+                    "confidence-nudge",
+                )
+                session.confidence_fired = True
+                session.confidence_firing_turn = turns_used
+                session.confidence_spans = session.pending_confidence
+                session.pending_confidence = None
 
         # Context management: citation-preserving truncation past the bloat cap.
         session.maybe_truncate(settings.scout_history_char_cap)
 
-    return _stamp_confidence(
-        LoopResult(TURNS_EXHAUSTED, None, turns_used, session.messages()), session
+    return _finalize(
+        LoopResult(TURNS_EXHAUSTED, None, turns_used, session.messages()),
+        session,
+        line_reader,
     )

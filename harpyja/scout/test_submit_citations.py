@@ -206,3 +206,17 @@ def test_submit_citations_single_production_caller():
                 if name == "submit_citations":
                     callers.add(str(py.relative_to(root)))
     assert callers == {"scout/explorer_backend.py"}
+
+
+def test_submit_citations_pure_seam_unchanged_by_confirm(tmp_path):
+    # Spec 0046: confirm-before-submit lives in the BACKEND seam, never inside
+    # submit_citations — the terminal action stays a pure validate+normalize with
+    # NO query/read_span/confirmation surface (its args are unchanged).
+    import inspect
+
+    from harpyja.scout.submit import submit_citations as sc
+
+    params = list(inspect.signature(sc).parameters)
+    assert params == ["citations", "repo_root", "settings"]
+    src = inspect.getsource(sc)
+    assert "confirm" not in src and "ConfirmationOutcome" not in src

@@ -36,7 +36,7 @@ A FastMCP server exposes three tools (`locate` / `read` / `index`) and holds no 
 
 ## Active spec
 
-None
+specs/0046-submission/
 
 ## Recent decisions (last 3)
 
