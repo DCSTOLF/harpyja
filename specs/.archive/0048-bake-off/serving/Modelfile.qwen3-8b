@@ -1,0 +1,5 @@
+# Spec 0048 — greedy serving (see Modelfile.qwen3-14b for rationale).
+FROM qwen3:8b
+PARAMETER temperature 0
+PARAMETER top_p 1
+PARAMETER seed 0

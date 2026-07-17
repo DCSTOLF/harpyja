@@ -1,0 +1,10 @@
+# Spec 0048 — greedy serving for the bake-off's reproducibility precondition.
+# temperature=0 makes the explorer's single draw reproducible (validated: the
+# non-greedy qwen3:14b flipped empty<->right-file-wrong-span across two runs of
+# astropy-12907; the greedy variant reproduced identically, tool-count and all).
+# The explorer sends only {max_tokens: 2048} (0034/0038 byte-pin), so greedy MUST
+# be a server-side default here — it cannot be injected per-request.
+FROM qwen3:14b
+PARAMETER temperature 0
+PARAMETER top_p 1
+PARAMETER seed 0

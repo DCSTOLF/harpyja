@@ -1329,6 +1329,19 @@
   the change is derived and minimal, and it lands BEFORE the outcome numbers — not tuned toward a
   desired verdict after seeing them. (See `harpyja/eval/enlargement.py` `EnlargementConfig`
   `max_per_repo` / `max_per_repo_derivation`, `ENLARGEMENT_CONFIG_HASH_0047`, spec 0047 OQ3.)
+- **A POWERED verdict requires RUNNABLE cases, not merely AUTHORED ones — re-check power
+  against the PROVISIONED set before a run is called powered** (spec 0048, the 0047
+  correction). A power / discordance-ceiling claim computed over cases that exist only as
+  authored rows — no checked-out worktree at the base commit, no resolved audited gold — is
+  a PAPER claim: those cases cannot run, so they cannot contribute discordance or coverage.
+  0047 typed `POWERED` on 53 authoring-time cases against the THEORETICAL ceiling; when 0048
+  attempted the run only 19 were provisioned (34 worktrees + gold unmaterialized), so the
+  eligible conceptual N ≤ 15 < the coverage floor of 36 → `PAIR_UNDER_POWERED` on every pair
+  — the exact stop the enlargement existed to escape. Necessity (the N-blocker is removed on
+  paper) is NOT sufficiency (the cases run). Gate the powered claim on a provisioned-set
+  power re-check, and treat authoring-time enlargement as a to-be-provisioned obligation, not
+  a runnable pool. (See `specs/0048-bake-off/outcome.md` Blocker 2, spec 0048 AC2/AC7;
+  contrast spec 0047's theoretical-ceiling `POWERED`.)
 
 ## Trajectory-verified measurement
 
@@ -1354,6 +1367,45 @@
   `harpyja/eval/live_verifier.py` `build_trajectory_record` + `run_verified_case`,
   `test_live_verifier.py` `test_written_artifact_carries_per_turn_and_think_mode` (extended for
   `serving_transport`), spec 0033/0034/0038.)
+
+- **Determinism for a single-draw stochastic comparison is a SERVING precondition, VERIFIED
+  by a bucket-level replay probe — greedy gives bucket-reproducibility, NOT bit-identical
+  trajectories** (spec 0048). A capability comparison that draws ONE trajectory per model+case
+  is only trustworthy if that draw is reproducible; the served models run non-greedy by
+  default, and a `qwen3:14b` double-run on astropy-12907 flipped `empty` (found-unsubmitted,
+  the 0043 class) vs `right-file-wrong-span` — both runs fully validated, the divergence
+  PRECISE not chaotic (both reached the right file; they split only at the terminal
+  submit-vs-dawdle action — temp>0 SAMPLING, not batching). Serve GREEDY (`temperature=0`,
+  `top_p=1`) as a SERVER-SIDE default — the explorer's outbound params are byte-pinned to
+  `{max_tokens: 2048}` (0034/0038), so temperature CANNOT be injected per-request without a
+  SUT change the measurement invariant forbids; greedy is a serving precondition (like "the
+  tag must be served"), not a SUT mutation. The replay probe compares TERMINAL BUCKETS and
+  EXCLUDES a model on flip. Honest limit: residual Ollama numerical/batching nondeterminism
+  can still vary the trajectory under greedy (observed: 9 vs 6 tool paths, same `empty`
+  bucket) — claim BUCKET-reproducibility only, never bit-perfect; greedy + bucket-level
+  exclude-on-flip replay is the sound pairing for the residual. (See
+  `specs/0048-bake-off/serving/` Modelfiles + README, `bakeoff_run.reproducibility_replay_probe`,
+  `specs/0048-bake-off/outcome.md` Blocker 1, spec 0048 AC1.)
+- **Greedy is a relative-ranking CONTROL, not a deployment rate** (spec 0048). Greedy decoding
+  separates SAMPLING noise from real policy behavior — a real behavioral defect reproduces
+  under greedy (the 0043 found-but-unsubmitted dawdle reappears deterministically), while a
+  sampling artifact collapses — so greedy is the right serving mode for a capability
+  COMPARISON. But the greedy outcome is NOT the temperature the model would ship at; do not
+  read a greedy capability number as a deployment rate. (See `specs/0048-bake-off/outcome.md`
+  Blocker 1, spec 0048.)
+- **A metric must read the AUTHORITATIVE trajectory source, never a convenience field — the
+  uncounted-tool class has now recurred a 3rd time (0040/0042/0048)** (spec 0048, reinforcing
+  the one-parser and dual-seam rules above). The verifier writes invoked tools into
+  `model_turns` but can leave the top-level `tool_names_invoked` convenience field NULL even
+  when tools WERE called; `bakeoff_live.bakeoff_artifact_from_verifier` had trusted that field,
+  so it would have recorded `symbols_adopted=False` for every cell and silently zeroed the
+  symbols-adoption metric. DERIVE per-tool call counts from the authoritative `model_turns`
+  trajectory, cross-checked by IDENTITY against the committed `extract_tool_names` oracle
+  (never a re-implementation), and regression-pin the null-field path. Three recurrences make
+  "read the authoritative trajectory, not a convenience summary field" a standing checklist
+  item for every adoption/tool metric. (See `harpyja/eval/bakeoff_live.py`
+  `bakeoff_artifact_from_verifier`, `test_bakeoff_live.py`
+  `test_bakeoff_artifact_derives_tools_from_model_turns_when_field_null`, spec 0048 AC6.)
 
 ## Speccraft memory & spec-ledger process
 
