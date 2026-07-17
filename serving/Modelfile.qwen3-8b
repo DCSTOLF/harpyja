@@ -1,0 +1,5 @@
+# Spec 0049 (path A) — greedy serving (see Modelfile.qwen3-14b for rationale).
+# temperature=0 is the ONLY change vs the base tag; top_p/seed are inert at temp=0
+# and deliberately unset so the greedy-vs-base delta is EXACTLY temperature (AC4a).
+FROM qwen3:8b
+PARAMETER temperature 0

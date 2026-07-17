@@ -635,6 +635,35 @@ See `ARCHITECTURE.md` (repo root) for the full design and `SPEC.md` for interfac
    homogeneity vs data volume) is DEFERRED to the bake-off. See history.md 2026-07-14
    (spec 0047).
 
+   **As of spec 0049 the package carries the greedy-serving PATH A machinery — still
+   measurement, not a runtime tier; the SUT is byte-untouched.** `greedy_serving.py` owns
+   a deterministic Modelfile fingerprint parser (`FROM` base + sorted `PARAMETER` map +
+   `TEMPLATE` + `SYSTEM`, rejecting any directive it cannot represent losslessly) computing
+   BOTH the committed fingerprint (hash input) and a TOLERANT live-param fingerprint
+   (conformance only — the live-expanded Modelfile grammar differs from the strict committed
+   one), plus `fingerprint_delta` / `is_exactly_temperature_delta` / `is_exactly_temperature_live`
+   / `local_ollama_env` and an idempotent, STOP-AND-WARN `ollama create` build driver
+   (no-op on a fingerprint match, warn-and-stop on a mismatch, never overwrite; local CLI
+   subprocess bound to the `assert_local`-resolved host via a sanitized `OLLAMA_HOST`).
+   `greedy_replay.py` owns the ≥3-draw bucket-keyed reproduction proof (`greedy_replay_proof`
+   + `GreedyServingOutcome` + `build_greedy_replay_artifact`, reusing the 0048 replay bucket
+   oracle by identity). `bakeoff_config.py` was RE-FROZEN with `served_variant_tags`
+   (`qwen3-14b-greedy` / `qwen3-8b-greedy` / `qwen3.5-4b-greedy`), committed
+   `served_variant_fingerprints`, `SERVED_VARIANT_CONFIG_HASH`, and `resolve_served_model`
+   (the single model-resolution consumer); the new frozen fields were absorbed by the
+   existing `sorted(asdict)` `bakeoff_config_hash` shape (`BAKEOFF_CONFIG_HASH_0048` derived
+   and shifted, no on-disk literal pinned the old value). `bakeoff_run.py` gained
+   `probe_served_membership(tags=…)` (backward-compatible) + `probe_served_variant_membership`
+   (positive `/api/tags` guard, `assert_local` first, SKIP when absent). The three
+   temperature-only `serving/Modelfile.*` are committed. **State: PATH A is BUILT and
+   REUSABLE, but greedy is a REJECTED control — spec 0049 typed `RESIDUAL_NONDETERMINISM`
+   (all three greedy tags flip a bucket within a cell at temperature 0; source named as
+   serving-stack numerical nondeterminism, NOT sampling, and seed/top_p-pin-invariant by an
+   empirical refutation), so the bake-off stays BLOCKED on determinism and it is NOT
+   fixable by a serving-config tweak — a deterministic backend or multi-draw majority-bucket
+   is the next spec.** Committed proof: `specs/0049-serving/replay_proof.json` (drift-pinned
+   `sha256 4bfe8679…`). See history.md 2026-07-17 (spec 0049).
+
 Tiers are adapters behind stable interfaces (`Locator` protocol) and stay stateless/swappable — the Scout engine, Deep engine, judge, and model backend can each be replaced independently.
 
 ## Key decisions

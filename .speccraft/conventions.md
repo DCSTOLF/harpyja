@@ -66,6 +66,24 @@
   gets none, so Deep stays uncapped — the guard lives on the tier-owned object, never the shared
   one.) (See `harpyja/scout/explorer_backend.py` `_default_model_call`, `Settings.explorer_max_tokens`
   / `explorer_enable_thinking`, `harpyja/deep/test_rlm.py` outbound-field guard, spec 0028 AC2/AC8.)
+- **An externally-provisioned model tag is verified LIVE-vs-COMMITTED by chain of custody —
+  rebuild it from the committed definition and compare a canonical SEMANTIC fingerprint,
+  never trust a hand-created registry tag.** A registry tag created by hand (or by a prior
+  spec) can silently diverge from the committed source file it is supposed to embody
+  (0048's `qwen3-14b-greedy` kept `top_p 1 + seed 0` the committed temperature-only
+  Modelfile dropped). Before any measurement draws on such a tag: compute the fingerprint
+  from the COMMITTED file (a pure function of in-repo data — this is what feeds any config
+  hash), read the LIVE definition with a TOLERANT extractor (the live-expanded Modelfile
+  grammar differs from the strict committed grammar — live carries LICENSE / multi-valued
+  `PARAMETER stop` / normalized forms), STOP-AND-WARN on any divergence, and DISCARD prior
+  draws taken on a divergent tag — rebuild from the committed file and re-verify the
+  intended delta (e.g. exactly-temperature vs the base) before drawing fresh. The
+  committed fingerprint is the hash input; the live read is CONFORMANCE only, never fed
+  the hash. When new frozen fields enter an existing `sorted(asdict)`-style config hash,
+  verify no on-disk literal pins the OLD derived hash before letting it shift. (See
+  `harpyja/eval/greedy_serving.py` fingerprint parser / tolerant live extractor /
+  STOP-AND-WARN build driver, `harpyja/eval/bakeoff_config.py`
+  `served_variant_fingerprints` / `SERVED_VARIANT_CONFIG_HASH`, spec 0049 AC1a/AC2/AC4a.)
 
 ## Errors & failure posture
 
@@ -1342,6 +1360,33 @@
   power re-check, and treat authoring-time enlargement as a to-be-provisioned obligation, not
   a runnable pool. (See `specs/0048-bake-off/outcome.md` Blocker 2, spec 0048 AC2/AC7;
   contrast spec 0047's theoretical-ceiling `POWERED`.)
+- **A bucket-reproducibility proof for a stochastic served model needs ≥3 draws per cell,
+  PER-TAG — a 2-draw comparison falsely passes stable cells that flip only on a 3rd draw,
+  and a freshly-created tag carries zero prior reproduction evidence.** When a proof
+  certifies that a served config (e.g. greedy temp=0) reproduces a classification BUCKET,
+  a 2-draw same==same is under-powered by construction: it cannot distinguish a genuinely
+  stable cell from a decision-boundary cell that happens to agree on two draws. Draw ≥3
+  per (tag, case); a cell reproduces iff ALL draws classify into the identical bucket
+  under the reused bucket oracle (oracle IDENTITY-REUSED, never re-derived); ANY
+  within-cell flip types the global negative outcome (no per-tag cherry-pick of a passing
+  subset). The gate is PER-TAG — a newly-provisioned variant tag inherits no reproduction
+  evidence from a sibling. This caught 0049's `RESIDUAL_NONDETERMINISM`: 0048's 2-draw
+  validation would have falsely passed 14b/django (correct==correct) and 8b/astropy
+  (empty==empty); the third draw flipped both. (See `harpyja/eval/greedy_replay.py`
+  `greedy_replay_proof`, `specs/0049-serving/replay_proof.json`, spec 0049 AC5/AC6.)
+- **Greedy decoding (temperature=0) is NOT sufficient for bucket reproduction on this
+  serving stack, and "greedy reproduces" must be proven per-run — never assumed from a
+  small validation.** At temperature 0 the decoder is argmax, but the served stack
+  (Ollama/llama.cpp) retains numerical nondeterminism (batch/KV-cache) that, on a
+  decision-boundary case, cascades a flipped logit into a DIFFERENT terminal action and a
+  different bucket. This residual is seed/top_p-pin-INVARIANT — EMPIRICALLY REFUTED, not
+  assumed: re-adding 0048's exact `temperature 0 + top_p 1 + seed 0` reproduced the SAME
+  flip, so the source is deeper than the sampler. Name the source as serving-stack
+  numerical nondeterminism, NOT sampling; a greedy ranking cannot be certified as
+  reproducible off a validation that happened to land off the decision boundary. The fix
+  is not a serving-config tweak but a genuinely deterministic backend (batch-invariant
+  kernels / serialized requests) or multi-draw majority-bucket. (See
+  `specs/0049-serving/findings.md` seed-pin refutation, spec 0049 AC6.)
 
 ## Trajectory-verified measurement
 

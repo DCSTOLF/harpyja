@@ -87,6 +87,54 @@ class BakeoffConfig:
         "preflight-all-3-then-run-widest-gap-pair-14b-4b-first-then-full-grid"
     )
 
+    # Spec 0049 (path A) — greedy serving variant tags, re-frozen into THIS config.
+    # ``served_variant_tags`` is what the runner actually serves/measures (the base
+    # ``model_tags`` above stay the LOGICAL identity, UNTOUCHED); the base tags are
+    # deliberately absent here (path A, not the tag-mutating path B).
+    served_variant_tags: tuple[str, ...] = (
+        "qwen3-14b-greedy",
+        "qwen3-8b-greedy",
+        "qwen3.5-4b-greedy",
+    )
+    # Each greedy tag's COMMITTED semantic fingerprint (re-derivable from the
+    # committed ``serving/Modelfile.*`` via ``greedy_serving.parse_modelfile_fingerprint``
+    # → ``fingerprint_digest``). COMMITTED, so the config hash is a pure function of
+    # in-repo data (a live ``ollama show`` read is CONFORMANCE-only, never a hash input).
+    served_variant_fingerprints: tuple[tuple[str, str], ...] = (
+        (
+            "qwen3-14b-greedy",
+            "03826a2ef9465419f0292747c13947cab17ab64e75f29d6b56a725beda23e33c",
+        ),
+        (
+            "qwen3-8b-greedy",
+            "29b890f3c3f77a779276f5673bb03a3255a8fee14d0e8b723aa96192b62675a6",
+        ),
+        (
+            "qwen3.5-4b-greedy",
+            "8c717e0c8aa4fc529d700ed49e379aea27f91e9e9a88065a81b1f84f6424db52",
+        ),
+    )
+
+
+# The single measurement-config consumer: map a logical base tag → its served
+# greedy variant. This is the ONLY call site that reads ``served_variant_tags``
+# (pinned by an ast sweep in the tests) so deployment/unrelated paths never adopt
+# the control tags.
+_LOGICAL_TO_GREEDY = {
+    "qwen3:14b": "qwen3-14b-greedy",
+    "qwen3:8b": "qwen3-8b-greedy",
+    "qwen3.5:4b": "qwen3.5-4b-greedy",
+}
+
+
+def resolve_served_model(cfg: BakeoffConfig, logical_tag: str) -> str:
+    """Resolve a logical base tag to the greedy variant the runner serves."""
+
+    greedy = _LOGICAL_TO_GREEDY.get(logical_tag)
+    if greedy is None or greedy not in cfg.served_variant_tags:
+        raise KeyError(f"no served greedy variant for logical tag {logical_tag!r}")
+    return greedy
+
 
 PREREGISTERED_BAKEOFF_CONFIG_0048 = BakeoffConfig()
 
@@ -98,3 +146,8 @@ def bakeoff_config_hash(cfg: BakeoffConfig) -> str:
 
 
 BAKEOFF_CONFIG_HASH_0048 = bakeoff_config_hash(PREREGISTERED_BAKEOFF_CONFIG_0048)
+
+# Spec 0049 — the re-frozen served-config digest (greedy variant tags + committed
+# fingerprints flow in via ``sorted(asdict)``). Offline-reproducible; pinned as a
+# known-value drift guard in ``test_bakeoff_config_served_variants``.
+SERVED_VARIANT_CONFIG_HASH = bakeoff_config_hash(PREREGISTERED_BAKEOFF_CONFIG_0048)

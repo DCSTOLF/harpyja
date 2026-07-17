@@ -1,0 +1,375 @@
+{
+  "spec": "0049-serving",
+  "artifact": "greedy-replay-reproduction-proof",
+  "config_hash": "82885d1b63cbd554b6584501d0c289f0467c49f467f0f2cbd1900ba8eb98e25a",
+  "grid": {
+    "tags": [
+      "qwen3-14b-greedy",
+      "qwen3-8b-greedy",
+      "qwen3.5-4b-greedy"
+    ],
+    "cases": [
+      "astropy__astropy-12907",
+      "django__django-12774"
+    ],
+    "repos": [
+      "astropy",
+      "django"
+    ],
+    "draws_per_cell": 3
+  },
+  "outcome": "RESIDUAL_NONDETERMINISM",
+  "outcome_typed": "RESIDUAL_NONDETERMINISM",
+  "per_tag_outcome": {
+    "qwen3-14b-greedy": "RESIDUAL_NONDETERMINISM",
+    "qwen3-8b-greedy": "RESIDUAL_NONDETERMINISM",
+    "qwen3.5-4b-greedy": "RESIDUAL_NONDETERMINISM"
+  },
+  "flips": [
+    {
+      "tag": "qwen3-14b-greedy",
+      "case": "django__django-12774"
+    },
+    {
+      "tag": "qwen3-8b-greedy",
+      "case": "astropy__astropy-12907"
+    },
+    {
+      "tag": "qwen3.5-4b-greedy",
+      "case": "django__django-12774"
+    }
+  ],
+  "cells": [
+    {
+      "repo": "astropy",
+      "case_id": "astropy__astropy-12907",
+      "tag": "qwen3-14b-greedy",
+      "committed_fingerprint": "03826a2ef9465419f0292747c13947cab17ab64e75f29d6b56a725beda23e33c",
+      "buckets": [
+        "right-file-wrong-span",
+        "right-file-wrong-span",
+        "right-file-wrong-span"
+      ],
+      "verdict": "reproduce",
+      "exclusivity": {
+        "schema_version": "0041/exclusivity/1",
+        "exclusivity_check_kind": "start-plus-per-block",
+        "unseeable_residuals": [
+          "intra-block-window",
+          "same-tag-contention"
+        ],
+        "model_set": [
+          "qwen3-14b-greedy",
+          "qwen3-8b-greedy",
+          "qwen3.5-4b-greedy"
+        ],
+        "checks": [
+          {
+            "timestamp": "2026-07-17T16:58:09.120726+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-14b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:20:37.164993+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-8b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:33:33.791552+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3.5-4b-greedy"
+          }
+        ]
+      }
+    },
+    {
+      "repo": "django",
+      "case_id": "django__django-12774",
+      "tag": "qwen3-14b-greedy",
+      "committed_fingerprint": "03826a2ef9465419f0292747c13947cab17ab64e75f29d6b56a725beda23e33c",
+      "buckets": [
+        "correct",
+        "correct",
+        "empty"
+      ],
+      "verdict": "flip",
+      "exclusivity": {
+        "schema_version": "0041/exclusivity/1",
+        "exclusivity_check_kind": "start-plus-per-block",
+        "unseeable_residuals": [
+          "intra-block-window",
+          "same-tag-contention"
+        ],
+        "model_set": [
+          "qwen3-14b-greedy",
+          "qwen3-8b-greedy",
+          "qwen3.5-4b-greedy"
+        ],
+        "checks": [
+          {
+            "timestamp": "2026-07-17T16:58:09.120726+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-14b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:20:37.164993+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-8b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:33:33.791552+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3.5-4b-greedy"
+          }
+        ]
+      }
+    },
+    {
+      "repo": "astropy",
+      "case_id": "astropy__astropy-12907",
+      "tag": "qwen3-8b-greedy",
+      "committed_fingerprint": "29b890f3c3f77a779276f5673bb03a3255a8fee14d0e8b723aa96192b62675a6",
+      "buckets": [
+        "empty",
+        "empty",
+        "right-file-wrong-span"
+      ],
+      "verdict": "flip",
+      "exclusivity": {
+        "schema_version": "0041/exclusivity/1",
+        "exclusivity_check_kind": "start-plus-per-block",
+        "unseeable_residuals": [
+          "intra-block-window",
+          "same-tag-contention"
+        ],
+        "model_set": [
+          "qwen3-14b-greedy",
+          "qwen3-8b-greedy",
+          "qwen3.5-4b-greedy"
+        ],
+        "checks": [
+          {
+            "timestamp": "2026-07-17T16:58:09.120726+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-14b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:20:37.164993+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-8b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:33:33.791552+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3.5-4b-greedy"
+          }
+        ]
+      }
+    },
+    {
+      "repo": "django",
+      "case_id": "django__django-12774",
+      "tag": "qwen3-8b-greedy",
+      "committed_fingerprint": "29b890f3c3f77a779276f5673bb03a3255a8fee14d0e8b723aa96192b62675a6",
+      "buckets": [
+        "correct",
+        "correct",
+        "correct"
+      ],
+      "verdict": "reproduce",
+      "exclusivity": {
+        "schema_version": "0041/exclusivity/1",
+        "exclusivity_check_kind": "start-plus-per-block",
+        "unseeable_residuals": [
+          "intra-block-window",
+          "same-tag-contention"
+        ],
+        "model_set": [
+          "qwen3-14b-greedy",
+          "qwen3-8b-greedy",
+          "qwen3.5-4b-greedy"
+        ],
+        "checks": [
+          {
+            "timestamp": "2026-07-17T16:58:09.120726+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-14b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:20:37.164993+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-8b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:33:33.791552+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3.5-4b-greedy"
+          }
+        ]
+      }
+    },
+    {
+      "repo": "astropy",
+      "case_id": "astropy__astropy-12907",
+      "tag": "qwen3.5-4b-greedy",
+      "committed_fingerprint": "8c717e0c8aa4fc529d700ed49e379aea27f91e9e9a88065a81b1f84f6424db52",
+      "buckets": [
+        "empty",
+        "empty",
+        "empty"
+      ],
+      "verdict": "reproduce",
+      "exclusivity": {
+        "schema_version": "0041/exclusivity/1",
+        "exclusivity_check_kind": "start-plus-per-block",
+        "unseeable_residuals": [
+          "intra-block-window",
+          "same-tag-contention"
+        ],
+        "model_set": [
+          "qwen3-14b-greedy",
+          "qwen3-8b-greedy",
+          "qwen3.5-4b-greedy"
+        ],
+        "checks": [
+          {
+            "timestamp": "2026-07-17T16:58:09.120726+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-14b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:20:37.164993+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-8b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:33:33.791552+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3.5-4b-greedy"
+          }
+        ]
+      }
+    },
+    {
+      "repo": "django",
+      "case_id": "django__django-12774",
+      "tag": "qwen3.5-4b-greedy",
+      "committed_fingerprint": "8c717e0c8aa4fc529d700ed49e379aea27f91e9e9a88065a81b1f84f6424db52",
+      "buckets": [
+        "correct",
+        "correct",
+        "empty"
+      ],
+      "verdict": "flip",
+      "exclusivity": {
+        "schema_version": "0041/exclusivity/1",
+        "exclusivity_check_kind": "start-plus-per-block",
+        "unseeable_residuals": [
+          "intra-block-window",
+          "same-tag-contention"
+        ],
+        "model_set": [
+          "qwen3-14b-greedy",
+          "qwen3-8b-greedy",
+          "qwen3.5-4b-greedy"
+        ],
+        "checks": [
+          {
+            "timestamp": "2026-07-17T16:58:09.120726+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-14b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:20:37.164993+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3-8b-greedy"
+          },
+          {
+            "timestamp": "2026-07-17T17:33:33.791552+00:00",
+            "clean": true,
+            "residents_before": [],
+            "tag": "qwen3.5-4b-greedy"
+          }
+        ]
+      }
+    }
+  ],
+  "source_named": {
+    "source": "serving-stack decoding numerical nondeterminism (NOT sampling)",
+    "evidence": "At temperature=0 the same (model,case) flips its terminal submit-vs-find BUCKET across draws (14b/django correct->found-unsubmitted; 8b/astropy never-found->submitted; 4b/django correct->found-unsubmitted).",
+    "seed_pin_refutation": {
+      "config": "temperature 0 + top_p 1 + seed 0 (0048's exact greedy config)",
+      "cell": "qwen3-14b-seedpin / django__django-12774",
+      "buckets": [
+        "correct",
+        "correct",
+        "empty"
+      ],
+      "reproduces": false,
+      "conclusion": "Adding seed 0 + top_p 1 back does NOT restore reproduction (correct,correct,empty \u2014 same flip). The residual nondeterminism is NOT the temperature-only config's dropped seed/top_p; it is a deeper serving-stack source (batch/KV-cache numerical nondeterminism cascading to a bucket flip on decision-boundary cases)."
+    },
+    "0048_caveat_link": "Consistent with 0048's acknowledged residual Ollama nondeterminism (9-vs-6 tool paths, same bucket) \u2014 but here the same non-sampling variance is strong enough to flip the BUCKET, not just the trajectory. 0048's 'greedy reproduces' held only because its 2 validation cases (astropy, pytest) happened to be off the decision boundary."
+  },
+  "greedy_found_unsubmitted_OQ3": [
+    {
+      "tag": "qwen3-14b-greedy",
+      "case": "django__django-12774",
+      "draw": 2
+    }
+  ],
+  "exclusivity": {
+    "schema_version": "0041/exclusivity/1",
+    "exclusivity_check_kind": "start-plus-per-block",
+    "unseeable_residuals": [
+      "intra-block-window",
+      "same-tag-contention"
+    ],
+    "model_set": [
+      "qwen3-14b-greedy",
+      "qwen3-8b-greedy",
+      "qwen3.5-4b-greedy"
+    ],
+    "checks": [
+      {
+        "timestamp": "2026-07-17T16:58:09.120726+00:00",
+        "clean": true,
+        "residents_before": [],
+        "tag": "qwen3-14b-greedy"
+      },
+      {
+        "timestamp": "2026-07-17T17:20:37.164993+00:00",
+        "clean": true,
+        "residents_before": [],
+        "tag": "qwen3-8b-greedy"
+      },
+      {
+        "timestamp": "2026-07-17T17:33:33.791552+00:00",
+        "clean": true,
+        "residents_before": [],
+        "tag": "qwen3.5-4b-greedy"
+      }
+    ]
+  },
+  "caveats": [
+    "bucket-not-bit-perfect",
+    "control-not-deployment"
+  ],
+  "drift_pin_sha256": "4bfe8679d3ed5dbd9b0b706a8dbb8b2275d47437959b0bfc14dd6b2d68e81d06"
+}

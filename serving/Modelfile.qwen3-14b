@@ -1,0 +1,12 @@
+# Spec 0049 (path A) — greedy serving variant for reproducible measurement.
+# temperature=0 makes the explorer's single draw reproducible (validated in 0048:
+# the non-greedy qwen3:14b flipped empty<->right-file-wrong-span across two runs
+# of astropy-12907; the greedy variant reproduced identically). The explorer sends
+# only {max_tokens: 2048} (0034/0038 byte-pin), so greedy MUST be a server-side
+# default here — it cannot be injected per-request.
+#
+# temperature=0 is the ONLY change vs the base tag (0049 invariant): at temp=0 the
+# decoder is argmax, so top_p/seed are inert and deliberately NOT set — this keeps
+# the greedy-vs-base delta EXACTLY temperature (AC4a).
+FROM qwen3:14b
+PARAMETER temperature 0

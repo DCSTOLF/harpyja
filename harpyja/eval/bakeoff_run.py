@@ -43,6 +43,7 @@ __all__ = [
     "build_bakeoff_artifact",
     "build_bakeoff_report",
     "probe_served_membership",
+    "probe_served_variant_membership",
     "reproducibility_replay_probe",
 ]
 
@@ -112,14 +113,37 @@ def probe_served_membership(
     api_base: str,
     assert_local_fn: Callable[..., Any],
     tags_reader: Callable[[str], Sequence[str]],
+    tags: Sequence[str] | None = None,
 ) -> dict[str, bool]:
     """The POSITIVE ``/api/tags`` membership check — ``assert_local`` FIRST (the
     probe's own read is the same loopback-gated egress class as the calls it
     checks), THEN a per-tag membership over the served set. Cannot pass trivially
-    when the endpoint is down (an empty served set → every tag False)."""
+    when the endpoint is down (an empty served set → every tag False).
+
+    ``tags`` defaults to ``cfg.model_tags`` (0048 behavior unchanged); spec 0049
+    passes ``cfg.served_variant_tags`` via ``probe_served_variant_membership``."""
+    checked = cfg.model_tags if tags is None else tags
     assert_local_fn(api_base)
     served = set(tags_reader(api_base))
-    return {tag: tag in served for tag in cfg.model_tags}
+    return {tag: tag in served for tag in checked}
+
+
+def probe_served_variant_membership(
+    cfg: BakeoffConfig,
+    *,
+    api_base: str,
+    assert_local_fn: Callable[..., Any],
+    tags_reader: Callable[[str], Sequence[str]],
+) -> dict[str, bool]:
+    """Spec 0049 (AC3): the positive ``/api/tags`` membership check keyed on the
+    greedy ``served_variant_tags`` (NOT the base ``model_tags``)."""
+    return probe_served_membership(
+        cfg,
+        api_base=api_base,
+        assert_local_fn=assert_local_fn,
+        tags_reader=tags_reader,
+        tags=cfg.served_variant_tags,
+    )
 
 
 def reproducibility_replay_probe(
